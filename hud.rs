@@ -8,6 +8,7 @@ use extra::net_ip::v4::{Ipv4Rep};
 use extra::{net,net_tcp,uv};
 use extra::comm::DuplexStream;
 use rustwebsocket::*;
+//use std::to_bytes::ToBytes;
 
 //TODO: contribute ipv6 libs
 
@@ -62,12 +63,14 @@ impl OrdAddrs {
 type AddrMap = HashMap<~OrdAddrs, ~Chan<~Addrs>>;
 
 struct HudStats {
+    id: uint,
     count: u64,
     routes: HashMap<~Addrs, ~RouteStats>
 }
 impl HudStats {
-    fn new() -> HudStats {
+    fn new(id: uint) -> HudStats {
         HudStats {
+            id: id,
             count: 0,
             routes: HashMap::new()
         }
@@ -77,10 +80,10 @@ impl HudStats {
         let stats = self.routes.find_or_insert_with(rte, |_| ~RouteStats::new());
         stats.update();
     }
-    fn spawn() -> Chan<~Addrs> {
+    fn spawn(id: uint) -> Chan<~Addrs> {
         let (port, chan) = stream();
         do spawn {
-            let mut hs = HudStats::new();
+            let mut hs = HudStats::new(id);
             loop {
                 let rte = port.recv();
                 hs.update(rte);
@@ -106,35 +109,50 @@ struct HudContext {
     mac: AddrMap,
     ip4: AddrMap,
     ip6: AddrMap,
+    out: ~Chan<~str>,
+    id_counter: uint
+}
+
+fn mk_json(id: uint, t: &str, src: &str, dst: &str) -> ~str {
+    fmt!("{\"conn_id\": %u, \"type\": \"%s\", \"src\": \"%s\", \"dst\": \"%s\"}", id, t, src, dst)
 }
 
 impl HudContext {
 
-    fn update(map: &mut AddrMap, src: ~[u8], dst: ~[u8], onNew: &fn(&[u8],&[u8])) {
+    fn update(id: uint, map: &mut AddrMap, src: ~[u8], dst: ~[u8], onNew: &fn(&[u8],&[u8])) {
         let key = ~OrdAddrs::from(src.clone(), dst.clone());
         let chan = map.find_or_insert_with(key, |k| {
             onNew(k.first(), k.second());
-            ~HudStats::spawn()
+            ~HudStats::spawn(id)
         });
         chan.send(~(src, dst))
     }
 
     fn updateEthernet(&mut self, eh: &EthernetHeader) -> bool {
-        HudContext::update(&mut self.mac, eh.src.toVec(), eh.dst.toVec(), |src,dst| {
+        let id = self.id_counter;
+        self.id_counter += 1;
+        HudContext::update(id, &mut self.mac, eh.src.toVec(), eh.dst.toVec(), |src,dst| {
+            self.out.send(mk_json(id, "mac", mac_to_str(src), mac_to_str(dst)));
             //io::println(fmt!("New mac %s, %s", mac_to_str(src), mac_to_str(dst)));
         });
         true
     }
 
     fn updateIP4(&mut self, ip: &IP4Header) -> bool {
-        HudContext::update(&mut self.ip4, ip4_to_vec(&ip.src), ip4_to_vec(&ip.dst), |src,dst| {
+        let id = self.id_counter;
+        self.id_counter += 1;
+        HudContext::update(id, &mut self.ip4, ip4_to_vec(&ip.src), ip4_to_vec(&ip.dst), |src,dst| {
+            self.out.send(mk_json(id, "ip4", ip4_to_str(src), ip4_to_str(dst)));
             //io::println(fmt!("New ip4 %s, %s", ip4_to_str(src), ip4_to_str(dst)));
         });
         false
     }
 
     fn updateIP6(&mut self, ip: &IP6Header) -> bool {
-        HudContext::update(&mut self.ip6, ip.src.toVec(), ip.dst.toVec(), |src,dst| {
+        let id = self.id_counter;
+        self.id_counter += 1;
+        HudContext::update(id, &mut self.ip6, ip.src.toVec(), ip.dst.toVec(), |src,dst| {
+            self.out.send(mk_json(id, "ip6", ip6_to_str(src), ip6_to_str(dst)));
             //io::println(fmt!("New ip6 %s, %s", ip6_to_str(src), ip6_to_str(dst)));
         });
         false
@@ -378,7 +396,7 @@ extern fn handler(args: *u8, header: &pcap_pkthdr, packet: *u8) {
     }
 }
 
-fn websocketWorker(sockb: &net::tcp::TcpSocketBuf) {
+fn websocketWorker(sockb: &net::tcp::TcpSocketBuf, data_po: &Port<~str>) {
     io::println("websocketWorker");
     let handshake = wsParseHandshake(sockb);
     match handshake {
@@ -387,32 +405,25 @@ fn websocketWorker(sockb: &net::tcp::TcpSocketBuf) {
     }
 
     loop {
-        io::println("It's coming back around again");
+        if data_po.peek() {
+            let msg = data_po.recv();
+            sockb.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
+        }
         let (opt_pl, frameType) = wsParseInputFrame(sockb);
-        io::println(fmt!("Parsed input frame, type: %?", frameType));
         match frameType {
             WS_CLOSING_FRAME => {
                 io::println("Got closing frame");
                 sockb.write(wsMakeFrame([], WS_CLOSING_FRAME));
                 break;
             }
-            _ => {
-                match opt_pl {
-                    Some(pl) => sockb.write(wsMakeFrame(pl, frameType)),
-                    None => {
-                        io::println("No payload");
-                        sockb.write(wsMakeFrame([], WS_CLOSING_FRAME));
-                        break;
-                    }
-                }
-            }
+            _ => ()
         }
     }
     io::println("Done with worker");
 }
 
 //fn uiServer(conns_ch: Chan<DuplexStream<~str, ~str>>) {
-fn uiServer(data_po: &Port<~str>) {
+fn uiServer(data_po: Port<~str>) {
     let (accept_po, accept_ch) = stream();
     let (finish_po, finish_ch) = stream();
     do spawn {
@@ -434,7 +445,7 @@ fn uiServer(data_po: &Port<~str>) {
         finish_ch.send(());
     }
 
-    do spawn {
+    do task::spawn_with(data_po) |dp| {
         loop {
             let (conn, res_ch) = accept_po.recv();
             //do spawn {
@@ -449,7 +460,7 @@ fn uiServer(data_po: &Port<~str>) {
                         let buf = net::tcp::socket_buf(sock);
                         //let (conn_a, conn_b) = DuplexStream::<~str, ~str>();
                         //conns_ch.send(conn_a);
-                        websocketWorker(&buf);
+                        websocketWorker(&buf, &dp);
                     }
                 }
             //} //spawn
@@ -460,12 +471,14 @@ fn uiServer(data_po: &Port<~str>) {
 }
 
 
-fn capture(data_ch: &Chan<~str>) {
+fn capture(data_ch: Chan<~str>) {
     let mut errbuf = std::vec::with_capacity(256);
     let ctx = ~HudContext {
         mac: HashMap::new(),
         ip4: HashMap::new(),
-        ip6: HashMap::new()
+        ip6: HashMap::new(),
+        out: ~data_ch,
+        id_counter: 0
     };
     let parser = ~HudParser {
         ctx: ctx
@@ -497,12 +510,12 @@ fn capture(data_ch: &Chan<~str>) {
 fn main() {
     let (data_po, data_ch) = stream();
 
-    do task::spawn_with(data_po) |po| { uiServer(&po); }
+    do task::spawn_with(data_po) |po| { uiServer(po); }
 
     //Spawn on own thread to avoid interfering w/ uiServer
     let mut t = task::task();
     t.sched_mode(task::ManualThreads(1));
     do t.spawn_with(data_ch) |ch| {
-        capture(&ch);
+        capture(ch);
     }
 }
