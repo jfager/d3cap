@@ -1,7 +1,7 @@
 #[link(name="rustpcap", vers="0.0.1")];
 
 use std::libc::{c_int,c_ulonglong};
-use std::{ptr,u8,vec};
+use std::{ptr,vec};
 
 pub enum pcap_t {}
 

@@ -4,14 +4,14 @@ $(document).ready(function() {
     function mkConns() {
         return {
             conns: [],
-            chart: d3.select('#log').append("svg").attr("width", 1000).attr("height", 200)
+            chart: d3.select('#log').append("svg").attr("width", 1000).attr("height", 300)
         };
     }
 
     var types = {
-        'mac': mkConns(),
         'ip4': mkConns(),
         'ip6': mkConns()
+        'mac': mkConns(),
     };
 
     var update = function(c) {
@@ -21,7 +21,7 @@ $(document).ready(function() {
             .append("circle")
             .attr("class", function(d) { return d.type; })
             .attr("cx", function(d, i) { return (i * 50) + 25; })
-            .attr("cy", 200)
+            .attr("cy", 100)
             .attr("r", 10);
     };
 
@@ -74,16 +74,8 @@ $(document).ready(function() {
 
         return false;
     });
-    /*$('#sendForm').on('submit', function() {
-        var message = $('#message').val();
-        ws.send(message);
-        $('#log').append('<li>sended: <span class="badge">' + message + '</span></li>');
-
-        return false;
-    });*/
     $('#disconnect').on('click', function() {
         ws.close();
-
         return false;
     });
 });

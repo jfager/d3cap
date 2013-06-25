@@ -11,3 +11,6 @@ hud:	hud.rc rustwebsocket.rs rustpcap.rs main.rs
 .PHONY: clean
 clean:
 		rm -f hud
+
+run:	hud
+		./hud

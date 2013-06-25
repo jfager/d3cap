@@ -1,9 +1,9 @@
 use std::hashmap::HashMap;
-use std::{cast,io,ptr,str,task,u8,u16,vec};
+use std::{cast,io,ptr,str,task,u8};
 use rustpcap::*;
 use extra::net_ip::v4::{Ipv4Rep};
 use extra::{net,net_tcp,uv};
-use extra::comm::DuplexStream;
+//use extra::comm::DuplexStream;
 use rustwebsocket::*;
 
 type Addrs = (~[u8], ~[u8]);
