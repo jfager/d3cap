@@ -1,42 +1,10 @@
-extern mod extra;
-extern mod rustwebsocket;
-
 use std::hashmap::HashMap;
 use std::{cast,io,ptr,str,task,u8,u16,vec};
-use pcap::*;
+use rustpcap::*;
 use extra::net_ip::v4::{Ipv4Rep};
 use extra::{net,net_tcp,uv};
 use extra::comm::DuplexStream;
 use rustwebsocket::*;
-//use std::to_bytes::ToBytes;
-
-//TODO: contribute ipv6 libs
-
-mod pcap {
-    use std::libc::{c_int,c_ulonglong};
-
-    pub enum pcap_t {}
-
-    pub struct pcap_pkthdr {
-        ts: timeval, // time stamp
-        caplen: u32, // length of portion present
-        len: u32     // length this packet (off wire)
-    }
-
-    pub struct timeval {
-        tv_sec: c_ulonglong,
-        tv_usec: c_ulonglong
-	}
-
-    #[link_args = "-lpcap"]
-    pub extern {
-        pub fn pcap_lookupdev(errbuf: *u8) -> *u8;
-        pub fn pcap_open_live(dev: *u8, snaplen: c_int, promisc: c_int, to_ms: c_int, ebuf: *u8) -> *pcap_t;
-        pub fn pcap_next(p: *pcap_t, h: &mut pcap_pkthdr) -> *const u8;
-        pub fn pcap_loop(p: *pcap_t, cnt: c_int, callback: *u8, user: *u8);
-        pub fn pcap_close(p: *pcap_t);
-    }
-}
 
 type Addrs = (~[u8], ~[u8]);
 
@@ -222,36 +190,7 @@ impl HudParser {
     }
 }
 
-fn empty_pkthdr() -> ~pcap_pkthdr {
-    ~pcap_pkthdr {
-        ts: timeval { tv_sec: 0, tv_usec: 0 },
-        caplen: 0,
-        len: 0
-    }
-}
 
-fn get_device(errbuf: &mut [u8]) -> Option<*u8> {
-    unsafe {
-        let dev = pcap::pcap_lookupdev(vec::raw::to_ptr(errbuf));
-        if dev != ptr::null() {
-            return Some(dev);
-        } else {
-            return None;
-        }
-    }
-}
-
-fn start_session(dev: *u8, errbuf: &mut [u8]) -> Option<*pcap_t> {
-    unsafe {
-        let eb = std::vec::raw::to_ptr(errbuf);
-	    let handle = pcap::pcap_open_live(dev, 65535, 0, 1000, eb);
-	    if handle == ptr::null() {
-            None
-	    } else {
-            Some(handle)
-        }
-    }
-}
 
 static ETHERNET_MAC_ADDR_BYTES: uint = 6;
 static ETHERNET_ETHERTYPE_BYTES: uint = 2;
@@ -326,53 +265,39 @@ struct IP4Header {
 struct IP6Addr([u8,..16]);
 impl IP6Addr {
     fn toVec(&self) -> ~[u8] {
-        return ~[self[0], self[1], self[2], self[3],
-                 self[4], self[5], self[6], self[7],
-                 self[8], self[9], self[10], self[11],
+        return ~[self[ 0], self[ 1], self[ 2], self[ 3],
+                 self[ 4], self[ 5], self[ 6], self[ 7],
+                 self[ 8], self[ 9], self[10], self[11],
                  self[12], self[13], self[14], self[15]];
     }
 }
 impl ToStr for IP6Addr {
     fn to_str(&self) -> ~str {
+        let f = u8::to_str_radix;
         return fmt!("%s%s:%s%s:%s%s:%s%s:%s%s:%s%s:%s%s:%s%s",
-                    u8::to_str_radix(self[0], 16),
-                    u8::to_str_radix(self[1], 16),
-                    u8::to_str_radix(self[2], 16),
-                    u8::to_str_radix(self[3], 16),
-                    u8::to_str_radix(self[4], 16),
-                    u8::to_str_radix(self[5], 16),
-                    u8::to_str_radix(self[6], 16),
-                    u8::to_str_radix(self[7], 16),
-                    u8::to_str_radix(self[8], 16),
-                    u8::to_str_radix(self[9], 16),
-                    u8::to_str_radix(self[10], 16),
-                    u8::to_str_radix(self[11], 16),
-                    u8::to_str_radix(self[12], 16),
-                    u8::to_str_radix(self[13], 16),
-                    u8::to_str_radix(self[14], 16),
-                    u8::to_str_radix(self[15], 16)
+                    f(self[ 0], 16), f(self[ 1], 16),
+                    f(self[ 2], 16), f(self[ 3], 16),
+                    f(self[ 4], 16), f(self[ 5], 16),
+                    f(self[ 6], 16), f(self[ 7], 16),
+                    f(self[ 8], 16), f(self[ 9], 16),
+                    f(self[10], 16), f(self[11], 16),
+                    f(self[12], 16), f(self[13], 16),
+                    f(self[14], 16), f(self[15], 16)
                    );
     }
 }
 
 fn ip6_to_str(ip6: &[u8]) -> ~str {
+    let f = u8::to_str_radix;
     return fmt!("%s%s:%s%s:%s%s:%s%s:%s%s:%s%s:%s%s:%s%s",
-                u8::to_str_radix(ip6[0], 16),
-                u8::to_str_radix(ip6[1], 16),
-                u8::to_str_radix(ip6[2], 16),
-                u8::to_str_radix(ip6[3], 16),
-                u8::to_str_radix(ip6[4], 16),
-                u8::to_str_radix(ip6[5], 16),
-                u8::to_str_radix(ip6[6], 16),
-                u8::to_str_radix(ip6[7], 16),
-                u8::to_str_radix(ip6[8], 16),
-                u8::to_str_radix(ip6[9], 16),
-                u8::to_str_radix(ip6[10], 16),
-                u8::to_str_radix(ip6[11], 16),
-                u8::to_str_radix(ip6[12], 16),
-                u8::to_str_radix(ip6[13], 16),
-                u8::to_str_radix(ip6[14], 16),
-                u8::to_str_radix(ip6[15], 16)
+                f(ip6[ 0], 16), f(ip6[ 1], 16),
+                f(ip6[ 2], 16), f(ip6[ 3], 16),
+                f(ip6[ 4], 16), f(ip6[ 5], 16),
+                f(ip6[ 6], 16), f(ip6[ 7], 16),
+                f(ip6[ 8], 16), f(ip6[ 9], 16),
+                f(ip6[10], 16), f(ip6[11], 16),
+                f(ip6[12], 16), f(ip6[13], 16),
+                f(ip6[14], 16), f(ip6[15], 16)
                );
 }
 
@@ -405,18 +330,22 @@ fn websocketWorker(sockb: &net::tcp::TcpSocketBuf, data_po: &Port<~str>) {
     }
 
     loop {
+        //io::println("Top of worker loop");
         if data_po.peek() {
             let msg = data_po.recv();
             sockb.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
         }
+        //io::println("Parsing input frame");
         let (opt_pl, frameType) = wsParseInputFrame(sockb);
         match frameType {
             WS_CLOSING_FRAME => {
-                io::println("Got closing frame");
+                //io::println("Got closing frame");
                 sockb.write(wsMakeFrame([], WS_CLOSING_FRAME));
                 break;
             }
-            _ => ()
+            _ => {
+                //io::println(fmt!("Got frameType %?", frameType));
+            }
         }
     }
     io::println("Done with worker");
@@ -494,7 +423,7 @@ fn capture(data_ch: Chan<~str>) {
             match session {
                 Some(s) => unsafe {
                     io::println(fmt!("Starting pcap_loop"));
-                    pcap::pcap_loop(s, -1, handler, cast::transmute(ptr::to_unsafe_ptr(parser)));
+                    pcap_loop(s, -1, handler, cast::transmute(ptr::to_unsafe_ptr(parser)));
                 },
                 None => unsafe {
                     io::println(fmt!("Couldn't open device %s: %?\n",
@@ -507,7 +436,7 @@ fn capture(data_ch: Chan<~str>) {
     }
 }
 
-fn main() {
+pub fn run() {
     let (data_po, data_ch) = stream();
 
     do task::spawn_with(data_po) |po| { uiServer(po); }

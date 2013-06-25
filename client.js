@@ -1,14 +1,28 @@
 $(document).ready(function() {
     var ws;
-    var conns = [];
-    var chart = d3.select('#log');
 
-    var update = function() {
-        chart.selectAll("li")
-            .data(conns, function(d) { return d.conn_id; })
+    function mkConns() {
+        return {
+            conns: [],
+            chart: d3.select('#log').append("svg").attr("width", 1000).attr("height", 200)
+        };
+    }
+
+    var types = {
+        'mac': mkConns(),
+        'ip4': mkConns(),
+        'ip6': mkConns()
+    };
+
+    var update = function(c) {
+        c.chart.selectAll("circle")
+            .data(c.conns, function(d) { return d.conn_id; })
             .enter()
-            .append("li")
-            .text(function(d) { return "received: " + JSON.stringify(d); });
+            .append("circle")
+            .attr("class", function(d) { return d.type; })
+            .attr("cx", function(d, i) { return (i * 50) + 25; })
+            .attr("cy", 200)
+            .attr("r", 10);
     };
 
     $('#connectForm').on('submit', function() {
@@ -16,6 +30,7 @@ $(document).ready(function() {
             ws = new WebSocket($('#wsServer').val());
             ws.onopen = function() {
                 $('#ws_log').append('<li><span class="badge badge-success">websocket opened</span></li>');
+
                 $('#wsServer').attr('disabled', 'disabled');
                 $('#connect').attr('disabled', 'disabled');
                 $('#disconnect').removeAttr('disabled');
@@ -30,9 +45,10 @@ $(document).ready(function() {
 
             ws.onmessage = function(event) {
                 var msg = JSON.parse(event.data);
-                conns.push(msg);
-                update();
-                ws.send("ack");
+                $('#ws_log').append("<li>received: " + JSON.stringify(msg) + "</li>");
+                var c = types[msg.type];
+                c.conns.push(msg);
+                update(c);
             };
 
             ws.onclose = function() {
@@ -47,7 +63,9 @@ $(document).ready(function() {
             (function() {
                 if(ws.readyState === 1) {
                     ws.send("ping");
-                    setTimeout(arguments.callee, 2000);
+                }
+                if(ws.readyState !== 3) {
+                    setTimeout(arguments.callee, 1000);
                 }
             })();
         } else {
