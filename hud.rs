@@ -12,20 +12,8 @@ use rustwebsocket::*;
 
 type Addrs = (~[u8], ~[u8]);
 
+#[deriving(Eq, IterBytes)]
 struct OrdAddrs(Addrs);
-impl IterBytes for OrdAddrs {
-    fn iter_bytes(&self, lsb0: bool, f: std::to_bytes::Cb) -> bool {
-        (**self).iter_bytes(lsb0, f)
-    }
-}
-impl Eq for OrdAddrs {
-    fn eq(&self, other: &OrdAddrs) -> bool {
-        (**self).eq(&**other)
-    }
-    fn ne(&self, other: &OrdAddrs) -> bool {
-        !self.eq(other)
-    }
-}
 impl OrdAddrs {
     fn from(a: ~[u8], b: ~[u8]) -> OrdAddrs {
         if a <= b { OrdAddrs((a, b)) } else { OrdAddrs((b, a)) }
