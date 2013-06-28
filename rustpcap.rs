@@ -1,4 +1,5 @@
 #[link(name="rustpcap", vers="0.0.1")];
+//extern mod std;
 
 use std::libc::{c_int,c_ulonglong};
 use std::{ptr,vec};

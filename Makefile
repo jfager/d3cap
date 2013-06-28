@@ -1,16 +1,23 @@
 RUSTC?=rustc
-RUSTFLAGS?=--cfg ndebug --cfg ncpuspew -O
-RUSTLDFLAGS?=-L .
+RUST_FLAGS?=--cfg ndebug --cfg ncpuspew
+RUST_DBG_FLAGS?=-Z debug-info
+RUST_LD_FLAGS?=-L .
 
 .PHONY: all
 all:	hud
 
-hud:	hud.rc rustwebsocket.rs rustpcap.rs main.rs
-		$(RUSTC) $(RUSTFLAGS) $(RUSTLDFLAGS) $< -o $@
+hud:	main.rs hud.rs rustwebsocket.rs rustpcap.rs
+		$(RUSTC) $(RUST_FLAGS) $(RUST_LD_FLAGS) $< -o $@
 
 .PHONY: clean
 clean:
-		rm -f hud
+		rm -rf hud huddbg *.dSYM *.o
 
 run:	hud
 		./hud
+
+huddbg: main.rs hud.rs rustwebsocket.rs rustpcap.rs
+		$(RUSTC) $(RUST_DBG_FLAGS) $(RUST_LD_FLAGS) $< -o $@
+
+debug:  huddbg
+		gdb huddbg

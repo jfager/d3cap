@@ -1,7 +1,8 @@
 extern mod extra;
 extern mod std;
 
-use extra::sha1;
+use extra::sha1::Sha1;
+use extra::digest::{Digest, DigestUtil};
 use std::{io,vec};
 use std::hashmap::HashMap;
 use extra::base64::ToBase64;
@@ -48,9 +49,11 @@ struct Handshake {
 
 impl Handshake {
     pub fn getAnswer(&self) -> ~str {
-        let mut sh = sha1::sha1();
+        let mut sh = Sha1::new();
         sh.input_str(self.key + SECRET);
-        let responseKey = sh.result().to_base64();
+        let mut res: ~[u8] = ~[];
+        sh.result(res);
+        let responseKey = res.to_base64();
         fmt!("HTTP/1.1 101 Switching Protocols\r\n\
               %s: %s\r\n\
               %s: %s\r\n\
