@@ -51,7 +51,7 @@ impl Handshake {
     pub fn getAnswer(&self) -> ~str {
         let mut sh = Sha1::new();
         sh.input_str(self.key + SECRET);
-        let mut res: ~[u8] = ~[];
+        let mut res = [0u8,..20];
         sh.result(res);
         let responseKey = res.to_base64();
         fmt!("HTTP/1.1 101 Switching Protocols\r\n\
@@ -166,7 +166,10 @@ pub fn wsParseInputFrame<T:Reader>(rdr: &T) -> (Option<~[u8]>, WSFrameType) {
             let toread = (payloadLength + 4) as uint; //+4 for mask
             //io::println(fmt!("reading payload, %u bytes", toread));
             let masked_payload = rdr.read_bytes(toread);
-            let payload = do masked_payload.tailn(4).mapi |i, t| { t ^ masked_payload[i%4] };
+            let payload = masked_payload.tailn(4).iter()
+                .enumerate()
+                .transform(|(i, t)| { t ^ masked_payload[i%4] })
+                .collect();
             return (Some(payload), frameType);
         }
 
