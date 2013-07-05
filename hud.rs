@@ -82,7 +82,15 @@ struct HudContext {
     ip4: AddrMap<IP4Addr>,
     ip6: AddrMap<IP6Addr>,
     out: ~Chan<~str>,
-    id_counter: uint
+    priv id_counter: uint
+}
+
+impl HudContext {
+    fn next_id(&mut self) -> uint {
+        let out = self.id_counter;
+        self.id_counter += 1;
+        out
+    }
 }
 
 fn mk_json(id: uint, t: &str, src: &str, dst: &str) -> ~str {
@@ -207,7 +215,7 @@ impl EthernetHeader {
             },
             ETHERTYPE_IP4 => unsafe {
                 let ipp: *IP4Header = cast_offset(packet, ETHERNET_HEADER_BYTES);
-                (*ipp).parse(ctx);
+                ctx.ip4.update("ip4", (*ipp).src), (*ipp).dst);
             },
             ETHERTYPE_IP6 => unsafe {
                 let ipp: *IP6Header = cast_offset(packet, ETHERNET_HEADER_BYTES);
