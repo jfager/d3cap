@@ -2,6 +2,21 @@
     color: 'green';
 }
 
+.connectForm:before {
+    content: '';
+    display: inline-block;
+    height: 100%;
+    vertical-align: bottom;
+}
+
+#connectForm {
+    vertical-align: bottom;
+}
+
+.node:not(:hover) .nodetext {
+  display: none;
+}
+
 /* For d3 force demo */
 .link {
   stroke: #ccc;

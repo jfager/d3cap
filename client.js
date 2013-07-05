@@ -1,38 +1,5 @@
 $(document).ready(function() {
 
-
-    // var link = svg.selectAll(".link")
-    //     .data(links)
-    //     .enter().append("line")
-    //     .attr("class", "link");
-
-    // var node = svg.selectAll(".node")
-    //     .data(nodes)
-    //     .enter().append("g")
-    //     .attr("class", "node")
-    //     .call(force.drag);
-
-    // node.append("image")
-    //     .attr("xlink:href", "https://github.com/favicon.ico")
-    //     .attr("x", -8)
-    //     .attr("y", -8)
-    //     .attr("width", 16)
-    //     .attr("height", 16);
-
-    // node.append("text")
-    //     .attr("dx", 12)
-    //     .attr("dy", ".35em")
-    //     .text(function(d) { return d.name });
-
-    // force.on("tick", function() {
-    //     link.attr("x1", function(d) { return d.source.x; })
-    //         .attr("y1", function(d) { return d.source.y; })
-    //         .attr("x2", function(d) { return d.target.x; })
-    //         .attr("y2", function(d) { return d.target.y; });
-
-    //     node.attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; });
-    // });
-
     var ws;
 
     function mkForce(nodes, links, width, height) {
@@ -43,56 +10,85 @@ $(document).ready(function() {
             .distance(100)
             .charge(-100)
             .size([width, height]);
-
-
-        return force;
     }
 
-    function mkConns() {
-        var nodes = [], links = [];
-        var width = 1000, height = 300;
-        var out = {
-            conns: [],
-            nodes: nodes,
-            nodeSet: {},
-            links: links,
-            chart: d3.select('#log').append("svg").attr("width", width).attr("height", height),
-            force: mkForce(nodes, links, width, height)
-        };
+    function mkChartTab(tabId, tabText, active) {
+        var boundary = $('.tab-content');
+        var width = boundary[0].offsetWidth;
+        var height = width * 0.66;
+        var tabTop = d3.select('#force-graph-tabs')
+            .append("li")
+            .append("a").attr("href", "#"+tabId).attr("data-toggle", "tab")
+            .text(tabText);
+        var tabCont = d3.select('#force-graph-contents')
+            .append("div").attr("id", tabId);
 
-        out.force.on("tick", function() {
-            out.chart.selectAll(".link")
+        if(active) {
+            tabTop.attr("class", "active");
+            tabCont.attr("class", "tab-pane active");
+        } else {
+            tabCont.attr("class", "tab-pane");
+        }
+
+        return tabCont.append("svg").attr("width", width).attr("height", height);
+    }
+
+    function mkConns(type, active) {
+        var tabId = "tab_"+type;
+        var chart = mkChartTab(tabId, type, active);
+
+        var width = chart.attr("width");
+        var height = chart.attr("height");
+        var nodes = [], links = [];
+
+        var force = mkForce(nodes, links, width, height);
+        force.on("tick", function() {
+            chart.selectAll(".link")
                 .attr("x1", function(d) { return d.source.x; })
                 .attr("y1", function(d) { return d.source.y; })
                 .attr("x2", function(d) { return d.target.x; })
                 .attr("y2", function(d) { return d.target.y; });
-            out.chart.selectAll(".node")
-                .attr("cx", function(d) { return d.x; })
-                .attr("cy", function(d) { return d.y; });
+            chart.selectAll(".node")
+                .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; });
         });
 
-        return out;
+        return {
+            conns: [],
+            nodes: nodes,
+            nodeSet: {},
+            links: links,
+            chart: chart,
+            force: force
+        };
     }
 
     var types = {
-        'ip4': mkConns(),
-        //'ip6': mkConns(),
-        'mac': mkConns()
+        'ip4': mkConns('ip4', true),
+        'ip6': mkConns('ip6', false),
+        'mac': mkConns('mac', false)
     };
 
     var update = function(c) {
         c.force.start();
         c.chart.selectAll(".link")
             .data(c.links)
-            .enter().insert("line", "circle")
+            .enter().insert("line", "g")
             .attr("class", "link")
             .style("stroke-width", function(d) { return Math.sqrt(d.value); });
-        c.chart.selectAll(".node")
+        var node = c.chart.selectAll(".node")
             .data(c.nodes)
-            .enter().append("circle")
+            .enter().append("svg:g")
             .attr("class", "node")
-            .attr("r", 5)
             .call(c.force.drag);
+
+        node.append("svg:circle")
+            .attr("r", 5)
+
+        node.append("svg:text")
+            .attr("class", "nodetext")
+            .attr("dx", 12)
+            .attr("dy", ".35em")
+            .text(function(d) { return d.addr; });
     };
 
     $('#connectForm').on('submit', function() {

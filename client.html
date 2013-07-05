@@ -2,26 +2,39 @@
 <html>
 <head>
     <title>HUD</title>
-    <link href="http://netdna.bootstrapcdn.com/twitter-bootstrap/2.3.1/css/bootstrap-combined.min.css" rel="stylesheet">
+    <link href="http://netdna.bootstrapcdn.com/twitter-bootstrap/2.3.2/css/bootstrap-combined.min.css" rel="stylesheet">
     <link href="client.css" rel="stylesheet">
-
 </head>
 <body>
-    <div class="container">
-        <h1 class="page-header">HUD</h1>
-        <form action="" class="form-inline" id="connectForm">
-            <div class="input-append">
-                <input type="text" class="input-large" value="ws://localhost:8080/echo" id="wsServer">
-                <button class="btn" type="submit" id="connect">Connect</button>
-                <button class="btn" disabled="disabled" id="disconnect">Disconnect</button>
-            </div>
+  <div class="container">
+    <div class="row topbar">
+      <div class="span2">
+        <h1>HUD</h1>
+      </div>
+      <div class="span10 connectForm">
+        <form id="connectForm" action="" class="form-inline">
+          <div class="input-append">
+            <input type="text" class="input-large" value="ws://localhost:8080/hud" id="wsServer">
+            <button id="connect" class="btn" type="submit">Connect</button>
+            <button id="disconnect" class="btn" disabled="disabled">Disconnect</button>
+          </div>
         </form>
-        <hr>
-        <div class="unstyled" id="log"></div>
-        <ul class="unstyled" id="ws_log"></ul>
+      </div>
     </div>
-    <script src="http://code.jquery.com/jquery.js"></script>
-    <script src="http://d3js.org/d3.v3.js" charset="utf-8"></script>
-    <script type="text/javascript" src="client.js"></script>
+    <div class="tabbable tabs-left">
+      <ul id="force-graph-tabs" class="nav nav-tabs" >
+        <li><a href="#tab_ws_log" data-toggle="tab">log</a></li>
+      </ul>
+      <div id="force-graph-contents" class="tab-content">
+        <div id="tab_ws_log" class="tab-pane">
+          <ul id="ws_log" class="unstyled"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="http://code.jquery.com/jquery.js"></script>
+  <script src="http://netdna.bootstrapcdn.com/twitter-bootstrap/2.3.2/js/bootstrap.min.js"></script>
+  <script src="http://d3js.org/d3.v3.js" charset="utf-8"></script>
+  <script type="text/javascript" src="client.js"></script>
 </body>
 </html>
