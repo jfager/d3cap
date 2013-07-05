@@ -3,44 +3,56 @@ extern mod extra;
 
 use std::hashmap::HashMap;
 use std::{cast,io,ptr,str,task,u8};
-use extra::net_ip::v4::{Ipv4Rep};
 use extra::{net,net_tcp,uv};
 //use extra::comm::DuplexStream;
 
 use rustpcap::*;
 use rustwebsocket::*;
 
-type Addrs = (~[u8], ~[u8]);
+type Addrs<T> = (T, T);
 
 #[deriving(Eq, IterBytes)]
-struct OrdAddrs(Addrs);
-impl OrdAddrs {
-    fn from(a: ~[u8], b: ~[u8]) -> OrdAddrs {
+struct OrdAddrs<T>(Addrs<T>);
+impl <T: Ord+IterBytes> OrdAddrs<T> {
+    fn from(a: T, b: T) -> OrdAddrs<T> {
         if a <= b { OrdAddrs((a, b)) } else { OrdAddrs((b, a)) }
     }
 }
 
-type AddrMap = HashMap<~OrdAddrs, ~Chan<~Addrs>>;
+type AddrMap<T> = HashMap<~OrdAddrs<T>, ~Chan<~Addrs<T>>>;
+trait Update<T> {
+   fn update(&mut self, src: T, dst: T, onNew: &fn(T,T)->uint);
+}
+impl <T: Ord+IterBytes+Eq+Copy+Send> Update<T> for AddrMap<T> {
+    fn update(&mut self, src: T, dst: T, onNew: &fn(T,T)->uint) {
+        let key = ~OrdAddrs::from(copy src, copy dst);
+        let chan = self.find_or_insert_with(key, |k| {
+            let id = onNew(k.first(), k.second());
+            ~HudStats::spawn(id)
+        });
+        chan.send(~(src, dst))
+    }
+}
 
-struct HudStats {
+struct HudStats<T> {
     id: uint,
     count: u64,
-    routes: HashMap<~Addrs, ~RouteStats>
+    routes: HashMap<~Addrs<T>, ~RouteStats>
 }
-impl HudStats {
-    fn new(id: uint) -> HudStats {
+impl <T: IterBytes+Eq+Copy+Send> HudStats<T> {
+    fn new(id: uint) -> HudStats<T> {
         HudStats {
             id: id,
             count: 0,
             routes: HashMap::new()
         }
     }
-    fn update(&mut self, rte: ~Addrs) {
+    fn update(&mut self, rte: ~Addrs<T>) {
         self.count += 1;
         let stats = self.routes.find_or_insert_with(rte, |_| ~RouteStats::new());
         stats.update();
     }
-    fn spawn(id: uint) -> Chan<~Addrs> {
+    fn spawn(id: uint) -> Chan<~Addrs<T>> {
         let (port, chan) = stream();
         do spawn {
             let mut hs = HudStats::new(id);
@@ -66,9 +78,9 @@ impl RouteStats {
 }
 
 struct HudContext {
-    mac: AddrMap,
-    ip4: AddrMap,
-    ip6: AddrMap,
+    mac: AddrMap<MacAddr>,
+    ip4: AddrMap<IP4Addr>,
+    ip6: AddrMap<IP6Addr>,
     out: ~Chan<~str>,
     id_counter: uint
 }
@@ -77,110 +89,71 @@ fn mk_json(id: uint, t: &str, src: &str, dst: &str) -> ~str {
     fmt!("{\"conn_id\": %u, \"type\": \"%s\", \"src\": \"%s\", \"dst\": \"%s\"}", id, t, src, dst)
 }
 
-impl HudContext {
-
-    fn update(map: &mut AddrMap, src: ~[u8], dst: ~[u8], onNew: &fn(&[u8],&[u8])->uint) {
-        let key = ~OrdAddrs::from(src.clone(), dst.clone());
-        let chan = map.find_or_insert_with(key, |k| {
-            let id = onNew(k.first(), k.second());
-            ~HudStats::spawn(id)
-        });
-        chan.send(~(src, dst))
-    }
-
-    fn updateEthernet(&mut self, eh: &EthernetHeader) -> bool {
-        HudContext::update(&mut self.mac, eh.src.toVec(), eh.dst.toVec(), |src,dst| {
-            let id = self.id_counter;
-            self.id_counter += 1;
-            self.out.send(mk_json(id, "mac", mac_to_str(src), mac_to_str(dst)));
-            id
-        });
-        true
-    }
-
-    fn updateIP4(&mut self, ip: &IP4Header) -> bool {
-        HudContext::update(&mut self.ip4, ip4_to_vec(&ip.src), ip4_to_vec(&ip.dst), |src,dst| {
-            let id = self.id_counter;
-            self.id_counter += 1;
-            self.out.send(mk_json(id, "ip4", ip4_to_str(src), ip4_to_str(dst)));
-            id
-        });
-        false
-    }
-
-    fn updateIP6(&mut self, ip: &IP6Header) -> bool {
-        HudContext::update(&mut self.ip6, ip.src.toVec(), ip.dst.toVec(), |src,dst| {
-            let id = self.id_counter;
-            self.id_counter += 1;
-            self.out.send(mk_json(id, "ip6", ip6_to_str(src), ip6_to_str(dst)));
-            id
-        });
-        false
-    }
-
+trait HudParser {
+    fn parse(&self, ctx: &mut HudContext);
 }
 
-struct HudParser {
-    ctx: ~HudContext
+struct Packet {
+    header: *pcap_pkthdr,
+    packet: *u8
 }
-
-impl HudParser {
-    fn parseEthernet(&mut self, header: &pcap_pkthdr, packet: *u8) {
-        if header.caplen < header.len {
-            io::println(fmt!("WARN: Capd only [%?] bytes of packet with length [%?]",
-                             header.caplen, header.len));
-        }
-        if header.len > ETHERNET_HEADER_BYTES as u32 {
-            unsafe {
-                let ehp: *EthernetHeader = cast::transmute(packet);
-                let continueParsing = self.ctx.updateEthernet(&*ehp);
-                if continueParsing {
-                    self.dispatchEthertype((*ehp).typ, packet);
-                }
-            }
-        }
-    }
-
-    fn parseIP4(&mut self, header: *IP4Header) {
+impl HudParser for Packet {
+    fn parse(&self, ctx: &mut HudContext) {
         unsafe {
-            let continueParsing = self.ctx.updateIP4(&*header);
-            if continueParsing {
-                //io::println("Continue parsing IP4!");
+            if (*self.header).caplen < (*self.header).len {
+                io::println(fmt!("WARN: Capd only [%?] bytes of packet with length [%?]",
+                                 (*self.header).caplen, (*self.header).len));
             }
-        }
-    }
-
-    fn parseIP6(&mut self, header: *IP6Header) {
-        unsafe {
-            let continueParsing = self.ctx.updateIP6(&*header);
-            if continueParsing {
-                //io::println("Continue parsing IP6!");
-            }
-        }
-    }
-
-    fn dispatchEthertype(&mut self, typ: u16, packet: *u8) {
-        match typ {
-            ETHERTYPE_ARP => {
-                //io::println("ARP!");
-            },
-            ETHERTYPE_IP4 => unsafe {
-                let ipp: *IP4Header = cast_offset(packet, ETHERNET_HEADER_BYTES);
-                self.parseIP4(ipp);
-            },
-            ETHERTYPE_IP6 => unsafe {
-                let ipp: *IP6Header = cast_offset(packet, ETHERNET_HEADER_BYTES);
-                self.parseIP6(ipp);
-            },
-            ETHERTYPE_802_1X => {
-                //io::println("802.1X!");
-            },
-            x => {
-                //io::println(fmt!("Unknown type: %s", u16::to_str_radix(x, 16)));
+            if (*self.header).len > ETHERNET_HEADER_BYTES as u32 {
+                let ehp: *EthernetHeader = cast::transmute(self.packet);
+                (*ehp).parse(ctx);
+                (*ehp).dispatch(self.packet, ctx);
             }
         }
     }
 }
+
+macro_rules! fixed_iter_bytes(
+    ($t:ty) => (
+        impl IterBytes for $t {
+            fn iter_bytes(&self, lsb0: bool, f: std::to_bytes::Cb) -> bool {
+                self.as_slice().iter_bytes(lsb0, f)
+            }
+        }
+    );
+)
+
+macro_rules! fixed_eq(
+    ($t:ty) => (
+        impl Eq for $t {
+            fn eq(&self, other: &$t) -> bool {
+                self.as_slice().eq(&other.as_slice())
+            }
+            fn ne(&self, other: &$t) -> bool {
+                !self.eq(other)
+            }
+        }
+    );
+)
+
+macro_rules! fixed_ord(
+    ($t:ty) => (
+        impl Ord for $t {
+            fn lt(&self, other: &$t) -> bool {
+                self.as_slice().lt(&other.as_slice())
+            }
+            fn le(&self, other: &$t) -> bool {
+                self.lt(other) || self.eq(other)
+            }
+            fn ge(&self, other: &$t) -> bool {
+                !self.lt(other)
+            }
+            fn gt(&self, other: &$t) -> bool {
+                !self.le(other)
+            }
+        }
+    );
+)
 
 static ETHERNET_MAC_ADDR_BYTES: uint = 6;
 static ETHERNET_ETHERTYPE_BYTES: uint = 2;
@@ -190,7 +163,7 @@ static ETHERNET_HEADER_BYTES: uint =
 struct MacAddr([u8,..ETHERNET_MAC_ADDR_BYTES]);
 
 impl MacAddr {
-    fn toVec(&self) -> ~[u8] {
+    fn to_vec(&self) -> ~[u8] {
         return ~[self[0], self[1], self[2], self[3], self[4], self[5]];
     }
 }
@@ -205,13 +178,9 @@ impl ToStr for MacAddr {
     }
 }
 
-fn mac_to_str(mac: &[u8]) -> ~str {
-    use f = std::u8::to_str_radix;
-    return fmt!("%s:%s:%s:%s:%s:%s",
-                f(mac[0], 16), f(mac[1], 16), f(mac[2], 16),
-                f(mac[3], 16), f(mac[4], 16), f(mac[5], 16)
-               );
-}
+fixed_iter_bytes!(MacAddr)
+fixed_eq!(MacAddr)
+fixed_ord!(MacAddr)
 
 struct EthernetHeader {
     dst: MacAddr,
@@ -219,19 +188,58 @@ struct EthernetHeader {
     typ: u16
 }
 
+impl HudParser for EthernetHeader {
+    fn parse(&self, ctx: &mut HudContext) {
+        ctx.mac.update(self.src, self.dst, |src,dst| {
+            let id = ctx.id_counter;
+            ctx.id_counter += 1;
+            ctx.out.send(mk_json(id, "mac", src.to_str(), dst.to_str()));
+            id
+        });
+    }
+}
+
+impl EthernetHeader {
+    fn dispatch(&self, packet: *u8, ctx: &mut HudContext) {
+        match self.typ {
+            ETHERTYPE_ARP => {
+                //io::println("ARP!");
+            },
+            ETHERTYPE_IP4 => unsafe {
+                let ipp: *IP4Header = cast_offset(packet, ETHERNET_HEADER_BYTES);
+                (*ipp).parse(ctx);
+            },
+            ETHERTYPE_IP6 => unsafe {
+                let ipp: *IP6Header = cast_offset(packet, ETHERNET_HEADER_BYTES);
+                (*ipp).parse(ctx);
+            },
+            ETHERTYPE_802_1X => {
+                //io::println("802.1X!");
+            },
+            x => {
+                //io::println(fmt!("Unknown type: %s", u16::to_str_radix(x, 16)));
+            }
+        }
+    }
+}
+
+
 static ETHERTYPE_ARP: u16 = 0x0608;
 static ETHERTYPE_IP4: u16 = 0x0008;
 static ETHERTYPE_IP6: u16 = 0xDD86;
 static ETHERTYPE_802_1X: u16 = 0x8E88;
 
-fn ip4_to_str(ip: &[u8]) -> ~str {
-    return fmt!("%u.%u.%u.%u",
-                ip[0] as uint, ip[1] as uint, ip[2] as uint, ip[3] as uint);
+struct IP4Addr([u8,..4]);
+impl ToStr for IP4Addr {
+    fn to_str(&self) -> ~str {
+        fmt!("%u.%u.%u.%u",
+             self[0] as uint, self[1] as uint, self[2] as uint, self[3] as uint)
+    }
 }
 
-fn ip4_to_vec(ip: &Ipv4Rep) -> ~[u8] {
-    return ~[ip.a, ip.b, ip.c, ip.d];
-}
+fixed_iter_bytes!(IP4Addr)
+fixed_eq!(IP4Addr)
+fixed_ord!(IP4Addr)
 
 struct IP4Header {
     ver_ihl: u8,
@@ -242,19 +250,22 @@ struct IP4Header {
     ttl: u8,
     proto: u8,
     hchk: u16,
-    src: Ipv4Rep,
-    dst: Ipv4Rep,
+    src: IP4Addr,
+    dst: IP4Addr,
+}
+
+impl HudParser for IP4Header {
+    fn parse(&self, ctx: &mut HudContext) {
+        ctx.ip4.update(self.src, self.dst, |src,dst| {
+            let id = ctx.id_counter;
+            ctx.id_counter += 1;
+            ctx.out.send(mk_json(id, "ip4", src.to_str(), dst.to_str()));
+            id
+        });
+    }
 }
 
 struct IP6Addr([u8,..16]);
-impl IP6Addr {
-    fn toVec(&self) -> ~[u8] {
-        return ~[self[ 0], self[ 1], self[ 2], self[ 3],
-                 self[ 4], self[ 5], self[ 6], self[ 7],
-                 self[ 8], self[ 9], self[10], self[11],
-                 self[12], self[13], self[14], self[15]];
-    }
-}
 impl ToStr for IP6Addr {
     fn to_str(&self) -> ~str {
         let f = u8::to_str_radix;
@@ -271,19 +282,9 @@ impl ToStr for IP6Addr {
     }
 }
 
-fn ip6_to_str(ip6: &[u8]) -> ~str {
-    let f = u8::to_str_radix;
-    return fmt!("%s%s:%s%s:%s%s:%s%s:%s%s:%s%s:%s%s:%s%s",
-                f(ip6[ 0], 16), f(ip6[ 1], 16),
-                f(ip6[ 2], 16), f(ip6[ 3], 16),
-                f(ip6[ 4], 16), f(ip6[ 5], 16),
-                f(ip6[ 6], 16), f(ip6[ 7], 16),
-                f(ip6[ 8], 16), f(ip6[ 9], 16),
-                f(ip6[10], 16), f(ip6[11], 16),
-                f(ip6[12], 16), f(ip6[13], 16),
-                f(ip6[14], 16), f(ip6[15], 16)
-               );
-}
+fixed_iter_bytes!(IP6Addr)
+fixed_eq!(IP6Addr)
+fixed_ord!(IP6Addr)
 
 struct IP6Header {
     ver_tc_fl: u32,
@@ -293,15 +294,26 @@ struct IP6Header {
     src: IP6Addr,
     dst: IP6Addr
 }
+impl HudParser for IP6Header {
+    fn parse(&self, ctx: &mut HudContext) {
+        ctx.ip6.update(self.src, self.dst, |src,dst| {
+            let id = ctx.id_counter;
+            ctx.id_counter += 1;
+            ctx.out.send(mk_json(id, "ip6", src.to_str(), dst.to_str()));
+            id
+        });
+    }
+}
 
 unsafe fn cast_offset<T,U>(base: *T, offset: uint) -> U {
     cast::transmute(ptr::offset(base, offset))
 }
 
-extern fn handler(args: *u8, header: &pcap_pkthdr, packet: *u8) {
+extern fn handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
     unsafe {
-        let parser: *mut HudParser = cast::transmute(args);
-        (&mut *parser).parseEthernet(header, packet);
+        let ctx: *mut HudContext = cast::transmute(args);
+        let p = Packet { header: header, packet: packet };
+        p.parse(&mut *ctx);
     }
 }
 
@@ -393,9 +405,6 @@ fn capture(data_ch: Chan<~str>) {
         out: ~data_ch,
         id_counter: 0
     };
-    let parser = ~HudParser {
-        ctx: ctx
-    };
 
     let dev = get_device(errbuf);
     match dev {
@@ -407,7 +416,7 @@ fn capture(data_ch: Chan<~str>) {
             match session {
                 Some(s) => unsafe {
                     io::println(fmt!("Starting pcap_loop"));
-                    pcap_loop(s, -1, handler, cast::transmute(ptr::to_unsafe_ptr(parser)));
+                    pcap_loop(s, -1, handler, cast::transmute(ptr::to_unsafe_ptr(ctx)));
                 },
                 None => unsafe {
                     io::println(fmt!("Couldn't open device %s: %?\n",

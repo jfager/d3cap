@@ -5,7 +5,7 @@ use extra::sha1::Sha1;
 use extra::digest::{Digest, DigestUtil};
 use std::{io,vec};
 use std::hashmap::HashMap;
-use extra::base64::ToBase64;
+use extra::base64::{ToBase64, STANDARD};
 use std::iterator::IteratorUtil;
 
 static CONNECTION_FIELD: &'static str = "Connection";
@@ -53,7 +53,7 @@ impl Handshake {
         sh.input_str(self.key + SECRET);
         let mut res = [0u8,..20];
         sh.result(res);
-        let responseKey = res.to_base64();
+        let responseKey = res.to_base64(STANDARD);
         fmt!("HTTP/1.1 101 Switching Protocols\r\n\
               %s: %s\r\n\
               %s: %s\r\n\
