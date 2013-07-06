@@ -10,6 +10,7 @@ use extra::{net,net_tcp,uv};
 
 use rustpcap::*;
 use rustwebsocket::*;
+use ring::RingBuffer;
 
 type Addrs<T> = (T, T);
 
@@ -33,7 +34,7 @@ impl <T: Ord+IterBytes+Eq+Clone+Copy+Send+ToStr> ProtocolStats<T> {
     }
     fn update(&mut self, src: T, dst: T, idgen: &mut IdGen, ch: &SharedChan<~str>) {
         let key = ~OrdAddrs::from(src.clone(), dst.clone());
-        let chan = self.addrs.find_or_insert_with(key, |k| {
+        let chan = self.addrs.find_or_insert_with(key, |_| {
             let id = idgen.next_id();
             ~AddrStats::spawn(id, self.typ, ch)
         });
@@ -45,7 +46,7 @@ struct AddrStats<T> {
     id: uint,
     typ: &'static str,
     count: u64,
-    routes: HashMap<~Addrs<T>, ~RouteStats>,
+    routes: HashMap<~Addrs<T>, ~RouteStats<T>>,
     out_ch: SharedChan<~str>
 }
 impl <T: IterBytes+Eq+Clone+Copy+Send+ToStr> AddrStats<T> {
@@ -58,11 +59,12 @@ impl <T: IterBytes+Eq+Clone+Copy+Send+ToStr> AddrStats<T> {
             out_ch: ch
         }
     }
-    fn update(&mut self, rte: ~Addrs<T>) {
+    fn update(&mut self, rte: &Addrs<T>) {
         self.count += 1;
-        let msg = mk_json(self.id, self.typ, rte.first().to_str(), rte.second().to_str());
-        let stats = self.routes.find_or_insert_with(rte, |_| ~RouteStats::new());
-        stats.update();
+        let pkt = PktMeta { route: rte.clone(), size: 1, time: 1 };
+        let msg = mk_json(self.id, self.typ, &pkt);
+        let stats = self.routes.find_or_insert_with(~rte.clone(), |_| ~RouteStats::new());
+        stats.update(pkt);
         self.out_ch.send(msg);
     }
     fn spawn(id: uint, typ: &'static str, ch: &SharedChan<~str>) -> Chan<~Addrs<T>> {
@@ -70,7 +72,7 @@ impl <T: IterBytes+Eq+Clone+Copy+Send+ToStr> AddrStats<T> {
         do task::spawn_with(ch.clone()) |oc| {
             let mut hs = AddrStats::new(id, typ, oc);
             loop {
-                let rte = port.recv();
+                let rte: ~Addrs<T> = port.recv();
                 hs.update(rte);
             }
         }
@@ -78,15 +80,24 @@ impl <T: IterBytes+Eq+Clone+Copy+Send+ToStr> AddrStats<T> {
     }
 }
 
-struct RouteStats {
-    count: u64
+struct PktMeta<T> {
+    route: Addrs<T>,
+    size: uint,
+    time: u64
 }
-impl RouteStats {
-    fn new() -> RouteStats {
-        RouteStats { count: 0 }
+
+struct RouteStats<T> {
+    count: u64,
+    last: RingBuffer<PktMeta<T>>
+}
+
+impl <T> RouteStats<T> {
+    fn new() -> RouteStats<T> {
+        RouteStats { count: 0, last: RingBuffer::new(5) }
     }
-    fn update(&mut self) {
+    fn update(&mut self, pm: PktMeta<T>) {
         self.count += 1;
+        self.last.push(pm);
     }
 }
 
@@ -107,8 +118,9 @@ impl IdGen {
     }
 }
 
-fn mk_json(id: uint, t: &str, src: &str, dst: &str) -> ~str {
-    fmt!("{\"conn_id\": %u, \"type\": \"%s\", \"src\": \"%s\", \"dst\": \"%s\"}", id, t, src, dst)
+fn mk_json<T: ToStr+Copy>(id: uint, t: &str, pkt: &PktMeta<T>) -> ~str {
+    fmt!("{\"conn_id\": %u, \"type\": \"%s\", \"src\": \"%s\", \"dst\": \"%s\"}",
+         id, t, pkt.route.first().to_str(), pkt.route.second().to_str())
 }
 
 trait HudParser {
