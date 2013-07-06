@@ -1,8 +1,10 @@
 extern mod std;
 extern mod extra;
 
-use std::hashmap::HashMap;
 use std::{cast,io,ptr,str,task,u8};
+use std::hashmap::HashMap;
+use std::comm::SharedChan;
+
 use extra::{net,net_tcp,uv};
 //use extra::comm::DuplexStream;
 
@@ -19,43 +21,54 @@ impl <T: Ord+IterBytes> OrdAddrs<T> {
     }
 }
 
-type AddrMap<T> = HashMap<~OrdAddrs<T>, ~Chan<~Addrs<T>>>;
-trait Update<T> {
-   fn update(&mut self, src: T, dst: T, onNew: &fn(T,T)->uint);
+type AddrChanMap<T> = HashMap<~OrdAddrs<T>, ~Chan<~Addrs<T>>>;
+
+struct ProtocolStats<T> {
+    typ: &'static str,
+    addrs: AddrChanMap<T>
 }
-impl <T: Ord+IterBytes+Eq+Copy+Send> Update<T> for AddrMap<T> {
-    fn update(&mut self, src: T, dst: T, onNew: &fn(T,T)->uint) {
-        let key = ~OrdAddrs::from(copy src, copy dst);
-        let chan = self.find_or_insert_with(key, |k| {
-            let id = onNew(k.first(), k.second());
-            ~HudStats::spawn(id)
+impl <T: Ord+IterBytes+Eq+Clone+Copy+Send+ToStr> ProtocolStats<T> {
+    fn new(typ: &'static str) -> ProtocolStats<T> {
+        ProtocolStats { typ: typ, addrs: HashMap::new() }
+    }
+    fn update(&mut self, src: T, dst: T, idgen: &mut IdGen, ch: &SharedChan<~str>) {
+        let key = ~OrdAddrs::from(src.clone(), dst.clone());
+        let chan = self.addrs.find_or_insert_with(key, |k| {
+            let id = idgen.next_id();
+            ~AddrStats::spawn(id, self.typ, ch)
         });
         chan.send(~(src, dst))
     }
 }
 
-struct HudStats<T> {
+struct AddrStats<T> {
     id: uint,
+    typ: &'static str,
     count: u64,
-    routes: HashMap<~Addrs<T>, ~RouteStats>
+    routes: HashMap<~Addrs<T>, ~RouteStats>,
+    out_ch: SharedChan<~str>
 }
-impl <T: IterBytes+Eq+Copy+Send> HudStats<T> {
-    fn new(id: uint) -> HudStats<T> {
-        HudStats {
+impl <T: IterBytes+Eq+Clone+Copy+Send+ToStr> AddrStats<T> {
+    fn new(id: uint, typ: &'static str, ch: SharedChan<~str>) -> AddrStats<T> {
+        AddrStats {
             id: id,
+            typ: typ,
             count: 0,
-            routes: HashMap::new()
+            routes: HashMap::new(),
+            out_ch: ch
         }
     }
     fn update(&mut self, rte: ~Addrs<T>) {
         self.count += 1;
+        let msg = mk_json(self.id, self.typ, rte.first().to_str(), rte.second().to_str());
         let stats = self.routes.find_or_insert_with(rte, |_| ~RouteStats::new());
         stats.update();
+        self.out_ch.send(msg);
     }
-    fn spawn(id: uint) -> Chan<~Addrs<T>> {
+    fn spawn(id: uint, typ: &'static str, ch: &SharedChan<~str>) -> Chan<~Addrs<T>> {
         let (port, chan) = stream();
-        do spawn {
-            let mut hs = HudStats::new(id);
+        do task::spawn_with(ch.clone()) |oc| {
+            let mut hs = AddrStats::new(id, typ, oc);
             loop {
                 let rte = port.recv();
                 hs.update(rte);
@@ -78,17 +91,18 @@ impl RouteStats {
 }
 
 struct HudContext {
-    mac: AddrMap<MacAddr>,
-    ip4: AddrMap<IP4Addr>,
-    ip6: AddrMap<IP6Addr>,
-    out: ~Chan<~str>,
-    priv id_counter: uint
+    mac: ProtocolStats<MacAddr>,
+    ip4: ProtocolStats<IP4Addr>,
+    ip6: ProtocolStats<IP6Addr>,
+    out: ~SharedChan<~str>,
+    idgen: IdGen
 }
 
-impl HudContext {
+struct IdGen(uint);
+impl IdGen {
     fn next_id(&mut self) -> uint {
-        let out = self.id_counter;
-        self.id_counter += 1;
+        let out = (**self);
+        (**self) += 1;
         out
     }
 }
@@ -163,6 +177,16 @@ macro_rules! fixed_ord(
     );
 )
 
+macro_rules! fixed_clone(
+    ($t:ty) => (
+        impl Clone for $t {
+            fn clone(&self) -> $t {
+                *(copy self)
+            }
+        }
+    );
+)
+
 static ETHERNET_MAC_ADDR_BYTES: uint = 6;
 static ETHERNET_ETHERTYPE_BYTES: uint = 2;
 static ETHERNET_HEADER_BYTES: uint =
@@ -189,6 +213,7 @@ impl ToStr for MacAddr {
 fixed_iter_bytes!(MacAddr)
 fixed_eq!(MacAddr)
 fixed_ord!(MacAddr)
+fixed_clone!(MacAddr)
 
 struct EthernetHeader {
     dst: MacAddr,
@@ -198,12 +223,7 @@ struct EthernetHeader {
 
 impl HudParser for EthernetHeader {
     fn parse(&self, ctx: &mut HudContext) {
-        ctx.mac.update(self.src, self.dst, |src,dst| {
-            let id = ctx.id_counter;
-            ctx.id_counter += 1;
-            ctx.out.send(mk_json(id, "mac", src.to_str(), dst.to_str()));
-            id
-        });
+        ctx.mac.update(self.src, self.dst, &mut ctx.idgen, ctx.out);
     }
 }
 
@@ -215,7 +235,7 @@ impl EthernetHeader {
             },
             ETHERTYPE_IP4 => unsafe {
                 let ipp: *IP4Header = cast_offset(packet, ETHERNET_HEADER_BYTES);
-                ctx.ip4.update("ip4", (*ipp).src), (*ipp).dst);
+                (*ipp).parse(ctx);
             },
             ETHERTYPE_IP6 => unsafe {
                 let ipp: *IP6Header = cast_offset(packet, ETHERNET_HEADER_BYTES);
@@ -248,6 +268,7 @@ impl ToStr for IP4Addr {
 fixed_iter_bytes!(IP4Addr)
 fixed_eq!(IP4Addr)
 fixed_ord!(IP4Addr)
+fixed_clone!(IP4Addr)
 
 struct IP4Header {
     ver_ihl: u8,
@@ -264,12 +285,7 @@ struct IP4Header {
 
 impl HudParser for IP4Header {
     fn parse(&self, ctx: &mut HudContext) {
-        ctx.ip4.update(self.src, self.dst, |src,dst| {
-            let id = ctx.id_counter;
-            ctx.id_counter += 1;
-            ctx.out.send(mk_json(id, "ip4", src.to_str(), dst.to_str()));
-            id
-        });
+        ctx.ip4.update(self.src, self.dst, &mut ctx.idgen, ctx.out);
     }
 }
 
@@ -293,6 +309,7 @@ impl ToStr for IP6Addr {
 fixed_iter_bytes!(IP6Addr)
 fixed_eq!(IP6Addr)
 fixed_ord!(IP6Addr)
+fixed_clone!(IP6Addr)
 
 struct IP6Header {
     ver_tc_fl: u32,
@@ -304,12 +321,7 @@ struct IP6Header {
 }
 impl HudParser for IP6Header {
     fn parse(&self, ctx: &mut HudContext) {
-        ctx.ip6.update(self.src, self.dst, |src,dst| {
-            let id = ctx.id_counter;
-            ctx.id_counter += 1;
-            ctx.out.send(mk_json(id, "ip6", src.to_str(), dst.to_str()));
-            id
-        });
+        ctx.ip6.update(self.src, self.dst, &mut ctx.idgen, ctx.out);
     }
 }
 
@@ -335,9 +347,11 @@ fn websocketWorker(sockb: &net::tcp::TcpSocketBuf, data_po: &Port<~str>) {
 
     loop {
         //io::println("Top of worker loop");
-        if data_po.peek() {
+        let mut counter = 0;
+        while data_po.peek() && counter < 100 {
             let msg = data_po.recv();
             sockb.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
+            counter += 1;
         }
         //io::println("Parsing input frame");
         let (opt_pl, frameType) = wsParseInputFrame(sockb);
@@ -404,14 +418,14 @@ fn uiServer(data_po: Port<~str>) {
 }
 
 
-fn capture(data_ch: Chan<~str>) {
+fn capture(data_ch: SharedChan<~str>) {
     let mut errbuf = std::vec::with_capacity(256);
     let ctx = ~HudContext {
-        mac: HashMap::new(),
-        ip4: HashMap::new(),
-        ip6: HashMap::new(),
+        mac: ProtocolStats::new("mac"),
+        ip4: ProtocolStats::new("ip4"),
+        ip6: ProtocolStats::new("ip6"),
         out: ~data_ch,
-        id_counter: 0
+        idgen: IdGen(0)
     };
 
     let dev = get_device(errbuf);
@@ -439,6 +453,7 @@ fn capture(data_ch: Chan<~str>) {
 
 pub fn run() {
     let (data_po, data_ch) = stream();
+    let data_ch = SharedChan::new(data_ch);
 
     do task::spawn_with(data_po) |po| { uiServer(po); }
 
