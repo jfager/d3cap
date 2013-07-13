@@ -5,7 +5,9 @@ use std::{cast,io,ptr,str,task,u8};
 use std::hashmap::HashMap;
 use std::comm::SharedChan;
 
-use extra::{net,net_tcp,uv};
+use extra::{json,net,time,uv};
+use extra::json::ToJson;
+use extra::serialize::{Encodable,Decodable};
 //use extra::comm::DuplexStream;
 
 use rustpcap::*;
@@ -22,7 +24,7 @@ impl <T: Ord+IterBytes> OrdAddrs<T> {
     }
 }
 
-type AddrChanMap<T> = HashMap<~OrdAddrs<T>, ~Chan<~Addrs<T>>>;
+type AddrChanMap<T> = HashMap<~OrdAddrs<T>, ~Chan<~PktMeta<T>>>;
 
 struct ProtocolStats<T> {
     typ: &'static str,
@@ -32,48 +34,46 @@ impl <T: Ord+IterBytes+Eq+Clone+Copy+Send+ToStr> ProtocolStats<T> {
     fn new(typ: &'static str) -> ProtocolStats<T> {
         ProtocolStats { typ: typ, addrs: HashMap::new() }
     }
-    fn update(&mut self, src: T, dst: T, idgen: &mut IdGen, ch: &SharedChan<~str>) {
+    fn update(&mut self, src: T, dst: T, size: uint, ch: &SharedChan<~str>) {
         let key = ~OrdAddrs::from(src.clone(), dst.clone());
         let chan = self.addrs.find_or_insert_with(key, |_| {
-            let id = idgen.next_id();
-            ~AddrStats::spawn(id, self.typ, ch)
+            ~AddrStats::spawn(self.typ, ch)
         });
-        chan.send(~(src, dst))
+        let t = time::get_time();
+        let pkt = ~PktMeta { typ: self.typ.to_str(), src: src, dst: dst, size: size, time: t };
+        chan.send(pkt);
     }
 }
 
 struct AddrStats<T> {
-    id: uint,
     typ: &'static str,
     count: u64,
     routes: HashMap<~Addrs<T>, ~RouteStats<T>>,
     out_ch: SharedChan<~str>
 }
 impl <T: IterBytes+Eq+Clone+Copy+Send+ToStr> AddrStats<T> {
-    fn new(id: uint, typ: &'static str, ch: SharedChan<~str>) -> AddrStats<T> {
+    fn new(typ: &'static str, ch: SharedChan<~str>) -> AddrStats<T> {
         AddrStats {
-            id: id,
             typ: typ,
             count: 0,
             routes: HashMap::new(),
             out_ch: ch
         }
     }
-    fn update(&mut self, rte: &Addrs<T>) {
+    fn update(&mut self, pkt: ~PktMeta<T>) {
         self.count += 1;
-        let pkt = PktMeta { route: rte.clone(), size: 1, time: 1 };
-        let msg = mk_json(self.id, self.typ, &pkt);
-        let stats = self.routes.find_or_insert_with(~rte.clone(), |_| ~RouteStats::new());
+        let msg = json::to_str(&pkt.to_json());
+        let stats = self.routes.find_or_insert_with(~pkt.addrs(), |_| ~RouteStats::new());
         stats.update(pkt);
         self.out_ch.send(msg);
     }
-    fn spawn(id: uint, typ: &'static str, ch: &SharedChan<~str>) -> Chan<~Addrs<T>> {
+    fn spawn(typ: &'static str, ch: &SharedChan<~str>) -> Chan<~PktMeta<T>> {
         let (port, chan) = stream();
         do task::spawn_with(ch.clone()) |oc| {
-            let mut hs = AddrStats::new(id, typ, oc);
+            let mut hs = AddrStats::new(typ, oc);
             loop {
-                let rte: ~Addrs<T> = port.recv();
-                hs.update(rte);
+                let pkt: ~PktMeta<T> = port.recv();
+                hs.update(pkt);
             }
         }
         chan
@@ -81,21 +81,39 @@ impl <T: IterBytes+Eq+Clone+Copy+Send+ToStr> AddrStats<T> {
 }
 
 struct PktMeta<T> {
-    route: Addrs<T>,
+    typ: ~str,
+    src: T,
+    dst: T,
     size: uint,
-    time: u64
+    time: time::Timespec
+}
+impl <T:Clone> PktMeta<T> {
+    fn addrs(&self) -> Addrs<T> {
+        (self.src.clone(), self.dst.clone())
+    }
+}
+impl <T: ToStr> ToJson for PktMeta<T> {
+    fn to_json(&self) -> json::Json {
+        let mut m = ~HashMap::new();
+        m.insert(~"type", self.typ.to_json());
+        m.insert(~"src", self.src.to_str().to_json());
+        m.insert(~"dst", self.dst.to_str().to_json());
+        m.insert(~"size", self.size.to_json());
+        m.insert(~"time", self.time.sec.to_json());
+        json::Object(m)
+    }
 }
 
 struct RouteStats<T> {
     count: u64,
-    last: RingBuffer<PktMeta<T>>
+    last: RingBuffer<~PktMeta<T>>
 }
 
 impl <T> RouteStats<T> {
     fn new() -> RouteStats<T> {
         RouteStats { count: 0, last: RingBuffer::new(5) }
     }
-    fn update(&mut self, pm: PktMeta<T>) {
+    fn update(&mut self, pm: ~PktMeta<T>) {
         self.count += 1;
         self.last.push(pm);
     }
@@ -105,22 +123,7 @@ struct HudContext {
     mac: ProtocolStats<MacAddr>,
     ip4: ProtocolStats<IP4Addr>,
     ip6: ProtocolStats<IP6Addr>,
-    out: ~SharedChan<~str>,
-    idgen: IdGen
-}
-
-struct IdGen(uint);
-impl IdGen {
-    fn next_id(&mut self) -> uint {
-        let out = (**self);
-        (**self) += 1;
-        out
-    }
-}
-
-fn mk_json<T: ToStr+Copy>(id: uint, t: &str, pkt: &PktMeta<T>) -> ~str {
-    fmt!("{\"conn_id\": %u, \"type\": \"%s\", \"src\": \"%s\", \"dst\": \"%s\"}",
-         id, t, pkt.route.first().to_str(), pkt.route.second().to_str())
+    out: ~SharedChan<~str>
 }
 
 trait HudParser {
@@ -147,7 +150,7 @@ impl HudParser for Packet {
     }
 }
 
-macro_rules! fixed_iter_bytes(
+macro_rules! fixed_vec_iter_bytes(
     ($t:ty) => (
         impl IterBytes for $t {
             fn iter_bytes(&self, lsb0: bool, f: std::to_bytes::Cb) -> bool {
@@ -157,7 +160,7 @@ macro_rules! fixed_iter_bytes(
     );
 )
 
-macro_rules! fixed_eq(
+macro_rules! fixed_vec_eq(
     ($t:ty) => (
         impl Eq for $t {
             fn eq(&self, other: &$t) -> bool {
@@ -170,7 +173,7 @@ macro_rules! fixed_eq(
     );
 )
 
-macro_rules! fixed_ord(
+macro_rules! fixed_vec_ord(
     ($t:ty) => (
         impl Ord for $t {
             fn lt(&self, other: &$t) -> bool {
@@ -189,7 +192,7 @@ macro_rules! fixed_ord(
     );
 )
 
-macro_rules! fixed_clone(
+macro_rules! fixed_vec_clone(
     ($t:ty) => (
         impl Clone for $t {
             fn clone(&self) -> $t {
@@ -222,10 +225,10 @@ impl ToStr for MacAddr {
     }
 }
 
-fixed_iter_bytes!(MacAddr)
-fixed_eq!(MacAddr)
-fixed_ord!(MacAddr)
-fixed_clone!(MacAddr)
+fixed_vec_iter_bytes!(MacAddr)
+fixed_vec_eq!(MacAddr)
+fixed_vec_ord!(MacAddr)
+fixed_vec_clone!(MacAddr)
 
 struct EthernetHeader {
     dst: MacAddr,
@@ -235,7 +238,7 @@ struct EthernetHeader {
 
 impl HudParser for EthernetHeader {
     fn parse(&self, ctx: &mut HudContext) {
-        ctx.mac.update(self.src, self.dst, &mut ctx.idgen, ctx.out);
+        ctx.mac.update(self.src, self.dst, 1, ctx.out);
     }
 }
 
@@ -277,10 +280,10 @@ impl ToStr for IP4Addr {
     }
 }
 
-fixed_iter_bytes!(IP4Addr)
-fixed_eq!(IP4Addr)
-fixed_ord!(IP4Addr)
-fixed_clone!(IP4Addr)
+fixed_vec_iter_bytes!(IP4Addr)
+fixed_vec_eq!(IP4Addr)
+fixed_vec_ord!(IP4Addr)
+fixed_vec_clone!(IP4Addr)
 
 struct IP4Header {
     ver_ihl: u8,
@@ -297,7 +300,7 @@ struct IP4Header {
 
 impl HudParser for IP4Header {
     fn parse(&self, ctx: &mut HudContext) {
-        ctx.ip4.update(self.src, self.dst, &mut ctx.idgen, ctx.out);
+        ctx.ip4.update(self.src, self.dst, self.len as uint, ctx.out);
     }
 }
 
@@ -318,10 +321,10 @@ impl ToStr for IP6Addr {
     }
 }
 
-fixed_iter_bytes!(IP6Addr)
-fixed_eq!(IP6Addr)
-fixed_ord!(IP6Addr)
-fixed_clone!(IP6Addr)
+fixed_vec_iter_bytes!(IP6Addr)
+fixed_vec_eq!(IP6Addr)
+fixed_vec_ord!(IP6Addr)
+fixed_vec_clone!(IP6Addr)
 
 struct IP6Header {
     ver_tc_fl: u32,
@@ -333,7 +336,7 @@ struct IP6Header {
 }
 impl HudParser for IP6Header {
     fn parse(&self, ctx: &mut HudContext) {
-        ctx.ip6.update(self.src, self.dst, &mut ctx.idgen, ctx.out);
+        ctx.ip6.update(self.src, self.dst, 1, ctx.out);
     }
 }
 
@@ -386,14 +389,14 @@ fn uiServer(data_po: Port<~str>) {
     let (accept_po, accept_ch) = stream();
     let (finish_po, finish_ch) = stream();
     do spawn {
-        let addr = extra::net_ip::v4::parse_addr("127.0.0.1");
+        let addr = extra::net::ip::v4::parse_addr("127.0.0.1");
         let port = 8080;
         let backlog = 128;
         let iotask = &uv::global_loop::get();
 
         do net::tcp::listen(addr, port, backlog, iotask, |_|{}) |conn, kill_ch| {
             io::println("Listen callback");
-            let (res_po, res_ch) = stream::<Option<net_tcp::TcpErrData>>();
+            let (res_po, res_ch) = stream::<Option<net::tcp::TcpErrData>>();
             accept_ch.send((conn, res_ch));
             io::println("Waiting on res_po");
             match res_po.recv() {
@@ -436,8 +439,7 @@ fn capture(data_ch: SharedChan<~str>) {
         mac: ProtocolStats::new("mac"),
         ip4: ProtocolStats::new("ip4"),
         ip6: ProtocolStats::new("ip6"),
-        out: ~data_ch,
-        idgen: IdGen(0)
+        out: ~data_ch
     };
 
     let dev = get_device(errbuf);
