@@ -7,7 +7,6 @@ use std::comm::SharedChan;
 
 use extra::{json,net,time,uv};
 use extra::json::ToJson;
-use extra::serialize::{Encodable,Decodable};
 //use extra::comm::DuplexStream;
 
 use rustpcap::*;
