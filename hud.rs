@@ -169,9 +169,6 @@ macro_rules! fixed_vec_eq(
             fn eq(&self, other: &$t) -> bool {
                 self.as_slice().eq(&other.as_slice())
             }
-            fn ne(&self, other: &$t) -> bool {
-                !self.eq(other)
-            }
         }
     );
 )
@@ -181,15 +178,6 @@ macro_rules! fixed_vec_ord(
         impl Ord for $t {
             fn lt(&self, other: &$t) -> bool {
                 self.as_slice().lt(&other.as_slice())
-            }
-            fn le(&self, other: &$t) -> bool {
-                self.lt(other) || self.eq(other)
-            }
-            fn ge(&self, other: &$t) -> bool {
-                !self.lt(other)
-            }
-            fn gt(&self, other: &$t) -> bool {
-                !self.le(other)
             }
         }
     );
