@@ -6,9 +6,10 @@ $(document).ready(function() {
         return d3.layout.force()
             .nodes(nodes)
             .links(links)
-            .gravity(.05)
-            .distance(100)
-            .charge(-100)
+            .gravity(0.05)
+            .distance(function(l) { return 30 + 1.5 * (l.source.displaySize +
+                                                       l.target.displaySize); })
+            .charge(function(d) { return -100 - d.displaySize; })
             .size([width, height]);
     }
 
@@ -62,6 +63,10 @@ $(document).ready(function() {
         };
     }
 
+    function displaySize(size) {
+        return 2 + Math.sqrt(size / Math.PI) / 120;
+    }
+
     var types = {
         'ip4': mkConns('ip4', true),
         'ip6': mkConns('ip6', false),
@@ -75,20 +80,25 @@ $(document).ready(function() {
             .enter().insert("line", "g")
             .attr("class", "link")
             .style("stroke-width", function(d) { return Math.sqrt(d.value); });
-        var node = c.chart.selectAll(".node")
-            .data(c.nodes)
-            .enter().append("svg:g")
+
+        var nodes = c.chart.selectAll(".node");
+        var newNodes = nodes.data(c.nodes).enter()
+            .append("svg:g")
             .attr("class", "node")
             .call(c.force.drag);
 
-        node.append("svg:circle")
-            .attr("r", 5)
+        newNodes.append("svg:circle");
 
-        node.append("svg:text")
+        newNodes.append("svg:text")
             .attr("class", "nodetext")
             .attr("dx", 12)
             .attr("dy", ".35em")
             .text(function(d) { return d.addr; });
+
+        //update size for all nodes, not just new ones.
+        nodes.selectAll("circle").attr("r", function(d) {
+            return d.displaySize;
+        });
     };
 
     $('#connectForm').on('submit', function() {
@@ -121,14 +131,20 @@ $(document).ready(function() {
                 var updateLinks = false;
                 if(s === undefined) {
                     s = c.nodes.length;
-                    c.nodes.push({addr: msg.src});
+                    c.nodes.push({addr: msg.src,
+                                  size: msg.size,
+                                  displaySize: displaySize(msg.size)});
                     c.nodeSet[msg.src] = s;
                     updateLinks = true;
+                } else {
+                    var node = c.nodes[s];
+                    node.size += msg.size;
+                    node.displaySize = displaySize(node.size);
                 }
                 var d = c.nodeSet[msg.dst];
                 if(d === undefined) {
                     d = c.nodes.length;
-                    c.nodes.push({addr: msg.dst});
+                    c.nodes.push({addr: msg.dst, size: 1, displaySize: 1});
                     c.nodeSet[msg.dst] = d;
                     updateLinks = true;
                 }
