@@ -1,12 +1,16 @@
 extern mod extra;
 extern mod std;
 
+
+use std::{rt,io,str,vec};
+use std::hashmap::HashMap;
+use std::iterator::IteratorUtil;
+use std::rt::io::Reader;
+use std::rt::io::extensions::ReaderUtil;
+
 use extra::sha1::Sha1;
 use extra::digest::{Digest, DigestUtil};
-use std::{io,vec};
-use std::hashmap::HashMap;
 use extra::base64::{ToBase64, STANDARD};
-use std::iterator::IteratorUtil;
 
 static CONNECTION_FIELD: &'static str = "Connection";
 static UPGRADE: &'static str = "upgrade";
@@ -73,9 +77,25 @@ fn headerfns() -> HeaderFns {
     hdrFns
 }
 
-pub fn wsParseHandshake<T: Reader>(rdr: &T) -> Option<Handshake> {
+fn read_line<T: rt::io::Reader>(rdr: &mut T) -> ~str {
+    let mut bytes = ~[];
+    loop {
+        match rdr.read_byte() {
+            Some(ch) => {
+                if ch == -1 || ch == '\n' as u8 {
+                    break;
+                }
+                bytes.push(ch as u8);
+            }
+            None => break
+        }
+    }
+    str::from_bytes(bytes)
+}
+
+pub fn wsParseHandshake<T: rt::io::Reader>(rdr: &mut T) -> Option<Handshake> {
     let hdrFns = headerfns();
-    let line = rdr.read_line();
+    let line = read_line(rdr);
     let prop: ~[~str] = line.split_str_iter(" ").transform(|s|s.to_owned()).collect();
     let resource = prop[1].trim();
     let mut hs = Handshake {
@@ -88,18 +108,18 @@ pub fn wsParseHandshake<T: Reader>(rdr: &T) -> Option<Handshake> {
 
     let mut hasHandshake = false;
     loop {
-        let line = rdr.read_line();
+        let line = read_line(rdr);
         let line = line.trim();
         if line.is_empty() {
-            if hasHandshake { return Some(hs); } else { return None; }
+            return if hasHandshake { Some(hs) } else { None };
         }
         let prop: ~[~str] = line.split_str_iter(": ").transform(|s|s.to_owned()).collect();
         if prop.len() != 2 {
             io::println(fmt!("Unexpected line: '%s'", line));
             return None;
         }
-        let key = copy prop[0];
-        let val = copy prop[1].trim();
+        let key = prop[0].clone();
+        let val = prop[1].trim();
         match hdrFns.find(&key) {
             Some(f) => {
                 (*f)(&mut hs, val);
@@ -141,9 +161,9 @@ priv fn frameTypeFrom(i: int) -> WSFrameType {
     unsafe { std::cast::transmute(i) }
 }
 
-pub fn wsParseInputFrame<T:Reader>(rdr: &T) -> (Option<~[u8]>, WSFrameType) {
+pub fn wsParseInputFrame<T: rt::io::Reader>(rdr: &mut T) -> (Option<~[u8]>, WSFrameType) {
     //io::println("reading header");
-    let hdr = rdr.read_bytes(2);
+    let hdr = rdr.read_bytes(2 as uint);
     if hdr.len() != 2 {
         return (None, WS_ERROR_FRAME);
     }

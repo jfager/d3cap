@@ -1,11 +1,15 @@
 extern mod std;
 extern mod extra;
 
-use std::{cast,io,ptr,str,task,u8};
+use std::{cast,io,ptr,rt,str,task,u8};
 use std::hashmap::HashMap;
 use std::comm::SharedChan;
 
-use extra::{json,net,time,uv};
+use std::rt::io::{Reader,Writer,Listener};
+use std::rt::io::net::tcp::{TcpListener, TcpStream};
+use std::rt::io::net::ip::Ipv4;
+
+use extra::{json,time};
 use extra::json::ToJson;
 //use extra::comm::DuplexStream;
 
@@ -29,7 +33,7 @@ struct ProtocolStats<T> {
     typ: &'static str,
     addrs: AddrChanMap<T>
 }
-impl <T: Ord+IterBytes+Eq+Clone+Copy+Send+ToStr> ProtocolStats<T> {
+impl <T: Ord+IterBytes+Eq+Clone+Send+ToStr> ProtocolStats<T> {
     fn new(typ: &'static str) -> ProtocolStats<T> {
         ProtocolStats { typ: typ, addrs: HashMap::new() }
     }
@@ -50,7 +54,7 @@ struct AddrStats<T> {
     routes: HashMap<~Addrs<T>, ~RouteStats<T>>,
     out_ch: SharedChan<~str>
 }
-impl <T: IterBytes+Eq+Clone+Copy+Send+ToStr> AddrStats<T> {
+impl <T: IterBytes+Eq+Clone+Send+ToStr> AddrStats<T> {
     fn new(typ: &'static str, ch: SharedChan<~str>) -> AddrStats<T> {
         AddrStats {
             typ: typ,
@@ -192,10 +196,12 @@ macro_rules! fixed_vec_ord(
 )
 
 macro_rules! fixed_vec_clone(
-    ($t:ty) => (
+    ($t:ident, $arrt: ty, $len:expr) => (
         impl Clone for $t {
             fn clone(&self) -> $t {
-                *(copy self)
+                let mut new_vec: [$arrt, ..$len] = [0, .. $len];
+                for new_vec.mut_iter().zip((**self).iter()).advance |(x,y)| { *x = y.clone(); }
+                $t(new_vec)
             }
         }
     );
@@ -207,12 +213,6 @@ static ETHERNET_HEADER_BYTES: uint =
     (ETHERNET_MAC_ADDR_BYTES * 2) + ETHERNET_ETHERTYPE_BYTES;
 
 struct MacAddr([u8,..ETHERNET_MAC_ADDR_BYTES]);
-
-impl MacAddr {
-    fn to_vec(&self) -> ~[u8] {
-        return ~[self[0], self[1], self[2], self[3], self[4], self[5]];
-    }
-}
 
 impl ToStr for MacAddr {
     fn to_str(&self) -> ~str {
@@ -227,7 +227,7 @@ impl ToStr for MacAddr {
 fixed_vec_iter_bytes!(MacAddr)
 fixed_vec_eq!(MacAddr)
 fixed_vec_ord!(MacAddr)
-fixed_vec_clone!(MacAddr)
+fixed_vec_clone!(MacAddr, u8, ETHERNET_MAC_ADDR_BYTES)
 
 struct EthernetHeader {
     dst: MacAddr,
@@ -282,7 +282,7 @@ impl ToStr for IP4Addr {
 fixed_vec_iter_bytes!(IP4Addr)
 fixed_vec_eq!(IP4Addr)
 fixed_vec_ord!(IP4Addr)
-fixed_vec_clone!(IP4Addr)
+fixed_vec_clone!(IP4Addr, u8, 4)
 
 struct IP4Header {
     ver_ihl: u8,
@@ -323,7 +323,7 @@ impl ToStr for IP6Addr {
 fixed_vec_iter_bytes!(IP6Addr)
 fixed_vec_eq!(IP6Addr)
 fixed_vec_ord!(IP6Addr)
-fixed_vec_clone!(IP6Addr)
+fixed_vec_clone!(IP6Addr, u8, 16)
 
 struct IP6Header {
     ver_tc_fl: u32,
@@ -351,12 +351,15 @@ extern fn handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
     }
 }
 
-fn websocketWorker(sockb: &net::tcp::TcpSocketBuf, data_po: &Port<~str>) {
+fn websocketWorker<T: rt::io::Reader+rt::io::Writer>(tcps: &mut T, data_po: &Port<~str>) {
     io::println("websocketWorker");
-    let handshake = wsParseHandshake(sockb);
+    let handshake = wsParseHandshake(tcps);
     match handshake {
-        Some(hs) => sockb.write_str(hs.getAnswer()),
-        None => sockb.write_str("HTTP/1.1 404 Not Found\r\n\r\n")
+        Some(hs) => {
+            let rsp = hs.getAnswer();
+            tcps.write(rsp.as_bytes());
+        }
+        None => tcps.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
     }
 
     loop {
@@ -364,15 +367,15 @@ fn websocketWorker(sockb: &net::tcp::TcpSocketBuf, data_po: &Port<~str>) {
         let mut counter = 0;
         while data_po.peek() && counter < 100 {
             let msg = data_po.recv();
-            sockb.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
+            tcps.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
             counter += 1;
         }
         //io::println("Parsing input frame");
-        let (opt_pl, frameType) = wsParseInputFrame(sockb);
+        let (opt_pl, frameType) = wsParseInputFrame(tcps);
         match frameType {
             WS_CLOSING_FRAME => {
                 //io::println("Got closing frame");
-                sockb.write(wsMakeFrame([], WS_CLOSING_FRAME));
+                tcps.write(wsMakeFrame([], WS_CLOSING_FRAME));
                 break;
             }
             _ => {
@@ -387,44 +390,27 @@ fn websocketWorker(sockb: &net::tcp::TcpSocketBuf, data_po: &Port<~str>) {
 fn uiServer(data_po: Port<~str>) {
     let (accept_po, accept_ch) = stream();
     let (finish_po, finish_ch) = stream();
-    do spawn {
-        let addr = extra::net::ip::v4::parse_addr("127.0.0.1");
-        let port = 8080;
-        let backlog = 128;
-        let iotask = &uv::global_loop::get();
+    do task::spawn_with(accept_ch) |acc_ch| {
+        let addr = Ipv4(127, 0, 0, 1, 8080);
+        let mut listener = TcpListener::bind(addr);
 
-        do net::tcp::listen(addr, port, backlog, iotask, |_|{}) |conn, kill_ch| {
-            io::println("Listen callback");
-            let (res_po, res_ch) = stream::<Option<net::tcp::TcpErrData>>();
-            accept_ch.send((conn, res_ch));
-            io::println("Waiting on res_po");
-            match res_po.recv() {
-                Some(err_data) => kill_ch.send(Some(err_data)),
-                None => () // wait for next connection
+        loop {
+            io::println("Waiting for connection");
+            match listener.accept() {
+                Some(st) => {
+                    io::println("Got stream!");
+                    acc_ch.send(st)
+                }
+                None => io::println("Shit broke!")
             }
-        };
+        }
         finish_ch.send(());
     }
 
     do task::spawn_with(data_po) |dp| {
         loop {
-            let (conn, res_ch) = accept_po.recv();
-            //do spawn {
-                let accept_result = net::tcp::accept(conn);
-                match accept_result {
-                    Err(accept_error) => {
-                        res_ch.send(Some(accept_error));
-                        // fail?
-                    },
-                    Ok(sock) => {
-                        res_ch.send(None);
-                        let buf = net::tcp::socket_buf(sock);
-                        //let (conn_a, conn_b) = DuplexStream::<~str, ~str>();
-                        //conns_ch.send(conn_a);
-                        websocketWorker(&buf, &dp);
-                    }
-                }
-            //} //spawn
+            let mut stream = accept_po.recv();
+            websocketWorker(&mut stream, &dp);
         }
     }
     finish_po.recv();
