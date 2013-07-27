@@ -11,6 +11,7 @@ use std::rt::io::net::ip::Ipv4;
 
 use extra::{json,time};
 use extra::json::ToJson;
+use extra::treemap::TreeMap;
 //use extra::comm::DuplexStream;
 
 use rustpcap::*;
@@ -97,7 +98,7 @@ impl <T:Clone> PktMeta<T> {
 }
 impl <T: ToStr> ToJson for PktMeta<T> {
     fn to_json(&self) -> json::Json {
-        let mut m = ~HashMap::new();
+        let mut m = ~TreeMap::new();
         m.insert(~"type", self.typ.to_json());
         m.insert(~"src", self.src.to_str().to_json());
         m.insert(~"dst", self.dst.to_str().to_json());
@@ -236,11 +237,11 @@ impl EthernetHeader {
                 //io::println("ARP!");
             },
             ETHERTYPE_IP4 => unsafe {
-                let ipp: *IP4Header = cast_offset(packet, ETHERNET_HEADER_BYTES);
+                let ipp: *IP4Header = transmute_offset(packet, ETHERNET_HEADER_BYTES);
                 (*ipp).parse(ctx);
             },
             ETHERTYPE_IP6 => unsafe {
-                let ipp: *IP6Header = cast_offset(packet, ETHERNET_HEADER_BYTES);
+                let ipp: *IP6Header = transmute_offset(packet, ETHERNET_HEADER_BYTES);
                 (*ipp).parse(ctx);
             },
             ETHERTYPE_802_1X => {
@@ -327,7 +328,7 @@ impl HudParser for IP6Header {
     }
 }
 
-unsafe fn cast_offset<T,U>(base: *T, offset: uint) -> U {
+unsafe fn transmute_offset<T,U>(base: *T, offset: uint) -> U {
     cast::transmute(ptr::offset(base, offset))
 }
 
@@ -407,7 +408,7 @@ fn uiServer(data_po: Port<~str>) {
 
 
 fn capture(data_ch: SharedChan<~str>) {
-    let mut errbuf = std::vec::with_capacity(256);
+
     let ctx = ~HudContext {
         mac: ProtocolStats::new("mac"),
         ip4: ProtocolStats::new("ip4"),
@@ -415,6 +416,7 @@ fn capture(data_ch: SharedChan<~str>) {
         out: ~data_ch
     };
 
+    let mut errbuf = std::vec::with_capacity(256);
     let dev = get_device(errbuf);
     match dev {
         Some(d) => {

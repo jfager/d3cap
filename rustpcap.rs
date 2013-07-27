@@ -18,7 +18,7 @@ pub struct timeval {
 }
 
 #[link_args = "-lpcap"]
-pub extern {
+extern {
     pub fn pcap_lookupdev(errbuf: *u8) -> *u8;
     pub fn pcap_open_live(dev: *u8, snaplen: c_int, promisc: c_int, to_ms: c_int, ebuf: *u8) -> *pcap_t;
     pub fn pcap_next(p: *pcap_t, h: &mut pcap_pkthdr) -> *const u8;
