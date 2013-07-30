@@ -4,6 +4,7 @@ extern mod extra;
 use std::{cast,io,ptr,rt,str,task,u8};
 use std::hashmap::HashMap;
 use std::comm::SharedChan;
+use std::num::FromStrRadix;
 
 use std::rt::io::{Reader,Writer,Listener};
 use std::rt::io::net::tcp::{TcpListener, TcpStream};
@@ -34,11 +35,32 @@ struct ProtocolStats<T> {
     typ: &'static str,
     addrs: AddrChanMap<T>
 }
+
+struct AddrStats<T> {
+    typ: &'static str,
+    count: u64,
+    routes: HashMap<~Addrs<T>, ~RouteStats<T>>,
+    out_ch: SharedChan<~str>
+}
+
+struct PktMeta<T> {
+    typ: ~str,
+    src: T,
+    dst: T,
+    size: u32,
+    time: time::Timespec
+}
+
+struct RouteStats<T> {
+    count: u64,
+    last: RingBuffer<~PktMeta<T>>
+}
+
 impl <T: Ord+IterBytes+Eq+Clone+Send+ToStr> ProtocolStats<T> {
     fn new(typ: &'static str) -> ProtocolStats<T> {
         ProtocolStats { typ: typ, addrs: HashMap::new() }
     }
-    fn update(&mut self, src: T, dst: T, size: uint, ch: &SharedChan<~str>) {
+    fn update(&mut self, src: T, dst: T, size: u32, ch: &SharedChan<~str>) {
         let key = ~OrdAddrs::from(src.clone(), dst.clone());
         let chan = self.addrs.find_or_insert_with(key, |_| {
             ~AddrStats::spawn(self.typ, ch)
@@ -49,12 +71,6 @@ impl <T: Ord+IterBytes+Eq+Clone+Send+ToStr> ProtocolStats<T> {
     }
 }
 
-struct AddrStats<T> {
-    typ: &'static str,
-    count: u64,
-    routes: HashMap<~Addrs<T>, ~RouteStats<T>>,
-    out_ch: SharedChan<~str>
-}
 impl <T: IterBytes+Eq+Clone+Send+ToStr> AddrStats<T> {
     fn new(typ: &'static str, ch: SharedChan<~str>) -> AddrStats<T> {
         AddrStats {
@@ -84,13 +100,6 @@ impl <T: IterBytes+Eq+Clone+Send+ToStr> AddrStats<T> {
     }
 }
 
-struct PktMeta<T> {
-    typ: ~str,
-    src: T,
-    dst: T,
-    size: uint,
-    time: time::Timespec
-}
 impl <T:Clone> PktMeta<T> {
     fn addrs(&self) -> Addrs<T> {
         (self.src.clone(), self.dst.clone())
@@ -106,11 +115,6 @@ impl <T: ToStr> ToJson for PktMeta<T> {
         m.insert(~"time", self.time.sec.to_json());
         json::Object(m)
     }
-}
-
-struct RouteStats<T> {
-    count: u64,
-    last: RingBuffer<~PktMeta<T>>
 }
 
 impl <T> RouteStats<T> {
@@ -130,25 +134,22 @@ struct HudContext {
     out: ~SharedChan<~str>
 }
 
-trait HudParser {
-    fn parse(&self, ctx: &mut HudContext);
-}
-
 struct Packet {
     header: *pcap_pkthdr,
     packet: *u8
 }
-impl HudParser for Packet {
+impl Packet {
     fn parse(&self, ctx: &mut HudContext) {
         unsafe {
-            if (*self.header).caplen < (*self.header).len {
+            let hdr = *self.header;
+            if hdr.caplen < hdr.len {
                 io::println(fmt!("WARN: Capd only [%?] bytes of packet with length [%?]",
-                                 (*self.header).caplen, (*self.header).len));
+                                 hdr.caplen, hdr.len));
             }
-            if (*self.header).len > ETHERNET_HEADER_BYTES as u32 {
+            if hdr.len > ETHERNET_HEADER_BYTES as u32 {
                 let ehp: *EthernetHeader = cast::transmute(self.packet);
-                (*ehp).parse(ctx);
-                (*ehp).dispatch(self.packet, ctx);
+                (*ehp).parse(ctx, hdr.len);
+                (*ehp).dispatch(self, ctx);
             }
         }
     }
@@ -223,26 +224,25 @@ struct EthernetHeader {
     src: MacAddr,
     typ: u16
 }
-
-impl HudParser for EthernetHeader {
-    fn parse(&self, ctx: &mut HudContext) {
-        ctx.mac.update(self.src, self.dst, 1, ctx.out);
+impl EthernetHeader {
+    fn parse(&self, ctx: &mut HudContext, size: u32) {
+        ctx.mac.update(self.src, self.dst, size, ctx.out);
     }
 }
 
 impl EthernetHeader {
-    fn dispatch(&self, packet: *u8, ctx: &mut HudContext) {
+    fn dispatch(&self, p: &Packet, ctx: &mut HudContext) {
         match self.typ {
             ETHERTYPE_ARP => {
                 //io::println("ARP!");
             },
             ETHERTYPE_IP4 => unsafe {
-                let ipp: *IP4Header = transmute_offset(packet, ETHERNET_HEADER_BYTES);
-                (*ipp).parse(ctx);
+                let ipp: *IP4Header = transmute_offset(p.packet, ETHERNET_HEADER_BYTES);
+                (*ipp).parse(ctx, (*p.header).len);
             },
             ETHERTYPE_IP6 => unsafe {
-                let ipp: *IP6Header = transmute_offset(packet, ETHERNET_HEADER_BYTES);
-                (*ipp).parse(ctx);
+                let ipp: *IP6Header = transmute_offset(p.packet, ETHERNET_HEADER_BYTES);
+                (*ipp).parse(ctx, (*p.header).len);
             },
             ETHERTYPE_802_1X => {
                 //io::println("802.1X!");
@@ -286,33 +286,57 @@ struct IP4Header {
     dst: IP4Addr,
 }
 
-impl HudParser for IP4Header {
-    fn parse(&self, ctx: &mut HudContext) {
-        ctx.ip4.update(self.src, self.dst, self.len as uint, ctx.out);
+impl IP4Header {
+    fn parse(&self, ctx: &mut HudContext, size: u32) {
+        ctx.ip4.update(self.src, self.dst, size, ctx.out);
     }
 }
 
-struct IP6Addr([u8,..16]);
+struct IP6Addr([u16,..8]);
 impl ToStr for IP6Addr {
     fn to_str(&self) -> ~str {
-        let f = u8::to_str_radix;
-        return fmt!("%s%s:%s%s:%s%s:%s%s:%s%s:%s%s:%s%s:%s%s",
-                    f(self[ 0], 16), f(self[ 1], 16),
-                    f(self[ 2], 16), f(self[ 3], 16),
-                    f(self[ 4], 16), f(self[ 5], 16),
-                    f(self[ 6], 16), f(self[ 7], 16),
-                    f(self[ 8], 16), f(self[ 9], 16),
-                    f(self[10], 16), f(self[11], 16),
-                    f(self[12], 16), f(self[13], 16),
-                    f(self[14], 16), f(self[15], 16)
-                   );
+        match (**self) {
+            //ip4-compatible
+            [0,0,0,0,0,0,g,h] => {
+                let a = fmt!("%04x", g as uint);
+                let b = FromStrRadix::from_str_radix(a.slice(2, 4), 16).unwrap();
+                let a = FromStrRadix::from_str_radix(a.slice(0, 2), 16).unwrap();
+                let c = fmt!("%04x", h as uint);
+                let d = FromStrRadix::from_str_radix(c.slice(2, 4), 16).unwrap();
+                let c = FromStrRadix::from_str_radix(c.slice(0, 2), 16).unwrap();
+
+                fmt!("[::%u.%u.%u.%u]", a, b, c, d)
+            }
+
+            // ip4-mapped address
+            [0, 0, 0, 0, 0, 1, g, h] => {
+                let a = fmt!("%04x", g as uint);
+                let b = FromStrRadix::from_str_radix(a.slice(2, 4), 16).unwrap();
+                let a = FromStrRadix::from_str_radix(a.slice(0, 2), 16).unwrap();
+                let c = fmt!("%04x", h as uint);
+                let d = FromStrRadix::from_str_radix(c.slice(2, 4), 16).unwrap();
+                let c = FromStrRadix::from_str_radix(c.slice(0, 2), 16).unwrap();
+
+                fmt!("[::FFFF:%u.%u.%u.%u]", a, b, c, d)
+            }
+
+            [a, b, c, d, e, f, g, h] => {
+                fmt!("[%x:%x:%x:%x:%x:%x:%x:%x]",
+                     a as uint, b as uint, c as uint, d as uint,
+                     e as uint, f as uint, g as uint, h as uint)
+            }
+
+            _ => fail!("Can't happen") //keep the exhaustion checker happy.
+        }
     }
 }
+
+
 
 fixed_vec_iter_bytes!(IP6Addr)
 fixed_vec_eq!(IP6Addr)
 fixed_vec_ord!(IP6Addr)
-fixed_vec_clone!(IP6Addr, u8, 16)
+fixed_vec_clone!(IP6Addr, u16, 8)
 
 struct IP6Header {
     ver_tc_fl: u32,
@@ -322,9 +346,9 @@ struct IP6Header {
     src: IP6Addr,
     dst: IP6Addr
 }
-impl HudParser for IP6Header {
-    fn parse(&self, ctx: &mut HudContext) {
-        ctx.ip6.update(self.src, self.dst, 1, ctx.out);
+impl IP6Header {
+    fn parse(&self, ctx: &mut HudContext, size: u32) {
+        ctx.ip6.update(self.src, self.dst, size, ctx.out);
     }
 }
 
