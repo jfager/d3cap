@@ -24,14 +24,35 @@ $(document).ready(function() {
         var tabCont = d3.select('#force-graph-contents')
             .append("div").attr("id", tabId);
 
-        if(active) {
-            tabTop.attr("class", "active");
-            tabCont.attr("class", "tab-pane active");
-        } else {
+        // if(active) {
+        //     tabTop.attr("class", "active");
+        //     tabCont.attr("class", "tab-pane active");
+        // } else {
             tabCont.attr("class", "tab-pane");
-        }
+        // }
 
         return tabCont.append("svg").attr("width", width).attr("height", height);
+    }
+
+    function mkTableTab() {
+        var boundary = $('.tab-content');
+        var width = boundary[0].offsetWidth;
+        var height = width * 0.66;
+        var tabTop = d3.select('#force-graph-tabs')
+            .append("li")
+            .append("a").attr("href", "#tab_ws_log").attr("data-toggle", "tab")
+            .text("log");
+        var tabCont = d3.select('#force-graph-contents')
+            .append("div").attr("id", "tab_ws_log");
+
+        // if(active) {
+             tabTop.attr("class", "active");
+             tabCont.attr("class", "tab-pane active");
+        // } else {
+        //     tabCont.attr("class", "tab-pane");
+        // }
+
+        return tabCont.append("table");
     }
 
     function mkConns(type, active) {
@@ -56,11 +77,76 @@ $(document).ready(function() {
         return {
             conns: [],
             nodes: nodes,
-            nodeSet: {},
+            nodeMap: {},
             links: links,
             chart: chart,
             force: force
         };
+    }
+
+    function mkTable() {
+        var table = mkTableTab();
+
+        return {
+            pairs: [],
+            pairMap: {},
+            table: table
+        }
+    }
+
+    var table = mkTable();
+
+    function updateTable(t, msg) {
+        var pair = [msg.src, msg.dst];
+        pair.sort();
+        var i = t.pairMap[pair];
+        if(i === undefined) {
+            i = t.pairs.length;
+            t.pairs.push({ a: pair[0], b: pair[1], total: 0, from_a: 0, from_b: 0 });
+            t.pairMap[pair] = i;
+        }
+
+        var pairData = t.pairs[i];
+        pairData.total += msg.size;
+        if(msg.src == pair[0]) {
+            pairData.from_a += msg.size;
+        } else {
+            pairData.from_b += msg.size;
+        }
+
+        var ps = t.table.selectAll("tr").data(t.pairs);
+        ps.enter().append("tr");
+        ps.html(mkRow);
+
+        // var lis = ps.data(t.pairs).enter().insert("div").attr("class", "row");
+        // lis.append("div").attr("class", "addr_a col-2");
+        // lis.append("div").attr("class", "addr_b col-2");
+        // lis.append("div").attr("class", "size_t col-2");
+        // lis.append("div").attr("class", "size_a col-2");
+        // lis.append("div").attr("class", "size_b col-2");
+
+        ps.sort(function(p1,p2) { return -cmp(p1.total, p2.total); });
+    }
+
+    function mkRow(d) {
+        return "<td class='addr_a'>"+d.a+"</td>" +
+               "<td class='addr_b'>"+d.b+"</td>" +
+               "<td class='size_t'>"+d.total+"</td>" +
+               "<td class='size_a'>"+d.from_a+"</td>" +
+               "<td class='size_b'>"+d.from_b+"</td>";
+    }
+
+    function cmp() {
+        for(var i=0; i<arguments.length; i+=2) {
+            var a = arguments[i];
+            var b = arguments[i+1];
+            if(a < b) {
+                return -1;
+            } else if(a > b) {
+                return 1;
+            }
+        }
+        return 0;
     }
 
     function displaySize(size) {
@@ -102,79 +188,74 @@ $(document).ready(function() {
     };
 
     $('#connectForm').on('submit', function() {
-        if ("WebSocket" in window) {
-            ws = new WebSocket($('#wsServer').val());
-            ws.onopen = function() {
-                $('#ws_log').append('<li><span class="badge badge-success">websocket opened</span></li>');
+        ws = new WebSocket($('#wsServer').val());
+        ws.onopen = function() {
+            console.log("websocket opened");
+            $('#wsServer').attr('disabled', 'disabled');
+            $('#connect').attr('disabled', 'disabled');
+            $('#disconnect').removeAttr('disabled');
+            $('#message').removeAttr('disabled').focus();
+            $('#send').removeAttr('disabled');
+        };
 
-                $('#wsServer').attr('disabled', 'disabled');
-                $('#connect').attr('disabled', 'disabled');
-                $('#disconnect').removeAttr('disabled');
-                $('#message').removeAttr('disabled').focus();
-                $('#send').removeAttr('disabled');
-            };
+        ws.onerror = function() {
+            console.log("websocket error");
+            ws.close();
+        };
 
-            ws.onerror = function() {
-                $('#ws_log').append('<li><span class="badge badge-important">websocket error</span></li>');
-                ws.close();
-            };
+        ws.onmessage = function(event) {
+            var msg = JSON.parse(event.data);
+            updateTable(table, msg);
+            var c = types[msg.type];
+            if(!c) {
+                return;
+            }
+            c.conns.push(msg);
+            var s = c.nodeMap[msg.src];
+            var updateLinks = false;
+            if(s === undefined) {
+                s = c.nodes.length;
+                c.nodes.push({addr: msg.src,
+                              size: msg.size,
+                              displaySize: displaySize(msg.size)});
+                c.nodeMap[msg.src] = s;
+                updateLinks = true;
+            } else {
+                var node = c.nodes[s];
+                node.size += msg.size;
+                node.displaySize = displaySize(node.size);
+            }
+            var d = c.nodeMap[msg.dst];
+            if(d === undefined) {
+                d = c.nodes.length;
+                c.nodes.push({addr: msg.dst, size: 1, displaySize: 1});
+                c.nodeMap[msg.dst] = d;
+                updateLinks = true;
+            }
+            if(updateLinks) {
+                c.links.push({source: s, target: d});
+            }
 
-            ws.onmessage = function(event) {
-                var msg = JSON.parse(event.data);
-                $('#ws_log').append("<li>received: " + JSON.stringify(msg) + "</li>");
-                var c = types[msg.type];
-                if(!c) {
-                    return;
-                }
-                c.conns.push(msg);
-                var s = c.nodeSet[msg.src];
-                var updateLinks = false;
-                if(s === undefined) {
-                    s = c.nodes.length;
-                    c.nodes.push({addr: msg.src,
-                                  size: msg.size,
-                                  displaySize: displaySize(msg.size)});
-                    c.nodeSet[msg.src] = s;
-                    updateLinks = true;
-                } else {
-                    var node = c.nodes[s];
-                    node.size += msg.size;
-                    node.displaySize = displaySize(node.size);
-                }
-                var d = c.nodeSet[msg.dst];
-                if(d === undefined) {
-                    d = c.nodes.length;
-                    c.nodes.push({addr: msg.dst, size: 1, displaySize: 1});
-                    c.nodeSet[msg.dst] = d;
-                    updateLinks = true;
-                }
-                if(updateLinks) {
-                    c.links.push({source: s, target: d});
-                }
+            update(c);
+        };
 
-                update(c);
-            };
+        ws.onclose = function() {
+            console.log("websocket closed");
+            $('#wsServer').removeAttr('disabled');
+            $('#connect').removeAttr('disabled');
+            $('#disconnect').attr('disabled', 'disabled');
+            $('#message').attr('disabled', 'disabled');
+            $('#send').attr('disabled', 'disabled');
+        };
 
-            ws.onclose = function() {
-                $('#ws_log').append('<li><span class="badge badge-important">websocket closed</span></li>');
-                $('#wsServer').removeAttr('disabled');
-                $('#connect').removeAttr('disabled');
-                $('#disconnect').attr('disabled', 'disabled');
-                $('#message').attr('disabled', 'disabled');
-                $('#send').attr('disabled', 'disabled');
-            };
-
-            (function() {
-                if(ws.readyState === 1) {
-                    ws.send("ping");
-                }
-                if(ws.readyState !== 3) {
-                    setTimeout(arguments.callee, 1000);
-                }
-            })();
-        } else {
-            $('#ws_log').append('<li><span class="badge badge-important">WebSocket NOT supported in this browser</span></li>');
-        }
+        (function() {
+            if(ws.readyState === 1) {
+                ws.send("ping");
+            }
+            if(ws.readyState !== 3) {
+                setTimeout(arguments.callee, 1000);
+            }
+        })();
 
         return false;
     });
