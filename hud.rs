@@ -1,14 +1,14 @@
 extern mod std;
 extern mod extra;
 
-use std::{cast,io,ptr,rt,str,task,u8};
+use std::{cast,io,ptr,rt,str,task};
 use std::hashmap::HashMap;
 use std::comm::SharedChan;
 use std::num::FromStrRadix;
 
 use std::rt::io::{Reader,Writer,Listener};
 use std::rt::io::net::tcp::{TcpListener, TcpStream};
-use std::rt::io::net::ip::Ipv4;
+use std::rt::io::net::ip::{Ipv4Addr,SocketAddr};
 
 use extra::{json,time};
 use extra::json::ToJson;
@@ -190,16 +190,18 @@ macro_rules! fixed_vec_clone(
         impl Clone for $t {
             fn clone(&self) -> $t {
                 let mut new_vec: [$arrt, ..$len] = [0, .. $len];
-                for new_vec.mut_iter().zip((**self).iter()).advance |(x,y)| { *x = y.clone(); }
+                for (x,y) in new_vec.mut_iter().zip((**self).iter()) {
+                    *x = y.clone();
+                }
                 $t(new_vec)
             }
         }
     );
 )
 
-static ETHERNET_MAC_ADDR_BYTES: uint = 6;
-static ETHERNET_ETHERTYPE_BYTES: uint = 2;
-static ETHERNET_HEADER_BYTES: uint =
+static ETHERNET_MAC_ADDR_BYTES: int = 6;
+static ETHERNET_ETHERTYPE_BYTES: int = 2;
+static ETHERNET_HEADER_BYTES: int =
     (ETHERNET_MAC_ADDR_BYTES * 2) + ETHERNET_ETHERTYPE_BYTES;
 
 struct MacAddr([u8,..ETHERNET_MAC_ADDR_BYTES]);
@@ -309,7 +311,7 @@ impl ToStr for IP6Addr {
             }
 
             // ip4-mapped address
-            [0, 0, 0, 0, 0, 1, g, h] => {
+            [0, 0, 0, 0, 0, 0xFFFF, g, h] => {
                 let a = fmt!("%04x", g as uint);
                 let b = FromStrRadix::from_str_radix(a.slice(2, 4), 16).unwrap();
                 let a = FromStrRadix::from_str_radix(a.slice(0, 2), 16).unwrap();
@@ -325,8 +327,6 @@ impl ToStr for IP6Addr {
                      a as uint, b as uint, c as uint, d as uint,
                      e as uint, f as uint, g as uint, h as uint)
             }
-
-            _ => fail!("Can't happen") //keep the exhaustion checker happy.
         }
     }
 }
@@ -352,7 +352,7 @@ impl IP6Header {
     }
 }
 
-unsafe fn transmute_offset<T,U>(base: *T, offset: uint) -> U {
+unsafe fn transmute_offset<T,U>(base: *T, offset: int) -> U {
     cast::transmute(ptr::offset(base, offset))
 }
 
@@ -376,24 +376,19 @@ fn websocketWorker<T: rt::io::Reader+rt::io::Writer>(tcps: &mut T, data_po: &Por
     }
 
     loop {
-        //io::println("Top of worker loop");
         let mut counter = 0;
         while data_po.peek() && counter < 100 {
             let msg = data_po.recv();
             tcps.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
             counter += 1;
         }
-        //io::println("Parsing input frame");
         let (opt_pl, frameType) = wsParseInputFrame(tcps);
         match frameType {
             WS_CLOSING_FRAME => {
-                //io::println("Got closing frame");
                 tcps.write(wsMakeFrame([], WS_CLOSING_FRAME));
                 break;
             }
-            _ => {
-                //io::println(fmt!("Got frameType %?", frameType));
-            }
+            _ => ()
         }
     }
     io::println("Done with worker");
@@ -404,7 +399,7 @@ fn uiServer(data_po: Port<~str>) {
     let (accept_po, accept_ch) = stream();
     let (finish_po, finish_ch) = stream();
     do task::spawn_with(accept_ch) |acc_ch| {
-        let addr = Ipv4(127, 0, 0, 1, 8080);
+        let addr = SocketAddr { ip: Ipv4Addr(127, 0, 0, 1), port: 8080 };
         let mut listener = TcpListener::bind(addr);
 
         loop {
@@ -445,7 +440,7 @@ fn capture(data_ch: SharedChan<~str>) {
     match dev {
         Some(d) => {
             unsafe {
-                io::println(fmt!("Found device %s", str::raw::from_buf(d)));
+                io::println(fmt!("Found device %s", str::raw::from_c_str(d)));
             }
             let session = start_session(d, errbuf);
             match session {
@@ -455,7 +450,7 @@ fn capture(data_ch: SharedChan<~str>) {
                 },
                 None => unsafe {
                     io::println(fmt!("Couldn't open device %s: %?\n",
-                                     str::raw::from_buf(d),
+                                     str::raw::from_c_str(d),
                                      errbuf));
                 }
             }
@@ -472,7 +467,7 @@ pub fn run() {
 
     //Spawn on own thread to avoid interfering w/ uiServer
     let mut t = task::task();
-    t.sched_mode(task::ManualThreads(1));
+    //t.sched_mode(task::ManualThreads(1));
     do t.spawn_with(data_ch) |ch| {
         capture(ch);
     }

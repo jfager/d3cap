@@ -4,12 +4,11 @@ extern mod std;
 
 use std::{rt,io,str,vec};
 use std::hashmap::HashMap;
-use std::iterator::IteratorUtil;
 use std::rt::io::Reader;
 use std::rt::io::extensions::ReaderUtil;
 
 use extra::sha1::Sha1;
-use extra::digest::{Digest, DigestUtil};
+use extra::digest::{Digest};
 use extra::base64::{ToBase64, STANDARD};
 
 static CONNECTION_FIELD: &'static str = "Connection";
@@ -96,7 +95,7 @@ fn read_line<T: rt::io::Reader>(rdr: &mut T) -> ~str {
 pub fn wsParseHandshake<T: rt::io::Reader>(rdr: &mut T) -> Option<Handshake> {
     let hdrFns = headerfns();
     let line = read_line(rdr);
-    let prop: ~[~str] = line.split_str_iter(" ").transform(|s|s.to_owned()).collect();
+    let prop: ~[~str] = line.split_str_iter(" ").map(|s|s.to_owned()).collect();
     let resource = prop[1].trim();
     let mut hs = Handshake {
         //host: ~"",
@@ -113,7 +112,7 @@ pub fn wsParseHandshake<T: rt::io::Reader>(rdr: &mut T) -> Option<Handshake> {
         if line.is_empty() {
             return if hasHandshake { Some(hs) } else { None };
         }
-        let prop: ~[~str] = line.split_str_iter(": ").transform(|s|s.to_owned()).collect();
+        let prop: ~[~str] = line.split_str_iter(": ").map(|s|s.to_owned()).collect();
         if prop.len() != 2 {
             io::println(fmt!("Unexpected line: '%s'", line));
             return None;
@@ -157,7 +156,7 @@ pub fn wsMakeFrame(data: &[u8], frameType: WSFrameType) -> ~[u8] {
     out
 }
 
-priv fn frameTypeFrom(i: int) -> WSFrameType {
+fn frameTypeFrom(i: int) -> WSFrameType {
     unsafe { std::cast::transmute(i) }
 }
 
@@ -188,7 +187,7 @@ pub fn wsParseInputFrame<T: rt::io::Reader>(rdr: &mut T) -> (Option<~[u8]>, WSFr
             let masked_payload = rdr.read_bytes(toread);
             let payload = masked_payload.tailn(4).iter()
                 .enumerate()
-                .transform(|(i, t)| { t ^ masked_payload[i%4] })
+                .map(|(i, t)| { t ^ masked_payload[i%4] })
                 .collect();
             return (Some(payload), frameType);
         }

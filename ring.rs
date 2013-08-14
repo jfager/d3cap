@@ -5,7 +5,7 @@
 // To run execute: rustc --test ring.rs && ./ring
 extern mod std;
 
-use std::iterator::{Iterator,IteratorUtil};
+use std::iterator::{Iterator};
 
 // This contains the data that represents our ring buffer. In general only one
 // allocation occurs: when the struct is first created and buffer is allocated.
@@ -108,7 +108,7 @@ impl<'self, T> Iterator<&'self T> for RingIterator<'self, T> {
 // the elements in the same order as they appear to users.
 impl<T: ToStr> ToStr for RingBuffer<T> {
     fn to_str(&self) -> ~str {
-        let elements: ~[~str] = self.iter().transform(|e| {e.to_str()}).collect();
+        let elements: ~[~str] = self.iter().map(|e| {e.to_str()}).collect();
         fmt!("[%s]", elements.connect(", "))
     }
 }
@@ -201,12 +201,12 @@ fn test_functional() {
     // it is more functional than an explicit loop, but requires side effects in order to
     // do anything useful (because the closures user's give to each don't return values)
     let mut max = 0;
-    for buffer.iter().advance |element| {
+    for element in buffer {
         if *element > max {max = *element}    // dereference because each returns elements by reference
     }
     assert!(max == 5);
 
-    let odd: ~[bool] = buffer.iter().transform(|e| {*e & 1 == 1}).collect();
+    let odd: ~[bool] = buffer.iter().map(|e| {*e & 1 == 1}).collect();
     assert!(odd == ~[true, true, true, false]);
 
     // filter returns elements for which the closure returns true
