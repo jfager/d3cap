@@ -13,10 +13,9 @@ $(document).ready(function() {
             .size([width, height]);
     }
 
-    function mkChartTab(tabId, tabText, active) {
-        var boundary = $('.tab-content');
-        var width = boundary[0].offsetWidth;
-        var height = width * 0.66;
+    //TODO:  this shouldn't append svg, leave that to the specific tabs
+    //       i.e., table tab should append table (or div or whatever) instead.
+    function mkTab(tabId, tabText, active) {
         var tabTop = d3.select('#force-graph-tabs')
             .append("li")
             .append("a").attr("href", "#"+tabId).attr("data-toggle", "tab")
@@ -24,40 +23,28 @@ $(document).ready(function() {
         var tabCont = d3.select('#force-graph-contents')
             .append("div").attr("id", tabId);
 
-        // if(active) {
-        //     tabTop.attr("class", "active");
-        //     tabCont.attr("class", "tab-pane active");
-        // } else {
+        if(active) {
+            tabTop.attr("class", "active");
+            tabCont.attr("class", "tab-pane active");
+        } else {
             tabCont.attr("class", "tab-pane");
-        // }
+        }
 
-        return tabCont.append("svg").attr("width", width).attr("height", height);
+        return tabCont;
     }
 
-    function mkTableTab() {
+    function mkConnsTab(tabId, type, active) {
         var boundary = $('.tab-content');
         var width = boundary[0].offsetWidth;
         var height = width * 0.66;
-        var tabTop = d3.select('#force-graph-tabs')
-            .append("li")
-            .append("a").attr("href", "#tab_ws_log").attr("data-toggle", "tab")
-            .text("log");
-        var tabCont = d3.select('#force-graph-contents')
-            .append("div").attr("id", "tab_ws_log");
-
-        // if(active) {
-             tabTop.attr("class", "active");
-             tabCont.attr("class", "tab-pane active");
-        // } else {
-        //     tabCont.attr("class", "tab-pane");
-        // }
-
-        return tabCont.append("table");
+        return mkTab(tabId, type, active)
+            .append("svg").attr("width", width)
+                          .attr("height", height);
     }
 
     function mkConns(type, active) {
         var tabId = "tab_"+type;
-        var chart = mkChartTab(tabId, type, active);
+        var chart = mkConnsTab(tabId, type, active);
 
         var width = chart.attr("width");
         var height = chart.attr("height");
@@ -84,6 +71,10 @@ $(document).ready(function() {
         };
     }
 
+    function mkTableTab() {
+        return mkTab("tab_ws_all", "all", false).append("table");
+    }
+
     function mkTable() {
         var table = mkTableTab();
 
@@ -93,8 +84,6 @@ $(document).ready(function() {
             table: table
         }
     }
-
-    var table = mkTable();
 
     function updateTable(t, msg) {
         var pair = [msg.src, msg.dst];
@@ -118,13 +107,6 @@ $(document).ready(function() {
         ps.enter().append("tr");
         ps.html(mkRow);
 
-        // var lis = ps.data(t.pairs).enter().insert("div").attr("class", "row");
-        // lis.append("div").attr("class", "addr_a col-2");
-        // lis.append("div").attr("class", "addr_b col-2");
-        // lis.append("div").attr("class", "size_t col-2");
-        // lis.append("div").attr("class", "size_a col-2");
-        // lis.append("div").attr("class", "size_b col-2");
-
         ps.sort(function(p1,p2) { return -cmp(p1.total, p2.total); });
     }
 
@@ -135,6 +117,8 @@ $(document).ready(function() {
                "<td class='size_a'>"+d.from_a+"</td>" +
                "<td class='size_b'>"+d.from_b+"</td>";
     }
+
+    //var table = mkTable();
 
     function cmp() {
         for(var i=0; i<arguments.length; i+=2) {
@@ -159,6 +143,12 @@ $(document).ready(function() {
         'mac': mkConns('mac', false)
     };
 
+    var pie = d3.layout.pie()
+        .value(function(d) { return d.sz; })
+        .sort(null);
+
+    var color = d3.scale.category10();
+
     var update = function(c) {
         c.force.start();
         c.chart.selectAll(".link")
@@ -167,13 +157,11 @@ $(document).ready(function() {
             .attr("class", "link")
             .style("stroke-width", function(d) { return Math.sqrt(d.value); });
 
-        var nodes = c.chart.selectAll(".node");
-        var newNodes = nodes.data(c.nodes).enter()
+        var nodes = c.chart.selectAll(".node").data(c.nodes);
+        var newNodes = nodes.enter()
             .append("svg:g")
             .attr("class", "node")
             .call(c.force.drag);
-
-        newNodes.append("svg:circle");
 
         newNodes.append("svg:text")
             .attr("class", "nodetext")
@@ -181,11 +169,45 @@ $(document).ready(function() {
             .attr("dy", ".35em")
             .text(function(d) { return d.addr; });
 
+
         //update size for all nodes, not just new ones.
-        nodes.selectAll("circle").attr("r", function(d) {
-            return d.displaySize;
+        var arcs = nodes.selectAll(".slice")
+            .data(function(d) { return pie([{r:d.displaySize, sz: d.sizeUp},
+                                            {r:d.displaySize, sz: d.sizeDown}]); });
+
+        arcs.enter()
+            .append("svg:path")
+            .attr("class", "slice")
+            .attr("fill", function(d, i) { return color(i); });
+
+        arcs.attr("d", function(d) {
+            return d3.svg.arc()
+                .innerRadius(d.data.r * 0.4)
+                .outerRadius(d.data.r)(d);
         });
     };
+
+
+
+    function updateNode(c, addr, sizeUp, sizeDown) {
+        var updateLinks = false;
+        var index = c.nodeMap[addr];
+        if(index === undefined) {
+            index = c.nodes.length;
+            c.nodes.push({addr: addr,
+                          sizeUp: sizeUp,
+                          sizeDown: sizeDown,
+                          displaySize: displaySize(sizeUp+sizeDown)});
+            c.nodeMap[addr] = index;
+            updateLinks = true;
+        } else {
+            var node = c.nodes[index];
+            node.sizeUp += sizeUp;
+            node.sizeDown += sizeDown;
+            node.displaySize = displaySize(node.sizeUp+node.sizeDown);
+        }
+        return updateLinks;
+    }
 
     $('#connectForm').on('submit', function() {
         ws = new WebSocket($('#wsServer').val());
@@ -205,35 +227,20 @@ $(document).ready(function() {
 
         ws.onmessage = function(event) {
             var msg = JSON.parse(event.data);
-            updateTable(table, msg);
+            //updateTable(table, msg);
             var c = types[msg.type];
             if(!c) {
                 return;
             }
             c.conns.push(msg);
-            var s = c.nodeMap[msg.src];
-            var updateLinks = false;
-            if(s === undefined) {
-                s = c.nodes.length;
-                c.nodes.push({addr: msg.src,
-                              size: msg.size,
-                              displaySize: displaySize(msg.size)});
-                c.nodeMap[msg.src] = s;
-                updateLinks = true;
-            } else {
-                var node = c.nodes[s];
-                node.size += msg.size;
-                node.displaySize = displaySize(node.size);
-            }
-            var d = c.nodeMap[msg.dst];
-            if(d === undefined) {
-                d = c.nodes.length;
-                c.nodes.push({addr: msg.dst, size: 1, displaySize: 1});
-                c.nodeMap[msg.dst] = d;
-                updateLinks = true;
-            }
+
+            //bitwise-or to avoid short-circuit
+            var updateLinks = updateNode(c, msg.src, msg.size, 0)
+                            | updateNode(c, msg.dst, 0, msg.size);
+
             if(updateLinks) {
-                c.links.push({source: s, target: d});
+                c.links.push({source: c.nodeMap[msg.src],
+                              target: c.nodeMap[msg.dst]});
             }
 
             update(c);
