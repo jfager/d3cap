@@ -1,13 +1,15 @@
 extern mod std;
 extern mod extra;
 
-use std::{cast,io,ptr,rt,str,task};
+use std::{cast,io,ptr,rt,str,task,u16};
 use std::hashmap::HashMap;
 use std::comm::SharedChan;
 use std::num::FromStrRadix;
+use std::task::TaskBuilder;
+use std::cell::Cell;
 
 use std::rt::io::{Reader,Writer,Listener};
-use std::rt::io::net::tcp::{TcpListener, TcpStream};
+use std::rt::io::net::tcp::TcpListener;
 use std::rt::io::net::ip::{Ipv4Addr,SocketAddr};
 
 use extra::{json,time};
@@ -40,7 +42,7 @@ struct AddrStats<T> {
     typ: &'static str,
     count: u64,
     routes: HashMap<~Addrs<T>, ~RouteStats<T>>,
-    out_ch: SharedChan<~str>
+    out_ch: MulticastSharedChan<~str>
 }
 
 struct PktMeta<T> {
@@ -60,7 +62,7 @@ impl <T: Ord+IterBytes+Eq+Clone+Send+ToStr> ProtocolStats<T> {
     fn new(typ: &'static str) -> ProtocolStats<T> {
         ProtocolStats { typ: typ, addrs: HashMap::new() }
     }
-    fn update(&mut self, src: T, dst: T, size: u32, ch: &SharedChan<~str>) {
+    fn update(&mut self, src: T, dst: T, size: u32, ch: &MulticastSharedChan<~str>) {
         let key = ~OrdAddrs::from(src.clone(), dst.clone());
         let chan = self.addrs.find_or_insert_with(key, |_| {
             ~AddrStats::spawn(self.typ, ch)
@@ -72,7 +74,7 @@ impl <T: Ord+IterBytes+Eq+Clone+Send+ToStr> ProtocolStats<T> {
 }
 
 impl <T: IterBytes+Eq+Clone+Send+ToStr> AddrStats<T> {
-    fn new(typ: &'static str, ch: SharedChan<~str>) -> AddrStats<T> {
+    fn new(typ: &'static str, ch: MulticastSharedChan<~str>) -> AddrStats<T> {
         AddrStats {
             typ: typ,
             count: 0,
@@ -87,7 +89,7 @@ impl <T: IterBytes+Eq+Clone+Send+ToStr> AddrStats<T> {
         stats.update(pkt);
         self.out_ch.send(msg);
     }
-    fn spawn(typ: &'static str, ch: &SharedChan<~str>) -> Chan<~PktMeta<T>> {
+    fn spawn(typ: &'static str, ch: &MulticastSharedChan<~str>) -> Chan<~PktMeta<T>> {
         let (port, chan) = stream();
         do task::spawn_with(ch.clone()) |oc| {
             let mut hs = AddrStats::new(typ, oc);
@@ -131,7 +133,7 @@ struct HudContext {
     mac: ProtocolStats<MacAddr>,
     ip4: ProtocolStats<IP4Addr>,
     ip6: ProtocolStats<IP6Addr>,
-    out: ~SharedChan<~str>
+    out: ~MulticastSharedChan<~str>
 }
 
 struct Packet {
@@ -250,7 +252,7 @@ impl EthernetHeader {
                 //io::println("802.1X!");
             },
             x => {
-                //io::println(fmt!("Unknown type: %s", u16::to_str_radix(x, 16)));
+                printfln!("Unknown type: %s", u16::to_str_radix(x, 16));
             }
         }
     }
@@ -394,39 +396,74 @@ fn websocketWorker<T: rt::io::Reader+rt::io::Writer>(tcps: &mut T, data_po: &Por
     io::println("Done with worker");
 }
 
-//fn uiServer(conns_ch: Chan<DuplexStream<~str, ~str>>) {
-fn uiServer(data_po: Port<~str>) {
-    let (accept_po, accept_ch) = stream();
-    let (finish_po, finish_ch) = stream();
-    do task::spawn_with(accept_ch) |acc_ch| {
+fn uiServer(mc: Multicast<~str>) {
+    do named_task(~"socket_listener").spawn_with(mc) |mc| {
         let addr = SocketAddr { ip: Ipv4Addr(127, 0, 0, 1), port: 8080 };
         let mut listener = TcpListener::bind(addr);
-
+        let mut workercount = 0;
         loop {
-            io::println("Waiting for connection");
-            match listener.accept() {
-                Some(st) => {
-                    io::println("Got stream!");
-                    acc_ch.send(st)
+            let tcp_stream = Cell::new(listener.accept());
+            let (conn_po, conn_ch) = stream();
+            mc.push(|msg| { conn_ch.send(msg.to_owned()); });
+            do named_task(fmt!("websocketWorker_%i", workercount)).spawn {
+                let mut tcp_stream = tcp_stream.take();
+                websocketWorker(&mut tcp_stream, &conn_po);
+            }
+            workercount += 1;
+        }
+    }
+}
+
+enum MulticastMsg<T> {
+    Msg(T),
+    MsgCb(~fn(&T))
+}
+struct Multicast<T> {
+    priv ch: SharedChan<MulticastMsg<T>>,
+}
+impl<T:Send+Clone> Multicast<T> {
+    fn new() -> Multicast<T> {
+        let (po, ch) = stream::<MulticastMsg<T>>();
+        do spawn {
+            let mut cbs: ~[~fn(&T)] = ~[];
+            loop {
+                match po.try_recv() {
+                    Some(Msg(msg)) => {
+                        for cb in cbs.iter() {
+                            (*cb)(&msg);
+                        }
+                    }
+                    Some(MsgCb(cb)) => {
+                        cbs.push(cb);
+                    }
+                    None => break
                 }
-                None => io::println("Shit broke!")
             }
         }
-        finish_ch.send(());
+        Multicast { ch: SharedChan::new(ch) }
     }
 
-    do task::spawn_with(data_po) |dp| {
-        loop {
-            let mut stream = accept_po.recv();
-            websocketWorker(&mut stream, &dp);
-        }
+    fn get_chan(&self) -> MulticastSharedChan<T> {
+        MulticastSharedChan { ch: self.ch.clone() }
     }
-    finish_po.recv();
-    io::println("uiServer out");
+
+    fn push(&self, cb: ~fn(&T)) {
+        self.ch.send(MsgCb(cb));
+    }
+}
+
+#[deriving(Clone)]
+struct MulticastSharedChan<T> {
+    priv ch: SharedChan<MulticastMsg<T>>
+}
+impl<T:Send> MulticastSharedChan<T> {
+    fn send(&self, msg: T) {
+        self.ch.send(Msg(msg));
+    }
 }
 
 
-fn capture(data_ch: SharedChan<~str>) {
+fn capture(data_ch: MulticastSharedChan<~str>) {
 
     let ctx = ~HudContext {
         mac: ProtocolStats::new("mac"),
@@ -459,16 +496,22 @@ fn capture(data_ch: SharedChan<~str>) {
     }
 }
 
+pub fn named_task(name: ~str) -> TaskBuilder {
+    let mut ui_task = task::task();
+    ui_task.name(name);
+    ui_task
+}
+
 pub fn run() {
-    let (data_po, data_ch) = stream();
-    let data_ch = SharedChan::new(data_ch);
+    //let (data_po, data_ch) = stream();
+    //let data_ch = SharedChan::new(data_ch);
 
-    do task::spawn_with(data_po) |po| { uiServer(po); }
+    let mc = Multicast::new();
+    let data_ch = mc.get_chan();
 
-    //Spawn on own thread to avoid interfering w/ uiServer
-    let mut t = task::task();
-    //t.sched_mode(task::ManualThreads(1));
-    do t.spawn_with(data_ch) |ch| {
+    uiServer(mc);
+
+    do named_task(~"packet_capture").spawn_with(data_ch) |ch| {
         capture(ch);
     }
 }
