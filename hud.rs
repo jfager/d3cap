@@ -8,7 +8,7 @@ use std::num::FromStrRadix;
 use std::task::TaskBuilder;
 use std::cell::Cell;
 
-use std::rt::io::{Reader,Writer,Listener};
+use std::rt::io::{read_error, Reader,Writer,Listener};
 use std::rt::io::net::tcp::TcpListener;
 use std::rt::io::net::ip::{Ipv4Addr,SocketAddr};
 
@@ -377,20 +377,23 @@ fn websocketWorker<T: rt::io::Reader+rt::io::Writer>(tcps: &mut T, data_po: &Por
         None => tcps.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
     }
 
-    loop {
-        let mut counter = 0;
-        while data_po.peek() && counter < 100 {
-            let msg = data_po.recv();
-            tcps.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
-            counter += 1;
-        }
-        let (opt_pl, frameType) = wsParseInputFrame(tcps);
-        match frameType {
-            WS_CLOSING_FRAME => {
-                tcps.write(wsMakeFrame([], WS_CLOSING_FRAME));
-                break;
+    do read_error::cond.trap(|_| ()).inside {
+        loop {
+            let mut counter = 0;
+            while data_po.peek() && counter < 100 {
+                let msg = data_po.recv();
+                tcps.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
+                counter += 1;
             }
-            _ => ()
+            let (opt_pl, frameType) = wsParseInputFrame(tcps);
+            match frameType {
+                WS_CLOSING_FRAME |
+                WS_ERROR_FRAME   => {
+                    tcps.write(wsMakeFrame([], WS_CLOSING_FRAME));
+                    break;
+                }
+                _ => ()
+            }
         }
     }
     io::println("Done with worker");
