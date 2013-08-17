@@ -16,6 +16,6 @@ To run, you need libpcap installed and a recent rust compiler (I try to track ru
 
 Open d3cap/client.html in a browser and hit the Connect button to attach to this running backend and you should start seeing network activity pop up, like so:
 
-![](/d3cap.png "d3cap")
+![](https://raw.github.com/jfager/d3cap/master/d3cap.png "d3cap")
 
 The size of each node indicates how much data has passed through the corresponding host, with blue and orange showing the proportion sent and received.  You can mouse over a node to see the corresponding address.
