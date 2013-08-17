@@ -6,7 +6,7 @@ RUST_LD_FLAGS?=-L .
 .PHONY: all
 all:	hud
 
-hud:	main.rs hud.rs rustwebsocket.rs rustpcap.rs ring.rs
+hud:	hud.rs rustwebsocket.rs rustpcap.rs ring.rs
 		$(RUSTC) $(RUST_FLAGS) $(RUST_LD_FLAGS) $< -o $@
 
 .PHONY: clean
@@ -16,7 +16,7 @@ clean:
 run:	hud
 		./hud
 
-huddbg: main.rs hud.rs rustwebsocket.rs rustpcap.rs ring.rs
+huddbg: hud.rs rustwebsocket.rs rustpcap.rs ring.rs
 		$(RUSTC) $(RUST_DBG_FLAGS) $(RUST_LD_FLAGS) $< -o $@
 
 debug:  huddbg

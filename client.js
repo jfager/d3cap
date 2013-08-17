@@ -14,7 +14,6 @@ $(document).ready(function() {
     }
 
     //TODO:  this shouldn't append svg, leave that to the specific tabs
-    //       i.e., table tab should append table (or div or whatever) instead.
     function mkTab(tabId, tabText, active) {
         var tabTop = d3.select('#force-graph-tabs')
             .append("li")
@@ -62,63 +61,14 @@ $(document).ready(function() {
         });
 
         return {
-            conns: [],
             nodes: nodes,
             nodeMap: {},
             links: links,
+            linkNodes: {},
             chart: chart,
             force: force
         };
     }
-
-    function mkTableTab() {
-        return mkTab("tab_ws_all", "all", false).append("table");
-    }
-
-    function mkTable() {
-        var table = mkTableTab();
-
-        return {
-            pairs: [],
-            pairMap: {},
-            table: table
-        }
-    }
-
-    function updateTable(t, msg) {
-        var pair = [msg.src, msg.dst];
-        pair.sort();
-        var i = t.pairMap[pair];
-        if(i === undefined) {
-            i = t.pairs.length;
-            t.pairs.push({ a: pair[0], b: pair[1], total: 0, from_a: 0, from_b: 0 });
-            t.pairMap[pair] = i;
-        }
-
-        var pairData = t.pairs[i];
-        pairData.total += msg.size;
-        if(msg.src == pair[0]) {
-            pairData.from_a += msg.size;
-        } else {
-            pairData.from_b += msg.size;
-        }
-
-        var ps = t.table.selectAll("tr").data(t.pairs);
-        ps.enter().append("tr");
-        ps.html(mkRow);
-
-        ps.sort(function(p1,p2) { return -cmp(p1.total, p2.total); });
-    }
-
-    function mkRow(d) {
-        return "<td class='addr_a'>"+d.a+"</td>" +
-               "<td class='addr_b'>"+d.b+"</td>" +
-               "<td class='size_t'>"+d.total+"</td>" +
-               "<td class='size_a'>"+d.from_a+"</td>" +
-               "<td class='size_b'>"+d.from_b+"</td>";
-    }
-
-    //var table = mkTable();
 
     function cmp() {
         for(var i=0; i<arguments.length; i+=2) {
@@ -172,8 +122,8 @@ $(document).ready(function() {
 
         //update size for all nodes, not just new ones.
         var arcs = nodes.selectAll(".slice")
-            .data(function(d) { return pie([{r:d.displaySize, sz: d.sizeUp},
-                                            {r:d.displaySize, sz: d.sizeDown}]); });
+            .data(function(d) { return pie([{r:d.displaySize, sz: d.sizeFrom},
+                                            {r:d.displaySize, sz: d.sizeTo}]); });
 
         arcs.enter()
             .append("svg:path")
@@ -189,22 +139,26 @@ $(document).ready(function() {
 
 
 
-    function updateNode(c, addr, sizeUp, sizeDown) {
+    function updateNode(c, addr, countFrom, sizeFrom, countTo, sizeTo) {
         var updateLinks = false;
         var index = c.nodeMap[addr];
         if(index === undefined) {
             index = c.nodes.length;
             c.nodes.push({addr: addr,
-                          sizeUp: sizeUp,
-                          sizeDown: sizeDown,
-                          displaySize: displaySize(sizeUp+sizeDown)});
+                          countFrom: countFrom,
+                          sizeFrom: sizeFrom,
+                          countTo: countTo,
+                          sizeTo: sizeTo,
+                          displaySize: displaySize(sizeFrom+sizeTo)});
             c.nodeMap[addr] = index;
             updateLinks = true;
         } else {
             var node = c.nodes[index];
-            node.sizeUp += sizeUp;
-            node.sizeDown += sizeDown;
-            node.displaySize = displaySize(node.sizeUp+node.sizeDown);
+            node.countFrom += countFrom;
+            node.sizeFrom += sizeFrom;
+            node.countTo += countTo;
+            node.sizeTo += sizeTo;
+            node.displaySize = displaySize(node.sizeFrom+node.sizeTo);
         }
         return updateLinks;
     }
@@ -227,20 +181,35 @@ $(document).ready(function() {
 
         ws.onmessage = function(event) {
             var msg = JSON.parse(event.data);
-            //updateTable(table, msg);
             var c = types[msg.type];
             if(!c) {
                 return;
             }
-            c.conns.push(msg);
+
+            var linkKey = msg.a+"_"+msg.b;
+            var oldLinkNode = c.linkNodes[linkKey];
+            if(oldLinkNode) {
+                var oldA = c.nodes[c.nodeMap[oldLinkNode.a]];
+                oldA.countFrom -= oldLinkNode.from_a_count;
+                oldA.sizeFrom -= oldLinkNode.from_a_size;
+                oldA.countTo -= oldLinkNode.from_b_count;
+                oldA.sizeTo -= oldLinkNode.from_b_size;
+
+                var oldB = c.nodes[c.nodeMap[oldLinkNode.b]];
+                oldB.countFrom -= oldLinkNode.from_b_count;
+                oldB.sizeFrom -= oldLinkNode.from_b_size;
+                oldB.countTo -= oldLinkNode.from_a_count;
+                oldB.sizeTo -= oldLinkNode.from_a_size;
+            }
+            c.linkNodes[linkKey] = msg;
 
             //bitwise-or to avoid short-circuit
-            var updateLinks = updateNode(c, msg.src, msg.size, 0)
-                            | updateNode(c, msg.dst, 0, msg.size);
+            var updateLinks = updateNode(c, msg.a, msg.from_a_count, msg.from_a_size, msg.from_b_count, msg.from_b_size)
+                            | updateNode(c, msg.b, msg.from_b_count, msg.from_b_size, msg.from_a_count, msg.from_a_size);
 
             if(updateLinks) {
-                c.links.push({source: c.nodeMap[msg.src],
-                              target: c.nodeMap[msg.dst]});
+                c.links.push({source: c.nodeMap[msg.a],
+                              target: c.nodeMap[msg.b]});
             }
 
             update(c);

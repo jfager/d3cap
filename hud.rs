@@ -15,11 +15,14 @@ use std::rt::io::net::ip::{Ipv4Addr,SocketAddr};
 use extra::{json,time};
 use extra::json::ToJson;
 use extra::treemap::TreeMap;
-//use extra::comm::DuplexStream;
 
 use rustpcap::*;
 use rustwebsocket::*;
 use ring::RingBuffer;
+
+mod rustpcap;
+mod ring;
+mod rustwebsocket;
 
 type Addrs<T> = (T, T);
 
@@ -33,107 +36,114 @@ impl <T: Ord+IterBytes> OrdAddrs<T> {
 
 type AddrChanMap<T> = HashMap<~OrdAddrs<T>, ~Chan<~PktMeta<T>>>;
 
-struct ProtocolStats<T> {
-    typ: &'static str,
-    addrs: AddrChanMap<T>
-}
-
-struct AddrStats<T> {
+struct ProtocolHandler<T> {
     typ: &'static str,
     count: u64,
-    routes: HashMap<~Addrs<T>, ~RouteStats<T>>,
-    out_ch: MulticastSharedChan<~str>
+    size: u64,
+    ch: MulticastSharedChan<~str>,
+    routes: HashMap<~OrdAddrs<T>, ~RouteStats<T>>
 }
 
-struct PktMeta<T> {
-    typ: ~str,
-    src: T,
-    dst: T,
-    size: u32,
-    time: time::Timespec
-}
-
-struct RouteStats<T> {
-    count: u64,
-    last: RingBuffer<~PktMeta<T>>
-}
-
-impl <T: Ord+IterBytes+Eq+Clone+Send+ToStr> ProtocolStats<T> {
-    fn new(typ: &'static str) -> ProtocolStats<T> {
-        ProtocolStats { typ: typ, addrs: HashMap::new() }
-    }
-    fn update(&mut self, src: T, dst: T, size: u32, ch: &MulticastSharedChan<~str>) {
-        let key = ~OrdAddrs::from(src.clone(), dst.clone());
-        let chan = self.addrs.find_or_insert_with(key, |_| {
-            ~AddrStats::spawn(self.typ, ch)
-        });
-        let t = time::get_time();
-        let pkt = ~PktMeta { typ: self.typ.to_str(), src: src, dst: dst, size: size, time: t };
-        chan.send(pkt);
-    }
-}
-
-impl <T: IterBytes+Eq+Clone+Send+ToStr> AddrStats<T> {
-    fn new(typ: &'static str, ch: MulticastSharedChan<~str>) -> AddrStats<T> {
-        AddrStats {
-            typ: typ,
-            count: 0,
-            routes: HashMap::new(),
-            out_ch: ch
-        }
+impl <T: Ord+IterBytes+Eq+Clone+Send+ToStr> ProtocolHandler<T> {
+    fn new(typ: &'static str, ch: MulticastSharedChan<~str>) -> ProtocolHandler<T> {
+        ProtocolHandler { typ: typ, count: 0, size: 0, ch: ch, routes: HashMap::new() }
     }
     fn update(&mut self, pkt: ~PktMeta<T>) {
-        self.count += 1;
-        let msg = json::to_str(&pkt.to_json());
-        let stats = self.routes.find_or_insert_with(~pkt.addrs(), |_| ~RouteStats::new());
+        let key = ~OrdAddrs::from(pkt.src.clone(), pkt.dst.clone());
+        let stats = self.routes.find_or_insert_with(key, |k| {
+            ~RouteStats::new(self.typ, k.first(), k.second())
+        });
         stats.update(pkt);
-        self.out_ch.send(msg);
+        let msg = route_msg(self.typ, *stats);
+        self.ch.send(msg);
     }
     fn spawn(typ: &'static str, ch: &MulticastSharedChan<~str>) -> Chan<~PktMeta<T>> {
         let (port, chan) = stream();
         do task::spawn_with(ch.clone()) |oc| {
-            let mut hs = AddrStats::new(typ, oc);
+            let mut handler = ProtocolHandler::new(typ, oc);
             loop {
                 let pkt: ~PktMeta<T> = port.recv();
-                hs.update(pkt);
+                handler.update(pkt);
             }
         }
         chan
     }
 }
 
+fn route_msg<T:ToStr>(typ: &str, rt: &RouteStats<T>) -> ~str {
+    let mut m = ~TreeMap::new();
+    m.insert(~"type", typ.to_str().to_json());
+    m.insert(~"a", rt.a.addr.to_str().to_json());
+    m.insert(~"from_a_count", rt.a.sent_count.to_json());
+    m.insert(~"from_a_size", rt.a.sent_size.to_json());
+    m.insert(~"b", rt.b.addr.to_str().to_json());
+    m.insert(~"from_b_count", rt.b.sent_count.to_json());
+    m.insert(~"from_b_size", rt.b.sent_size.to_json());
+    json::Object(m).to_str()
+}
+
+struct AddrStats<T> {
+    addr: T,
+    sent_count: u64,
+    sent_size: u64,
+}
+impl<T> AddrStats<T> {
+    fn new(addr:T) -> AddrStats<T> {
+        AddrStats { addr: addr, sent_count: 0, sent_size: 0 }
+    }
+    fn update(&mut self, size: u32) {
+        self.sent_count += 1;
+        self.sent_size += size as u64;
+    }
+}
+
+struct RouteStats<T> {
+    typ: &'static str,
+    a: AddrStats<T>,
+    b: AddrStats<T>,
+    last: RingBuffer<~PktMeta<T>>
+}
+
+impl <T: IterBytes+Eq+Clone+Send+ToStr> RouteStats<T> {
+    fn new(typ: &'static str, a: T, b: T) -> RouteStats<T> {
+        RouteStats {
+            typ: typ,
+            a: AddrStats::new(a),
+            b: AddrStats::new(b),
+            last: RingBuffer::new(5),
+        }
+    }
+    fn update(&mut self, pkt: ~PktMeta<T>) {
+        if pkt.src == self.a.addr {
+            self.a.update(pkt.size);
+        } else {
+            self.b.update(pkt.size);
+        }
+    }
+}
+
+struct PktMeta<T> {
+    src: T,
+    dst: T,
+    size: u32,
+    time: time::Timespec
+}
+impl<T> PktMeta<T> {
+    fn new(src: T, dst: T, size: u32) -> PktMeta<T> {
+        let t = time::get_time();
+        PktMeta { src: src, dst: dst, size: size, time: t }
+    }
+}
 impl <T:Clone> PktMeta<T> {
     fn addrs(&self) -> Addrs<T> {
         (self.src.clone(), self.dst.clone())
     }
 }
-impl <T: ToStr> ToJson for PktMeta<T> {
-    fn to_json(&self) -> json::Json {
-        let mut m = ~TreeMap::new();
-        m.insert(~"type", self.typ.to_json());
-        m.insert(~"src", self.src.to_str().to_json());
-        m.insert(~"dst", self.dst.to_str().to_json());
-        m.insert(~"size", self.size.to_json());
-        m.insert(~"time", self.time.sec.to_json());
-        json::Object(m)
-    }
-}
-
-impl <T> RouteStats<T> {
-    fn new() -> RouteStats<T> {
-        RouteStats { count: 0, last: RingBuffer::new(5) }
-    }
-    fn update(&mut self, pm: ~PktMeta<T>) {
-        self.count += 1;
-        self.last.push(pm);
-    }
-}
 
 struct HudContext {
-    mac: ProtocolStats<MacAddr>,
-    ip4: ProtocolStats<IP4Addr>,
-    ip6: ProtocolStats<IP6Addr>,
-    out: ~MulticastSharedChan<~str>
+    mac: Chan<~PktMeta<MacAddr>>,
+    ip4: Chan<~PktMeta<IP4Addr>>,
+    ip6: Chan<~PktMeta<IP6Addr>>
 }
 
 struct Packet {
@@ -230,7 +240,7 @@ struct EthernetHeader {
 }
 impl EthernetHeader {
     fn parse(&self, ctx: &mut HudContext, size: u32) {
-        ctx.mac.update(self.src, self.dst, size, ctx.out);
+        ctx.mac.send(~PktMeta::new(self.src, self.dst, size));
     }
 }
 
@@ -292,7 +302,7 @@ struct IP4Header {
 
 impl IP4Header {
     fn parse(&self, ctx: &mut HudContext, size: u32) {
-        ctx.ip4.update(self.src, self.dst, size, ctx.out);
+        ctx.ip4.send(~PktMeta::new(self.src, self.dst, size));
     }
 }
 
@@ -350,7 +360,7 @@ struct IP6Header {
 }
 impl IP6Header {
     fn parse(&self, ctx: &mut HudContext, size: u32) {
-        ctx.ip6.update(self.src, self.dst, size, ctx.out);
+        ctx.ip6.send(~PktMeta::new(self.src, self.dst, size));
     }
 }
 
@@ -400,20 +410,18 @@ fn websocketWorker<T: rt::io::Reader+rt::io::Writer>(tcps: &mut T, data_po: &Por
 }
 
 fn uiServer(mc: Multicast<~str>) {
-    do named_task(~"socket_listener").spawn_with(mc) |mc| {
-        let addr = SocketAddr { ip: Ipv4Addr(127, 0, 0, 1), port: 8080 };
-        let mut listener = TcpListener::bind(addr);
-        let mut workercount = 0;
-        loop {
-            let tcp_stream = Cell::new(listener.accept());
-            let (conn_po, conn_ch) = stream();
-            mc.push(|msg| { conn_ch.send(msg.to_owned()); });
-            do named_task(fmt!("websocketWorker_%i", workercount)).spawn {
-                let mut tcp_stream = tcp_stream.take();
-                websocketWorker(&mut tcp_stream, &conn_po);
-            }
-            workercount += 1;
+    let addr = SocketAddr { ip: Ipv4Addr(127, 0, 0, 1), port: 8080 };
+    let mut listener = TcpListener::bind(addr);
+    let mut workercount = 0;
+    loop {
+        let tcp_stream = Cell::new(listener.accept());
+        let (conn_po, conn_ch) = stream();
+        mc.push(|msg| { conn_ch.send(msg.to_owned()); });
+        do named_task(fmt!("websocketWorker_%i", workercount)).spawn {
+            let mut tcp_stream = tcp_stream.take();
+            websocketWorker(&mut tcp_stream, &conn_po);
         }
+        workercount += 1;
     }
 }
 
@@ -466,13 +474,12 @@ impl<T:Send> MulticastSharedChan<T> {
 }
 
 
-fn capture(data_ch: MulticastSharedChan<~str>) {
+fn capture(data_ch: &MulticastSharedChan<~str>) {
 
     let ctx = ~HudContext {
-        mac: ProtocolStats::new("mac"),
-        ip4: ProtocolStats::new("ip4"),
-        ip6: ProtocolStats::new("ip6"),
-        out: ~data_ch
+        mac: ProtocolHandler::spawn("mac", data_ch),
+        ip4: ProtocolHandler::spawn("ip4", data_ch),
+        ip6: ProtocolHandler::spawn("ip6", data_ch)
     };
 
     let mut errbuf = std::vec::with_capacity(256);
@@ -505,16 +512,15 @@ pub fn named_task(name: ~str) -> TaskBuilder {
     ui_task
 }
 
-pub fn run() {
-    //let (data_po, data_ch) = stream();
-    //let data_ch = SharedChan::new(data_ch);
-
+fn main() {
     let mc = Multicast::new();
     let data_ch = mc.get_chan();
 
-    uiServer(mc);
+    do named_task(~"socket_listener").spawn_with(mc) |mc| {
+        uiServer(mc);
+    }
 
     do named_task(~"packet_capture").spawn_with(data_ch) |ch| {
-        capture(ch);
+        capture(&ch);
     }
 }
