@@ -140,7 +140,7 @@ impl <T:Clone> PktMeta<T> {
     }
 }
 
-struct HudContext {
+struct ProtocolHandlers {
     mac: Chan<~PktMeta<MacAddr>>,
     ip4: Chan<~PktMeta<IP4Addr>>,
     ip6: Chan<~PktMeta<IP6Addr>>
@@ -151,7 +151,7 @@ struct Packet {
     packet: *u8
 }
 impl Packet {
-    fn parse(&self, ctx: &mut HudContext) {
+    fn parse(&self, ctx: &mut ProtocolHandlers) {
         unsafe {
             let hdr = *self.header;
             if hdr.caplen < hdr.len {
@@ -239,13 +239,13 @@ struct EthernetHeader {
     typ: u16
 }
 impl EthernetHeader {
-    fn parse(&self, ctx: &mut HudContext, size: u32) {
+    fn parse(&self, ctx: &mut ProtocolHandlers, size: u32) {
         ctx.mac.send(~PktMeta::new(self.src, self.dst, size));
     }
 }
 
 impl EthernetHeader {
-    fn dispatch(&self, p: &Packet, ctx: &mut HudContext) {
+    fn dispatch(&self, p: &Packet, ctx: &mut ProtocolHandlers) {
         match self.typ {
             ETHERTYPE_ARP => {
                 //io::println("ARP!");
@@ -301,7 +301,7 @@ struct IP4Header {
 }
 
 impl IP4Header {
-    fn parse(&self, ctx: &mut HudContext, size: u32) {
+    fn parse(&self, ctx: &mut ProtocolHandlers, size: u32) {
         ctx.ip4.send(~PktMeta::new(self.src, self.dst, size));
     }
 }
@@ -359,7 +359,7 @@ struct IP6Header {
     dst: IP6Addr
 }
 impl IP6Header {
-    fn parse(&self, ctx: &mut HudContext, size: u32) {
+    fn parse(&self, ctx: &mut ProtocolHandlers, size: u32) {
         ctx.ip6.send(~PktMeta::new(self.src, self.dst, size));
     }
 }
@@ -370,7 +370,7 @@ unsafe fn transmute_offset<T,U>(base: *T, offset: int) -> U {
 
 extern fn handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
     unsafe {
-        let ctx: *mut HudContext = cast::transmute(args);
+        let ctx: *mut ProtocolHandlers = cast::transmute(args);
         let p = Packet { header: header, packet: packet };
         p.parse(&mut *ctx);
     }
@@ -395,7 +395,7 @@ fn websocketWorker<T: rt::io::Reader+rt::io::Writer>(tcps: &mut T, data_po: &Por
                 tcps.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
                 counter += 1;
             }
-            let (opt_pl, frameType) = wsParseInputFrame(tcps);
+            let (_, frameType) = wsParseInputFrame(tcps);
             match frameType {
                 WS_CLOSING_FRAME |
                 WS_ERROR_FRAME   => {
@@ -476,7 +476,7 @@ impl<T:Send> MulticastSharedChan<T> {
 
 fn capture(data_ch: &MulticastSharedChan<~str>) {
 
-    let ctx = ~HudContext {
+    let ctx = ~ProtocolHandlers {
         mac: ProtocolHandler::spawn("mac", data_ch),
         ip4: ProtocolHandler::spawn("ip4", data_ch),
         ip6: ProtocolHandler::spawn("ip6", data_ch)

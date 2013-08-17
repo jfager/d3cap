@@ -4,20 +4,20 @@ RUST_DBG_FLAGS?=-Z debug-info
 RUST_LD_FLAGS?=-L .
 
 .PHONY: all
-all:	hud
+all:	d3cap
 
-hud:	hud.rs rustwebsocket.rs rustpcap.rs ring.rs
+d3cap:	d3cap.rs rustwebsocket.rs rustpcap.rs ring.rs
 		$(RUSTC) $(RUST_FLAGS) $(RUST_LD_FLAGS) $< -o $@
 
 .PHONY: clean
 clean:
-		rm -rf hud huddbg *.dSYM *.o
+		rm -rf d3cap d3capdbg *.dSYM *.o
 
-run:	hud
-		./hud
+run:	d3cap
+		./d3cap
 
-huddbg: hud.rs rustwebsocket.rs rustpcap.rs ring.rs
+d3capdbg: d3cap.rs rustwebsocket.rs rustpcap.rs ring.rs
 		$(RUSTC) $(RUST_DBG_FLAGS) $(RUST_LD_FLAGS) $< -o $@
 
-debug:  huddbg
-		gdb huddbg
+debug:  d3capdbg
+		gdb d3capdbg
