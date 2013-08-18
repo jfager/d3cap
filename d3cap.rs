@@ -1,7 +1,7 @@
 extern mod std;
 extern mod extra;
 
-use std::{cast,io,ptr,rt,str,task,u16};
+use std::{cast,io,os,ptr,rt,str,task,u16};
 use std::hashmap::HashMap;
 use std::comm::SharedChan;
 use std::num::FromStrRadix;
@@ -409,9 +409,11 @@ fn websocketWorker<T: rt::io::Reader+rt::io::Writer>(tcps: &mut T, data_po: &Por
     io::println("Done with worker");
 }
 
-fn uiServer(mc: Multicast<~str>) {
-    let addr = SocketAddr { ip: Ipv4Addr(127, 0, 0, 1), port: 8080 };
+fn uiServer(mc: Multicast<~str>, port: u16) {
+    let addr = SocketAddr { ip: Ipv4Addr(127, 0, 0, 1), port: port };
     let mut listener = TcpListener::bind(addr);
+    printfln!("Server listening on port %u", port as uint);
+
     let mut workercount = 0;
     loop {
         let tcp_stream = Cell::new(listener.accept());
@@ -513,11 +515,28 @@ pub fn named_task(name: ~str) -> TaskBuilder {
 }
 
 fn main() {
+    use extra::getopts::*;
+
+    let PORT_FLAG = "p";
+
+    let args = os::args();
+    let opts = ~[
+        optopt(PORT_FLAG)
+    ];
+
+    let matches = match getopts(args.tail(), opts) {
+        Ok(m) => { m }
+        Err(f) => { fail!(fail_str(f)) }
+    };
+
+    let port = opt_maybe_str(&matches, PORT_FLAG).unwrap_or_default(~"7432");
+    let port = u16::from_str(port).unwrap();
+
     let mc = Multicast::new();
     let data_ch = mc.get_chan();
 
     do named_task(~"socket_listener").spawn_with(mc) |mc| {
-        uiServer(mc);
+        uiServer(mc, port);
     }
 
     do named_task(~"packet_capture").spawn_with(data_ch) |ch| {
