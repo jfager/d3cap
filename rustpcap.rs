@@ -1,5 +1,4 @@
 #[link(name="rustpcap", vers="0.0.1")];
-//extern mod std;
 
 use std::libc::{c_char,c_int,c_ulonglong};
 use std::{ptr,vec};
@@ -48,10 +47,10 @@ pub fn get_device(errbuf: &mut [c_char]) -> Option<*c_char> {
 pub fn start_session(dev: *c_char, errbuf: &mut [c_char]) -> Option<*pcap_t> {
     unsafe {
         let eb = vec::raw::to_ptr(errbuf);
-	    let handle = pcap_open_live(dev, 65535, 0, 1000, eb);
-	    if handle == ptr::null() {
+        let handle = pcap_open_live(dev, 65535, 0, 1000, eb);
+        if handle == ptr::null() {
             None
-	    } else {
+        } else {
             Some(handle)
         }
     }

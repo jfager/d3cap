@@ -7,6 +7,7 @@ use std::comm::SharedChan;
 use std::num::FromStrRadix;
 use std::task::TaskBuilder;
 use std::cell::Cell;
+use std::libc::c_char;
 
 use std::rt::io::{read_error, Reader,Writer,Listener};
 use std::rt::io::net::tcp::TcpListener;
@@ -475,8 +476,20 @@ impl<T:Send> MulticastSharedChan<T> {
     }
 }
 
+fn find_device(errbuf: &mut [c_char]) -> *c_char {
+    let dev = get_device(errbuf);
+    match dev {
+        Some(d) => {
+            unsafe {
+                io::println(fmt!("Found device %s", str::raw::from_c_str(d)));
+            }
+            d
+        }
+        None => fail!("No device available")
+    }
+}
 
-fn capture(data_ch: &MulticastSharedChan<~str>) {
+fn capture(data_ch: &MulticastSharedChan<~str>, dev: *c_char, errbuf: &mut [c_char]) {
 
     let ctx = ~ProtocolHandlers {
         mac: ProtocolHandler::spawn("mac", data_ch),
@@ -484,27 +497,17 @@ fn capture(data_ch: &MulticastSharedChan<~str>) {
         ip6: ProtocolHandler::spawn("ip6", data_ch)
     };
 
-    let mut errbuf = std::vec::with_capacity(256);
-    let dev = get_device(errbuf);
-    match dev {
-        Some(d) => {
-            unsafe {
-                io::println(fmt!("Found device %s", str::raw::from_c_str(d)));
-            }
-            let session = start_session(d, errbuf);
-            match session {
-                Some(s) => unsafe {
-                    io::println(fmt!("Starting pcap_loop"));
-                    pcap_loop(s, -1, handler, cast::transmute(ptr::to_unsafe_ptr(ctx)));
-                },
-                None => unsafe {
-                    io::println(fmt!("Couldn't open device %s: %?\n",
-                                     str::raw::from_c_str(d),
-                                     errbuf));
-                }
-            }
+    let session = start_session(dev, errbuf);
+    match session {
+        Some(s) => unsafe {
+            io::println(fmt!("Starting pcap_loop"));
+            pcap_loop(s, -1, handler, cast::transmute(ptr::to_unsafe_ptr(ctx)));
+        },
+        None => unsafe {
+            io::println(fmt!("Couldn't open device %s: %?\n",
+                             str::raw::from_c_str(dev),
+                             errbuf));
         }
-        None => io::println("No device available")
     }
 }
 
@@ -517,11 +520,13 @@ pub fn named_task(name: ~str) -> TaskBuilder {
 fn main() {
     use extra::getopts::*;
 
-    let PORT_FLAG = "p";
+    let PORT_OPT = "p";
+    let INTERFACE_OPT = "i";
 
     let args = os::args();
     let opts = ~[
-        optopt(PORT_FLAG)
+        optopt(PORT_OPT),
+        optopt(INTERFACE_OPT)
     ];
 
     let matches = match getopts(args.tail(), opts) {
@@ -529,7 +534,7 @@ fn main() {
         Err(f) => { fail!(fail_str(f)) }
     };
 
-    let port = opt_maybe_str(&matches, PORT_FLAG).unwrap_or_default(~"7432");
+    let port = opt_maybe_str(&matches, PORT_OPT).unwrap_or_default(~"7432");
     let port = u16::from_str(port).unwrap();
 
     let mc = Multicast::new();
@@ -540,6 +545,12 @@ fn main() {
     }
 
     do named_task(~"packet_capture").spawn_with(data_ch) |ch| {
-        capture(&ch);
+        let mut errbuf = std::vec::with_capacity(256);
+        let dev = opt_maybe_str(&matches, INTERFACE_OPT);
+        let dev = match dev {
+            Some(d) => unsafe { d.to_c_str().unwrap() },
+            None => find_device(errbuf)
+        };
+        capture(&ch, dev, errbuf);
     }
 }
