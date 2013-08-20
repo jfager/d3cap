@@ -489,6 +489,7 @@ fn find_device(errbuf: &mut [c_char]) -> *c_char {
     }
 }
 
+#[fixed_stack_segment]
 fn capture(data_ch: &MulticastSharedChan<~str>, dev: *c_char, errbuf: &mut [c_char]) {
 
     let ctx = ~ProtocolHandlers {
