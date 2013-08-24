@@ -221,7 +221,7 @@ struct MacAddr([u8,..ETHERNET_MAC_ADDR_BYTES]);
 
 impl ToStr for MacAddr {
     fn to_str(&self) -> ~str {
-        use f = std::u8::to_str_radix;
+        let f = |x: u8,y| x.to_str_radix(y);
         return fmt!("%s:%s:%s:%s:%s:%s",
                     f(self[0], 16), f(self[1], 16), f(self[2], 16),
                     f(self[3], 16), f(self[4], 16), f(self[5], 16)
@@ -263,7 +263,7 @@ impl EthernetHeader {
                 //io::println("802.1X!");
             },
             x => {
-                printfln!("Unknown type: %s", u16::to_str_radix(x, 16));
+                printfln!("Unknown type: %s", x.to_str_radix(16));
             }
         }
     }

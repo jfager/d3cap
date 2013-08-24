@@ -21,7 +21,7 @@ extern {
     pub fn pcap_lookupdev(errbuf: *c_char) -> *c_char;
     pub fn pcap_open_live(dev: *c_char, snaplen: c_int, promisc: c_int, to_ms: c_int, ebuf: *c_char) -> *pcap_t;
     pub fn pcap_next(p: *pcap_t, h: &mut pcap_pkthdr) -> *const u8;
-    pub fn pcap_loop(p: *pcap_t, cnt: c_int, callback: *u8, user: *u8);
+    pub fn pcap_loop(p: *pcap_t, cnt: c_int, callback: extern "C" fn(*u8, *pcap_pkthdr, *u8), user: *u8);
     pub fn pcap_close(p: *pcap_t);
 }
 
