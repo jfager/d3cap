@@ -9,7 +9,7 @@ use std::task::TaskBuilder;
 use std::cell::Cell;
 use std::libc::c_char;
 
-use std::rt::io::{read_error, Reader,Writer,Listener};
+use std::rt::io::{read_error,Acceptor,Listener,Reader,Writer};
 use std::rt::io::net::tcp::TcpListener;
 use std::rt::io::net::ip::{Ipv4Addr,SocketAddr};
 
@@ -412,12 +412,13 @@ fn websocketWorker<T: rt::io::Reader+rt::io::Writer>(tcps: &mut T, data_po: &Por
 
 fn uiServer(mc: Multicast<~str>, port: u16) {
     let addr = SocketAddr { ip: Ipv4Addr(127, 0, 0, 1), port: port };
-    let mut listener = TcpListener::bind(addr);
+    let listener = TcpListener::bind(addr);
+    let mut acceptor = listener.listen();
     printfln!("Server listening on port %u", port as uint);
 
     let mut workercount = 0;
-    loop {
-        let tcp_stream = Cell::new(listener.accept());
+    for s in acceptor.incoming() {
+        let tcp_stream = Cell::new(s);
         let (conn_po, conn_ch) = stream();
         mc.push(|msg| { conn_ch.send(msg.to_owned()); });
         do named_task(fmt!("websocketWorker_%i", workercount)).spawn {
