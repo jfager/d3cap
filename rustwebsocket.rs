@@ -89,7 +89,7 @@ fn read_line<T: rt::io::Reader>(rdr: &mut T) -> ~str {
             None => break
         }
     }
-    str::from_bytes(bytes)
+    str::from_utf8(bytes)
 }
 
 pub fn wsParseHandshake<T: rt::io::Reader>(rdr: &mut T) -> Option<Handshake> {
