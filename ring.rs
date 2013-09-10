@@ -5,7 +5,7 @@
 // To run execute: rustc --test ring.rs && ./ring
 extern mod std;
 
-use std::iterator::{Iterator};
+use std::iter::{Iterator};
 
 // This contains the data that represents our ring buffer. In general only one
 // allocation occurs: when the struct is first created and buffer is allocated.
