@@ -536,7 +536,7 @@ fn main() {
         Err(f) => { fail!(fail_str(f)) }
     };
 
-    let port = opt_maybe_str(&matches, PORT_OPT).unwrap_or_default(~"7432");
+    let port = opt_maybe_str(&matches, PORT_OPT).unwrap_or(~"7432");
     let port = u16::from_str(port).unwrap();
 
     let mc = Multicast::new();
