@@ -1,7 +1,7 @@
 extern mod std;
 extern mod extra;
 
-use std::{cast,io,os,ptr,rt,str,task,u16};
+use std::{cast,io,os,ptr,rt,str,task};
 use std::hashmap::HashMap;
 use std::comm::SharedChan;
 use std::num::FromStrRadix;
@@ -537,7 +537,7 @@ fn main() {
     };
 
     let port = opt_maybe_str(&matches, PORT_OPT).unwrap_or(~"7432");
-    let port = u16::from_str(port).unwrap();
+    let port = from_str::<u16>(port).unwrap();
 
     let mc = Multicast::new();
     let data_ch = mc.get_chan();
