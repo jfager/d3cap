@@ -533,10 +533,10 @@ fn main() {
 
     let matches = match getopts(args.tail(), opts) {
         Ok(m) => { m }
-        Err(f) => { fail!(fail_str(f)) }
+        Err(f) => { fail!(f.to_err_msg()) }
     };
 
-    let port = opt_maybe_str(&matches, PORT_OPT).unwrap_or(~"7432");
+    let port = matches.opt_str(PORT_OPT).unwrap_or(~"7432");
     let port = from_str::<u16>(port).unwrap();
 
     let mc = Multicast::new();
@@ -548,7 +548,7 @@ fn main() {
 
     do named_task(~"packet_capture").spawn_with(data_ch) |ch| {
         let mut errbuf = std::vec::with_capacity(256);
-        let dev = opt_maybe_str(&matches, INTERFACE_OPT);
+        let dev = matches.opt_str(INTERFACE_OPT);
         let dev = match dev {
             Some(d) => unsafe { d.to_c_str().unwrap() },
             None => find_device(errbuf)
