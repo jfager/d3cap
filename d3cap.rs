@@ -263,7 +263,7 @@ impl EthernetHeader {
                 //io::println("802.1X!");
             },
             x => {
-                printfln!("Unknown type: %s", x.to_str_radix(16));
+                println!("Unknown type: {}", x.to_str_radix(16));
             }
         }
     }
@@ -414,7 +414,7 @@ fn uiServer(mc: Multicast<~str>, port: u16) {
     let addr = SocketAddr { ip: Ipv4Addr(127, 0, 0, 1), port: port };
     let listener = TcpListener::bind(addr);
     let mut acceptor = listener.listen();
-    printfln!("Server listening on port %u", port as uint);
+    println!("Server listening on port {}", port as uint);
 
     let mut workercount = 0;
     for s in acceptor.incoming() {
