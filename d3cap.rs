@@ -1,3 +1,5 @@
+#[feature(globs, macro_rules)];
+
 extern mod std;
 extern mod extra;
 
