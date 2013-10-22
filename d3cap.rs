@@ -6,7 +6,6 @@ extern mod extra;
 use std::{cast,io,os,ptr,rt,str,task};
 use std::hashmap::HashMap;
 use std::comm::SharedChan;
-use std::num::FromStrRadix;
 use std::task::TaskBuilder;
 use std::cell::Cell;
 use std::libc::c_char;
@@ -158,8 +157,8 @@ impl Packet {
         unsafe {
             let hdr = *self.header;
             if hdr.caplen < hdr.len {
-                io::println(fmt!("WARN: Capd only [%?] bytes of packet with length [%?]",
-                                 hdr.caplen, hdr.len));
+                println!("WARN: Capd only [{}] bytes of packet with length [{}]",
+                         hdr.caplen, hdr.len);
             }
             if hdr.len > ETHERNET_HEADER_BYTES as u32 {
                 let ehp: *EthernetHeader = cast::transmute(self.packet);
@@ -224,10 +223,10 @@ struct MacAddr([u8,..ETHERNET_MAC_ADDR_BYTES]);
 impl ToStr for MacAddr {
     fn to_str(&self) -> ~str {
         let f = |x: u8,y| x.to_str_radix(y);
-        return fmt!("%s:%s:%s:%s:%s:%s",
-                    f(self[0], 16), f(self[1], 16), f(self[2], 16),
-                    f(self[3], 16), f(self[4], 16), f(self[5], 16)
-                   );
+        return format!("{}:{}:{}:{}:{}:{}",
+                       f(self[0], 16), f(self[1], 16), f(self[2], 16),
+                       f(self[3], 16), f(self[4], 16), f(self[5], 16)
+                      );
     }
 }
 
@@ -280,8 +279,8 @@ static ETHERTYPE_802_1X: u16 = 0x8E88;
 struct IP4Addr([u8,..4]);
 impl ToStr for IP4Addr {
     fn to_str(&self) -> ~str {
-        fmt!("%u.%u.%u.%u",
-             self[0] as uint, self[1] as uint, self[2] as uint, self[3] as uint)
+        format!("{}.{}.{}.{}",
+                self[0] as uint, self[1] as uint, self[2] as uint, self[3] as uint)
     }
 }
 
@@ -315,32 +314,18 @@ impl ToStr for IP6Addr {
         match (**self) {
             //ip4-compatible
             [0,0,0,0,0,0,g,h] => {
-                let a = fmt!("%04x", g as uint);
-                let b = FromStrRadix::from_str_radix(a.slice(2, 4), 16).unwrap();
-                let a = FromStrRadix::from_str_radix(a.slice(0, 2), 16).unwrap();
-                let c = fmt!("%04x", h as uint);
-                let d = FromStrRadix::from_str_radix(c.slice(2, 4), 16).unwrap();
-                let c = FromStrRadix::from_str_radix(c.slice(0, 2), 16).unwrap();
-
-                fmt!("[::%u.%u.%u.%u]", a, b, c, d)
+                format!("::{}.{}.{}.{}", (g >> 8) as u8, g as u8,
+                        (h >> 8) as u8, h as u8)
             }
 
             // ip4-mapped address
             [0, 0, 0, 0, 0, 0xFFFF, g, h] => {
-                let a = fmt!("%04x", g as uint);
-                let b = FromStrRadix::from_str_radix(a.slice(2, 4), 16).unwrap();
-                let a = FromStrRadix::from_str_radix(a.slice(0, 2), 16).unwrap();
-                let c = fmt!("%04x", h as uint);
-                let d = FromStrRadix::from_str_radix(c.slice(2, 4), 16).unwrap();
-                let c = FromStrRadix::from_str_radix(c.slice(0, 2), 16).unwrap();
-
-                fmt!("[::FFFF:%u.%u.%u.%u]", a, b, c, d)
+                format!("::FFFF:{}.{}.{}.{}", (g >> 8) as u8, g as u8,
+                        (h >> 8) as u8, h as u8)
             }
 
             [a, b, c, d, e, f, g, h] => {
-                fmt!("[%x:%x:%x:%x:%x:%x:%x:%x]",
-                     a as uint, b as uint, c as uint, d as uint,
-                     e as uint, f as uint, g as uint, h as uint)
+                format!("{}:{}:{}:{}:{}:{}:{}:{}", a, b, c, d, e, f, g, h)
             }
         }
     }
@@ -423,7 +408,7 @@ fn uiServer(mc: Multicast<~str>, port: u16) {
         let tcp_stream = Cell::new(s);
         let (conn_po, conn_ch) = stream();
         mc.push(|msg| { conn_ch.send(msg.to_owned()); });
-        do named_task(fmt!("websocketWorker_%i", workercount)).spawn {
+        do named_task(format!("websocketWorker_{}", workercount)).spawn {
             let mut tcp_stream = tcp_stream.take();
             websocketWorker(&mut tcp_stream, &conn_po);
         }
@@ -484,7 +469,7 @@ fn find_device(errbuf: &mut [c_char]) -> *c_char {
     match dev {
         Some(d) => {
             unsafe {
-                io::println(fmt!("Found device %s", str::raw::from_c_str(d)));
+                println!("Found device {}", str::raw::from_c_str(d));
             }
             d
         }
@@ -504,13 +489,13 @@ fn capture(data_ch: &MulticastSharedChan<~str>, dev: *c_char, errbuf: &mut [c_ch
     let session = start_session(dev, errbuf);
     match session {
         Some(s) => unsafe {
-            io::println(fmt!("Starting pcap_loop"));
+            println!("Starting pcap_loop");
             pcap_loop(s, -1, handler, cast::transmute(ptr::to_unsafe_ptr(ctx)));
         },
         None => unsafe {
-            io::println(fmt!("Couldn't open device %s: %?\n",
-                             str::raw::from_c_str(dev),
-                             errbuf));
+            println!("Couldn't open device {}: {:?}\n",
+                     str::raw::from_c_str(dev),
+                     errbuf);
         }
     }
 }

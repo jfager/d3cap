@@ -2,7 +2,7 @@ extern mod extra;
 extern mod std;
 
 
-use std::{rt,io,str,vec};
+use std::{rt,str,vec};
 use std::hashmap::HashMap;
 use std::rt::io::Reader;
 use std::rt::io::extensions::ReaderUtil;
@@ -57,13 +57,13 @@ impl Handshake {
         let mut res = [0u8,..20];
         sh.result(res);
         let responseKey = res.to_base64(STANDARD);
-        fmt!("HTTP/1.1 101 Switching Protocols\r\n\
-              %s: %s\r\n\
-              %s: %s\r\n\
-              %s: %s\r\n\r\n",
-             UPGRADE_FIELD, WEBSOCKET,
-             CONNECTION_FIELD, UPGRADE_FIELD,
-             ACCEPT_FIELD, responseKey)
+        format!("HTTP/1.1 101 Switching Protocols\r\n\
+                 {}: {}\r\n\
+                 {}: {}\r\n\
+                 {}: {}\r\n\r\n",
+                UPGRADE_FIELD, WEBSOCKET,
+                CONNECTION_FIELD, UPGRADE_FIELD,
+                ACCEPT_FIELD, responseKey)
     }
 }
 
@@ -114,7 +114,7 @@ pub fn wsParseHandshake<T: rt::io::Reader>(rdr: &mut T) -> Option<Handshake> {
         }
         let prop: ~[~str] = line.split_str_iter(": ").map(|s|s.to_owned()).collect();
         if prop.len() != 2 {
-            io::println(fmt!("Unexpected line: '%s'", line));
+            println!("Unexpected line: '{}'", line);
             return None;
         }
         let key = prop[0].clone();
@@ -183,7 +183,6 @@ pub fn wsParseInputFrame<T: rt::io::Reader>(rdr: &mut T) -> (Option<~[u8]>, WSFr
         let payloadLength = hdr[1] & 0x7F;
         if payloadLength < 0x7E { //Only handle short payloads right now.
             let toread = (payloadLength + 4) as uint; //+4 for mask
-            //io::println(fmt!("reading payload, %u bytes", toread));
             let masked_payload = rdr.read_bytes(toread);
             let payload = masked_payload.tailn(4).iter()
                 .enumerate()

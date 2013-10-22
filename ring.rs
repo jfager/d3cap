@@ -109,7 +109,7 @@ impl<'self, T> Iterator<&'self T> for RingIterator<'self, T> {
 impl<T: ToStr> ToStr for RingBuffer<T> {
     fn to_str(&self) -> ~str {
         let elements: ~[~str] = self.iter().map(|e| {e.to_str()}).collect();
-        fmt!("[%s]", elements.connect(", "))
+        format!("[{}]", elements.connect(", "))
     }
 }
 
