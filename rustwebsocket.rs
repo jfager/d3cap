@@ -1,15 +1,14 @@
-extern mod extra;
 extern mod std;
-
+extern mod extra;
+extern mod crypto;
 
 use std::{rt,str,vec};
 use std::hashmap::HashMap;
 use std::rt::io::Reader;
-use std::rt::io::extensions::ReaderUtil;
 
-use extra::sha1::Sha1;
-use extra::digest::{Digest};
 use extra::base64::{ToBase64, STANDARD};
+
+use crypto::hash;
 
 static CONNECTION_FIELD: &'static str = "Connection";
 static UPGRADE: &'static str = "upgrade";
@@ -52,10 +51,8 @@ struct Handshake {
 
 impl Handshake {
     pub fn getAnswer(&self) -> ~str {
-        let mut sh = Sha1::new();
-        sh.input_str(self.key + SECRET);
-        let mut res = [0u8,..20];
-        sh.result(res);
+        let s = self.key + SECRET;
+        let res = hash::hash(hash::SHA1, s.as_bytes());
         let responseKey = res.to_base64(STANDARD);
         format!("HTTP/1.1 101 Switching Protocols\r\n\
                  {}: {}\r\n\
@@ -156,7 +153,7 @@ pub fn wsMakeFrame(data: &[u8], frameType: WSFrameType) -> ~[u8] {
     out
 }
 
-fn frameTypeFrom(i: int) -> WSFrameType {
+fn frameTypeFrom(i: u8) -> WSFrameType {
     unsafe { std::cast::transmute(i) }
 }
 
@@ -173,12 +170,12 @@ pub fn wsParseInputFrame<T: rt::io::Reader>(rdr: &mut T) -> (Option<~[u8]>, WSFr
         return (None, WS_ERROR_FRAME);
     }
 
-    let opcode = (hdr[0] & 0x0F) as int;
-    if opcode == WS_TEXT_FRAME as int
-    || opcode == WS_BINARY_FRAME as int
-    || opcode == WS_CLOSING_FRAME as int
-    || opcode == WS_PING_FRAME as int
-    || opcode == WS_PONG_FRAME as int {
+    let opcode = (hdr[0] & 0x0F) as u8;
+    if opcode == WS_TEXT_FRAME as u8
+    || opcode == WS_BINARY_FRAME as u8
+    || opcode == WS_CLOSING_FRAME as u8
+    || opcode == WS_PING_FRAME as u8
+    || opcode == WS_PONG_FRAME as u8 {
         let frameType = frameTypeFrom(opcode);
         let payloadLength = hdr[1] & 0x7F;
         if payloadLength < 0x7E { //Only handle short payloads right now.

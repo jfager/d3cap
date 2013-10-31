@@ -2,15 +2,16 @@
 
 extern mod std;
 extern mod extra;
+extern mod crypto;
 
-use std::{cast,io,os,ptr,rt,str,task};
+use std::{cast,os,ptr,rt,str,task};
 use std::hashmap::HashMap;
 use std::comm::SharedChan;
 use std::task::TaskBuilder;
 use std::cell::Cell;
 use std::libc::c_char;
 
-use std::rt::io::{read_error,Acceptor,Listener,Reader,Writer};
+use std::rt::io::{io_error,Acceptor,Listener,Reader,Writer};
 use std::rt::io::net::tcp::TcpListener;
 use std::rt::io::net::ip::{Ipv4Addr,SocketAddr};
 
@@ -365,7 +366,7 @@ extern fn handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
 }
 
 fn websocketWorker<T: rt::io::Reader+rt::io::Writer>(tcps: &mut T, data_po: &Port<~str>) {
-    io::println("websocketWorker");
+    println!("websocketWorker");
     let handshake = wsParseHandshake(tcps);
     match handshake {
         Some(hs) => {
@@ -375,7 +376,7 @@ fn websocketWorker<T: rt::io::Reader+rt::io::Writer>(tcps: &mut T, data_po: &Por
         None => tcps.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
     }
 
-    do read_error::cond.trap(|_| ()).inside {
+    do io_error::cond.trap(|_| ()).inside {
         loop {
             let mut counter = 0;
             while data_po.peek() && counter < 100 {
@@ -394,7 +395,7 @@ fn websocketWorker<T: rt::io::Reader+rt::io::Writer>(tcps: &mut T, data_po: &Por
             }
         }
     }
-    io::println("Done with worker");
+    println!("Done with worker");
 }
 
 fn uiServer(mc: Multicast<~str>, port: u16) {
@@ -454,13 +455,17 @@ impl<T:Send+Clone> Multicast<T> {
     }
 }
 
-#[deriving(Clone)]
 struct MulticastSharedChan<T> {
     priv ch: SharedChan<MulticastMsg<T>>
 }
 impl<T:Send> MulticastSharedChan<T> {
     fn send(&self, msg: T) {
         self.ch.send(Msg(msg));
+    }
+}
+impl<T:Send> Clone for MulticastSharedChan<T> {
+    fn clone(&self) -> MulticastSharedChan<T> {
+        MulticastSharedChan { ch: self.ch.clone() }
     }
 }
 
