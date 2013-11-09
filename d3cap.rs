@@ -6,7 +6,6 @@ extern mod crypto;
 
 use std::{cast,os,ptr,rt,str,task};
 use std::hashmap::HashMap;
-use std::comm::SharedChan;
 use std::task::TaskBuilder;
 use std::cell::Cell;
 use std::libc::c_char;
@@ -22,16 +21,18 @@ use extra::treemap::TreeMap;
 use rustpcap::*;
 use rustwebsocket::*;
 use ring::RingBuffer;
+use multicast::Multicast;
 
 mod rustpcap;
 mod ring;
 mod rustwebsocket;
+mod multicast;
 
 type Addrs<T> = (T, T);
 
 #[deriving(Eq, IterBytes)]
 struct OrdAddrs<T>(Addrs<T>);
-impl <T: Ord+IterBytes> OrdAddrs<T> {
+impl<T: Ord+IterBytes> OrdAddrs<T> {
     fn from(a: T, b: T) -> OrdAddrs<T> {
         if a <= b { OrdAddrs((a, b)) } else { OrdAddrs((b, a)) }
     }
@@ -39,19 +40,19 @@ impl <T: Ord+IterBytes> OrdAddrs<T> {
 
 type AddrChanMap<T> = HashMap<~OrdAddrs<T>, ~Chan<~PktMeta<T>>>;
 
-struct ProtocolHandler<T> {
+struct ProtocolHandler<T, C> {
     typ: &'static str,
     count: u64,
     size: u64,
-    ch: MulticastSharedChan<~str>,
+    ch: C,
     routes: HashMap<~OrdAddrs<T>, ~RouteStats<T>>
 }
 
-impl <T: Ord+IterBytes+Eq+Clone+Send+ToStr> ProtocolHandler<T> {
-    fn new(typ: &'static str, ch: MulticastSharedChan<~str>) -> ProtocolHandler<T> {
+impl<T: Ord+IterBytes+Eq+Clone+Send+ToStr, C: GenericChan<~str>+Clone+Send> ProtocolHandler<T,C> {
+    fn new(typ: &'static str, ch: C) -> ProtocolHandler<T,C> {
         ProtocolHandler { typ: typ, count: 0, size: 0, ch: ch, routes: HashMap::new() }
     }
-    fn update(&mut self, pkt: ~PktMeta<T>) {
+    fn update(&mut self, pkt: &PktMeta<T>) {
         let key = ~OrdAddrs::from(pkt.src.clone(), pkt.dst.clone());
         let stats = self.routes.find_or_insert_with(key, |k| {
             ~RouteStats::new(self.typ, k.first(), k.second())
@@ -60,7 +61,7 @@ impl <T: Ord+IterBytes+Eq+Clone+Send+ToStr> ProtocolHandler<T> {
         let msg = route_msg(self.typ, *stats);
         self.ch.send(msg);
     }
-    fn spawn(typ: &'static str, ch: &MulticastSharedChan<~str>) -> Chan<~PktMeta<T>> {
+    fn spawn(typ: &'static str, ch: &C) -> Chan<~PktMeta<T>> {
         let (port, chan) = stream();
         do task::spawn_with(ch.clone()) |oc| {
             let mut handler = ProtocolHandler::new(typ, oc);
@@ -107,7 +108,7 @@ struct RouteStats<T> {
     last: RingBuffer<~PktMeta<T>>
 }
 
-impl <T: IterBytes+Eq+Clone+Send+ToStr> RouteStats<T> {
+impl<T: IterBytes+Eq+Clone+Send+ToStr> RouteStats<T> {
     fn new(typ: &'static str, a: T, b: T) -> RouteStats<T> {
         RouteStats {
             typ: typ,
@@ -116,7 +117,7 @@ impl <T: IterBytes+Eq+Clone+Send+ToStr> RouteStats<T> {
             last: RingBuffer::new(5),
         }
     }
-    fn update(&mut self, pkt: ~PktMeta<T>) {
+    fn update(&mut self, pkt: &PktMeta<T>) {
         if pkt.src == self.a.addr {
             self.a.update(pkt.size);
         } else {
@@ -137,7 +138,7 @@ impl<T> PktMeta<T> {
         PktMeta { src: src, dst: dst, size: size, time: t }
     }
 }
-impl <T:Clone> PktMeta<T> {
+impl<T:Clone> PktMeta<T> {
     fn addrs(&self) -> Addrs<T> {
         (self.src.clone(), self.dst.clone())
     }
@@ -408,7 +409,7 @@ fn uiServer(mc: Multicast<~str>, port: u16) {
     for s in acceptor.incoming() {
         let tcp_stream = Cell::new(s);
         let (conn_po, conn_ch) = stream();
-        mc.push(|msg| { conn_ch.send(msg.to_owned()); });
+        mc.add_handler(|msg| { conn_ch.send(msg.to_owned()); });
         do named_task(format!("websocketWorker_{}", workercount)).spawn {
             let mut tcp_stream = tcp_stream.take();
             websocketWorker(&mut tcp_stream, &conn_po);
@@ -417,57 +418,7 @@ fn uiServer(mc: Multicast<~str>, port: u16) {
     }
 }
 
-enum MulticastMsg<T> {
-    Msg(T),
-    MsgCb(~fn(&T))
-}
-struct Multicast<T> {
-    priv ch: SharedChan<MulticastMsg<T>>,
-}
-impl<T:Send+Clone> Multicast<T> {
-    fn new() -> Multicast<T> {
-        let (po, ch) = stream::<MulticastMsg<T>>();
-        do spawn {
-            let mut cbs: ~[~fn(&T)] = ~[];
-            loop {
-                match po.try_recv() {
-                    Some(Msg(msg)) => {
-                        for cb in cbs.iter() {
-                            (*cb)(&msg);
-                        }
-                    }
-                    Some(MsgCb(cb)) => {
-                        cbs.push(cb);
-                    }
-                    None => break
-                }
-            }
-        }
-        Multicast { ch: SharedChan::new(ch) }
-    }
 
-    fn get_chan(&self) -> MulticastSharedChan<T> {
-        MulticastSharedChan { ch: self.ch.clone() }
-    }
-
-    fn push(&self, cb: ~fn(&T)) {
-        self.ch.send(MsgCb(cb));
-    }
-}
-
-struct MulticastSharedChan<T> {
-    priv ch: SharedChan<MulticastMsg<T>>
-}
-impl<T:Send> MulticastSharedChan<T> {
-    fn send(&self, msg: T) {
-        self.ch.send(Msg(msg));
-    }
-}
-impl<T:Send> Clone for MulticastSharedChan<T> {
-    fn clone(&self) -> MulticastSharedChan<T> {
-        MulticastSharedChan { ch: self.ch.clone() }
-    }
-}
 
 fn find_device(errbuf: &mut [c_char]) -> *c_char {
     let dev = get_device(errbuf);
@@ -483,7 +434,7 @@ fn find_device(errbuf: &mut [c_char]) -> *c_char {
 }
 
 #[fixed_stack_segment]
-fn capture(data_ch: &MulticastSharedChan<~str>, dev: *c_char, errbuf: &mut [c_char]) {
+fn capture<C:GenericChan<~str>+Clone+Send>(data_ch: &C, dev: *c_char, errbuf: &mut [c_char]) {
 
     let ctx = ~ProtocolHandlers {
         mac: ProtocolHandler::spawn("mac", data_ch),
