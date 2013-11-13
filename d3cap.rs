@@ -433,7 +433,6 @@ fn find_device(errbuf: &mut [c_char]) -> *c_char {
     }
 }
 
-#[fixed_stack_segment]
 fn capture<C:GenericChan<~str>+Clone+Send>(data_ch: &C, dev: *c_char, errbuf: &mut [c_char]) {
 
     let ctx = ~ProtocolHandlers {

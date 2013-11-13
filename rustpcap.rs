@@ -33,7 +33,6 @@ pub fn empty_pkthdr() -> ~pcap_pkthdr {
     }
 }
 
-#[fixed_stack_segment]
 pub fn get_device(errbuf: &mut [c_char]) -> Option<*c_char> {
     unsafe {
         let dev = pcap_lookupdev(vec::raw::to_ptr(errbuf));
@@ -45,7 +44,6 @@ pub fn get_device(errbuf: &mut [c_char]) -> Option<*c_char> {
     }
 }
 
-#[fixed_stack_segment]
 pub fn start_session(dev: *c_char, errbuf: &mut [c_char]) -> Option<*pcap_t> {
     unsafe {
         let eb = vec::raw::to_ptr(errbuf);
