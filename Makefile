@@ -6,7 +6,7 @@ RUST_LD_FLAGS?=-L../rustcrypto
 .PHONY: all
 all:	d3cap
 
-deps:	multicast.rs rustwebsocket.rs rustpcap.rs ring.rs
+deps:	multicast.rs rustwebsocket.rs rustpcap.rs ring.rs vec_util_macros.rs
 
 d3cap:	d3cap.rs deps
 		$(RUSTC) $(RUST_FLAGS) $(RUST_LD_FLAGS) $< -o $@
