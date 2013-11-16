@@ -2,9 +2,9 @@ extern mod std;
 extern mod extra;
 extern mod crypto;
 
-use std::{rt,str,vec};
+use std::{io,str,vec};
 use std::hashmap::HashMap;
-use std::rt::io::Reader;
+use std::io::Reader;
 
 use extra::base64::{ToBase64, STANDARD};
 
@@ -73,7 +73,7 @@ fn headerfns() -> HeaderFns {
     hdrFns
 }
 
-fn read_line<T: rt::io::Reader>(rdr: &mut T) -> ~str {
+fn read_line<T: io::Reader>(rdr: &mut T) -> ~str {
     let mut bytes = ~[];
     loop {
         match rdr.read_byte() {
@@ -89,7 +89,7 @@ fn read_line<T: rt::io::Reader>(rdr: &mut T) -> ~str {
     str::from_utf8(bytes)
 }
 
-pub fn wsParseHandshake<T: rt::io::Reader>(rdr: &mut T) -> Option<Handshake> {
+pub fn wsParseHandshake<T: io::Reader>(rdr: &mut T) -> Option<Handshake> {
     let hdrFns = headerfns();
     let line = read_line(rdr);
     let prop: ~[~str] = line.split_str_iter(" ").map(|s|s.to_owned()).collect();
@@ -157,7 +157,7 @@ fn frameTypeFrom(i: u8) -> WSFrameType {
     unsafe { std::cast::transmute(i) }
 }
 
-pub fn wsParseInputFrame<T: rt::io::Reader>(rdr: &mut T) -> (Option<~[u8]>, WSFrameType) {
+pub fn wsParseInputFrame<T: io::Reader>(rdr: &mut T) -> (Option<~[u8]>, WSFrameType) {
     //io::println("reading header");
     let hdr = rdr.read_bytes(2 as uint);
     if hdr.len() != 2 {

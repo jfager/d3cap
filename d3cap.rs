@@ -4,14 +4,14 @@ extern mod std;
 extern mod extra;
 extern mod crypto;
 
-use std::{cast,os,ptr,rt,task};
+use std::{cast,io,os,ptr,task};
 use std::hashmap::HashMap;
 use std::task::TaskBuilder;
 use std::cell::Cell;
 
-use std::rt::io::{io_error,Acceptor,Listener,Reader,Writer};
-use std::rt::io::net::tcp::TcpListener;
-use std::rt::io::net::ip::{Ipv4Addr,SocketAddr};
+use std::io::{io_error,Acceptor,Listener,Reader,Writer};
+use std::io::net::tcp::TcpListener;
+use std::io::net::ip::{Ipv4Addr,SocketAddr};
 
 use extra::{json,time};
 use extra::json::ToJson;
@@ -322,7 +322,7 @@ extern fn handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
     }
 }
 
-fn websocketWorker<T: rt::io::Reader+rt::io::Writer>(tcps: &mut T, data_po: &Port<~str>) {
+fn websocketWorker<T: io::Reader+io::Writer>(tcps: &mut T, data_po: &Port<~str>) {
     println!("websocketWorker");
     let handshake = wsParseHandshake(tcps);
     match handshake {

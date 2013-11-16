@@ -58,7 +58,7 @@ fn do_capture_loop_dev<C>(ctx: ~C, dev: *c_char, errbuf: &mut [c_char],
     }
 }
 
-pub fn  capture_loop_dev<C>(dev: &str, ctx: ~C, handler: extern "C" fn(*u8, *pcap_pkthdr, *u8)) {
+pub fn capture_loop_dev<C>(dev: &str, ctx: ~C, handler: extern "C" fn(*u8, *pcap_pkthdr, *u8)) {
     let mut errbuf = vec::with_capacity(256);
     let c_dev = unsafe { dev.to_c_str().unwrap() };
     do_capture_loop_dev(ctx, c_dev, errbuf, handler);
