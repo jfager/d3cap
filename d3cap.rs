@@ -156,13 +156,13 @@ struct Packet {
 }
 impl Packet {
     fn parse(&self, ctx: &mut ProtocolHandlers) {
-        unsafe {
-            let hdr = *self.header;
-            if hdr.caplen < hdr.len {
-                println!("WARN: Capd only [{}] bytes of packet with length [{}]",
-                         hdr.caplen, hdr.len);
-            }
-            if hdr.len > ETHERNET_HEADER_BYTES as u32 {
+        let hdr = unsafe { *self.header };
+        if hdr.caplen < hdr.len {
+            println!("WARN: Capd only [{}] bytes of packet with length [{}]",
+                     hdr.caplen, hdr.len);
+        }
+        if hdr.len > ETHERNET_HEADER_BYTES as u32 {
+            unsafe {
                 let ehp: *EthernetHeader = cast::transmute(self.packet);
                 (*ehp).parse(ctx, hdr.len);
                 (*ehp).dispatch(self, ctx);
