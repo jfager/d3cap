@@ -4,11 +4,10 @@ extern mod std;
 extern mod extra;
 extern mod crypto;
 
-use std::{cast,os,ptr,rt,str,task};
+use std::{cast,os,ptr,rt,task};
 use std::hashmap::HashMap;
 use std::task::TaskBuilder;
 use std::cell::Cell;
-use std::libc::c_char;
 
 use std::rt::io::{io_error,Acceptor,Listener,Reader,Writer};
 use std::rt::io::net::tcp::TcpListener;
@@ -292,8 +291,6 @@ impl ToStr for IP6Addr {
     }
 }
 
-
-
 fixed_vec_iter_bytes!(IP6Addr)
 fixed_vec_eq!(IP6Addr)
 fixed_vec_ord!(IP6Addr)
@@ -377,43 +374,6 @@ fn uiServer(mc: Multicast<~str>, port: u16) {
     }
 }
 
-
-
-fn find_device(errbuf: &mut [c_char]) -> *c_char {
-    let dev = get_device(errbuf);
-    match dev {
-        Some(d) => {
-            unsafe {
-                println!("Found device {}", str::raw::from_c_str(d));
-            }
-            d
-        }
-        None => fail!("No device available")
-    }
-}
-
-fn capture<C:GenericChan<~str>+Clone+Send>(data_ch: &C, dev: *c_char, errbuf: &mut [c_char]) {
-
-    let ctx = ~ProtocolHandlers {
-        mac: ProtocolHandler::spawn("mac", data_ch),
-        ip4: ProtocolHandler::spawn("ip4", data_ch),
-        ip6: ProtocolHandler::spawn("ip6", data_ch)
-    };
-
-    let session = start_session(dev, errbuf);
-    match session {
-        Some(s) => unsafe {
-            println!("Starting pcap_loop");
-            pcap_loop(s, -1, handler, cast::transmute(ptr::to_unsafe_ptr(ctx)));
-        },
-        None => unsafe {
-            println!("Couldn't open device {}: {:?}\n",
-                     str::raw::from_c_str(dev),
-                     errbuf);
-        }
-    }
-}
-
 pub fn named_task(name: ~str) -> TaskBuilder {
     let mut ui_task = task::task();
     ui_task.name(name);
@@ -448,12 +408,16 @@ fn main() {
     }
 
     do named_task(~"packet_capture").spawn_with(data_ch) |ch| {
-        let mut errbuf = std::vec::with_capacity(256);
-        let dev = matches.opt_str(INTERFACE_OPT);
-        let dev = match dev {
-            Some(d) => unsafe { d.to_c_str().unwrap() },
-            None => find_device(errbuf)
+        let ctx = ~ProtocolHandlers {
+            mac: ProtocolHandler::spawn("mac", &ch),
+            ip4: ProtocolHandler::spawn("ip4", &ch),
+            ip6: ProtocolHandler::spawn("ip6", &ch)
         };
-        capture(&ch, dev, errbuf);
+
+        let dev = matches.opt_str(INTERFACE_OPT);
+        match dev {
+            Some(d) => capture_loop_dev(d, ctx, handler),
+            None => capture_loop(ctx, handler)
+        };
     }
 }
