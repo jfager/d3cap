@@ -26,7 +26,7 @@ mod rustpcap;
 mod ring;
 mod rustwebsocket;
 mod multicast;
-mod vec_util_macros;
+mod fixed_vec_macros;
 
 type Addrs<T> = (T, T);
 
@@ -63,7 +63,8 @@ impl<T: Ord+IterBytes+Eq+Clone+Send+ToStr, C: GenericChan<~str>+Clone+Send> Prot
     }
     fn spawn(typ: &'static str, ch: &C) -> Chan<~PktMeta<T>> {
         let (port, chan) = stream();
-        do task::spawn_with(ch.clone()) |oc| {
+        let oc = ch.clone();
+        do spawn {
             let mut handler = ProtocolHandler::new(typ, oc);
             loop {
                 let pkt: ~PktMeta<T> = port.recv();
@@ -171,14 +172,12 @@ impl Packet {
     }
 }
 
-
-
 static ETHERNET_MAC_ADDR_BYTES: int = 6;
 static ETHERNET_ETHERTYPE_BYTES: int = 2;
 static ETHERNET_HEADER_BYTES: int =
     (ETHERNET_MAC_ADDR_BYTES * 2) + ETHERNET_ETHERTYPE_BYTES;
 
-struct MacAddr([u8,..ETHERNET_MAC_ADDR_BYTES]);
+fixed_vec!(MacAddr, u8, ETHERNET_MAC_ADDR_BYTES)
 
 impl ToStr for MacAddr {
     fn to_str(&self) -> ~str {
@@ -190,16 +189,13 @@ impl ToStr for MacAddr {
     }
 }
 
-fixed_vec_iter_bytes!(MacAddr)
-fixed_vec_eq!(MacAddr)
-fixed_vec_ord!(MacAddr)
-fixed_vec_clone!(MacAddr, u8, ETHERNET_MAC_ADDR_BYTES)
 
 struct EthernetHeader {
     dst: MacAddr,
     src: MacAddr,
     typ: u16
 }
+
 impl EthernetHeader {
     fn parse(&self, ctx: &mut ProtocolHandlers, size: u32) {
         ctx.mac.send(~PktMeta::new(self.src, self.dst, size));
@@ -236,18 +232,14 @@ static ETHERTYPE_IP4: u16 = 0x0008;
 static ETHERTYPE_IP6: u16 = 0xDD86;
 static ETHERTYPE_802_1X: u16 = 0x8E88;
 
-struct IP4Addr([u8,..4]);
+fixed_vec!(IP4Addr, u8, 4)
+
 impl ToStr for IP4Addr {
     fn to_str(&self) -> ~str {
         format!("{}.{}.{}.{}",
                 self[0] as uint, self[1] as uint, self[2] as uint, self[3] as uint)
     }
 }
-
-fixed_vec_iter_bytes!(IP4Addr)
-fixed_vec_eq!(IP4Addr)
-fixed_vec_ord!(IP4Addr)
-fixed_vec_clone!(IP4Addr, u8, 4)
 
 struct IP4Header {
     ver_ihl: u8,
@@ -268,7 +260,8 @@ impl IP4Header {
     }
 }
 
-struct IP6Addr([u16,..8]);
+fixed_vec!(IP6Addr, u16, 8)
+
 impl ToStr for IP6Addr {
     fn to_str(&self) -> ~str {
         match (**self) {
@@ -291,10 +284,7 @@ impl ToStr for IP6Addr {
     }
 }
 
-fixed_vec_iter_bytes!(IP6Addr)
-fixed_vec_eq!(IP6Addr)
-fixed_vec_ord!(IP6Addr)
-fixed_vec_clone!(IP6Addr, u16, 8)
+
 
 struct IP6Header {
     ver_tc_fl: u32,
@@ -333,7 +323,7 @@ fn websocketWorker<T: io::Reader+io::Writer>(tcps: &mut T, data_po: &Port<~str>)
         None => tcps.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
     }
 
-    do io_error::cond.trap(|_| ()).inside {
+    io_error::cond.trap(|_| ()).inside(|| {
         loop {
             let mut counter = 0;
             while data_po.peek() && counter < 100 {
@@ -351,7 +341,7 @@ fn websocketWorker<T: io::Reader+io::Writer>(tcps: &mut T, data_po: &Port<~str>)
                 _ => ()
             }
         }
-    }
+    });
     println!("Done with worker");
 }
 
@@ -365,7 +355,7 @@ fn uiServer(mc: Multicast<~str>, port: u16) {
     for s in acceptor.incoming() {
         let tcp_stream = Cell::new(s);
         let (conn_po, conn_ch) = stream();
-        mc.add_handler(|msg| { conn_ch.send(msg.to_owned()); });
+        mc.add_dest_chan(conn_ch);
         do named_task(format!("websocketWorker_{}", workercount)).spawn {
             let mut tcp_stream = tcp_stream.take();
             websocketWorker(&mut tcp_stream, &conn_po);
@@ -403,15 +393,15 @@ fn main() {
     let mc = Multicast::new();
     let data_ch = mc.get_chan();
 
-    do named_task(~"socket_listener").spawn_with(mc) |mc| {
+    do named_task(~"socket_listener").spawn {
         uiServer(mc, port);
     }
 
-    do named_task(~"packet_capture").spawn_with(data_ch) |ch| {
+    do named_task(~"packet_capture").spawn {
         let ctx = ~ProtocolHandlers {
-            mac: ProtocolHandler::spawn("mac", &ch),
-            ip4: ProtocolHandler::spawn("ip4", &ch),
-            ip6: ProtocolHandler::spawn("ip6", &ch)
+            mac: ProtocolHandler::spawn("mac", &data_ch),
+            ip4: ProtocolHandler::spawn("ip4", &data_ch),
+            ip6: ProtocolHandler::spawn("ip6", &data_ch)
         };
 
         let dev = matches.opt_str(INTERFACE_OPT);

@@ -2,7 +2,7 @@ use std::comm::SharedChan;
 
 enum MulticastMsg<T> {
     Msg(T),
-    MsgCb(~fn(&T))
+    MsgDest(Chan<T>)
 }
 
 struct Multicast<T> {
@@ -13,11 +13,11 @@ impl<T:Send+Clone> Multicast<T> {
     pub fn new() -> Multicast<T> {
         let (po, ch) = stream::<MulticastMsg<T>>();
         do spawn {
-            let mut cbs: ~[~fn(&T)] = ~[];
+            let mut mc_chans: ~[Chan<T>] = ~[];
             loop {
                 match po.try_recv() {
-                    Some(Msg(msg)) => for cb in cbs.iter() { (*cb)(&msg) },
-                    Some(MsgCb(cb)) => cbs.push(cb),
+                    Some(Msg(msg)) => for mc_chan in mc_chans.iter() { mc_chan.send(msg.clone()) },
+                    Some(MsgDest(c)) => mc_chans.push(c),
                     None => break
                 }
             }
@@ -29,8 +29,8 @@ impl<T:Send+Clone> Multicast<T> {
         MulticastSharedChan { ch: self.ch.clone() }
     }
 
-    pub fn add_handler(&self, cb: ~fn(&T)) {
-        self.ch.send(MsgCb(cb));
+    pub fn add_dest_chan(&self, chan: Chan<T>) {
+        self.ch.send(MsgDest(chan));
     }
 }
 

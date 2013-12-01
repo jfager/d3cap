@@ -64,7 +64,7 @@ impl Handshake {
     }
 }
 
-type HeaderFns = HashMap<~str, &'static fn(&mut Handshake, &str)>;
+type HeaderFns = HashMap<~str, 'static |&mut Handshake, &str|->()>;
 
 fn headerfns() -> HeaderFns {
     let mut hdrFns = HashMap::new();
@@ -92,7 +92,7 @@ fn read_line<T: io::Reader>(rdr: &mut T) -> ~str {
 pub fn wsParseHandshake<T: io::Reader>(rdr: &mut T) -> Option<Handshake> {
     let hdrFns = headerfns();
     let line = read_line(rdr);
-    let prop: ~[~str] = line.split_str_iter(" ").map(|s|s.to_owned()).collect();
+    let prop: ~[~str] = line.split_str(" ").map(|s|s.to_owned()).collect();
     let resource = prop[1].trim();
     let mut hs = Handshake {
         //host: ~"",
@@ -109,7 +109,7 @@ pub fn wsParseHandshake<T: io::Reader>(rdr: &mut T) -> Option<Handshake> {
         if line.is_empty() {
             return if hasHandshake { Some(hs) } else { None };
         }
-        let prop: ~[~str] = line.split_str_iter(": ").map(|s|s.to_owned()).collect();
+        let prop: ~[~str] = line.split_str(": ").map(|s|s.to_owned()).collect();
         if prop.len() != 2 {
             println!("Unexpected line: '{}'", line);
             return None;
@@ -140,14 +140,14 @@ pub fn wsMakeFrame(data: &[u8], frameType: WSFrameType) -> ~[u8] {
         out.push(data.len() as u8);
     } else if data.len() <= MED_FRAME {
         out.push(MED_FRAME_FLAG);
-        do (data.len() as u16).iter_bytes(false) |bytes| {
+        (data.len() as u16).iter_bytes(false, |bytes| {
             out.push_all(bytes); true
-        };
+        });
     } else {
         out.push(LARGE_FRAME_FLAG);
-        do (data.len() as u64).iter_bytes(false) |bytes| {
+        (data.len() as u64).iter_bytes(false, |bytes| {
             out.push_all(bytes); true
-        };
+        });
     }
     out.push_all(data);
     out
