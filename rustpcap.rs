@@ -16,7 +16,7 @@ pub struct timeval {
     tv_usec: c_ulonglong
 }
 
-#[link_args = "-lpcap"]
+#[link(name="pcap")]
 extern {
     pub fn pcap_lookupdev(errbuf: *c_char) -> *c_char;
     pub fn pcap_open_live(dev: *c_char, snaplen: c_int, promisc: c_int, to_ms: c_int, ebuf: *c_char) -> *pcap_t;
