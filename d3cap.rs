@@ -4,14 +4,15 @@ extern mod std;
 extern mod extra;
 extern mod crypto;
 
-use std::{cast,io,os,ptr,task};
+use std::{cast,os,ptr,task};
 use std::hashmap::HashMap;
 use std::task::TaskBuilder;
 use std::cell::Cell;
 
-use std::io::{io_error,Acceptor,Listener,Reader,Writer};
-use std::io::net::tcp::TcpListener;
+use std::io::{io_error,Acceptor,Listener,Stream};
+use std::io::net::tcp::{TcpListener};
 use std::io::net::ip::{Ipv4Addr,SocketAddr};
+use std::io::buffered::{BufferedStream};
 
 use extra::{json,time};
 use extra::json::ToJson;
@@ -312,13 +313,14 @@ extern fn handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
     }
 }
 
-fn websocketWorker<T: io::Reader+io::Writer>(tcps: &mut T, data_po: &Port<~str>) {
+fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Port<~str>) {
     println!("websocketWorker");
     let handshake = wsParseHandshake(tcps);
     match handshake {
         Some(hs) => {
             let rsp = hs.getAnswer();
             tcps.write(rsp.as_bytes());
+            tcps.flush();
         }
         None => tcps.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
     }
@@ -329,6 +331,7 @@ fn websocketWorker<T: io::Reader+io::Writer>(tcps: &mut T, data_po: &Port<~str>)
             while data_po.peek() && counter < 100 {
                 let msg = data_po.recv();
                 tcps.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
+                tcps.flush();
                 counter += 1;
             }
             let (_, frameType) = wsParseInputFrame(tcps);
@@ -336,6 +339,7 @@ fn websocketWorker<T: io::Reader+io::Writer>(tcps: &mut T, data_po: &Port<~str>)
                 WS_CLOSING_FRAME |
                 WS_ERROR_FRAME   => {
                     tcps.write(wsMakeFrame([], WS_CLOSING_FRAME));
+                    tcps.flush();
                     break;
                 }
                 _ => ()
@@ -352,13 +356,14 @@ fn uiServer(mc: Multicast<~str>, port: u16) {
     println!("Server listening on port {}", port as uint);
 
     let mut workercount = 0;
-    for s in acceptor.incoming() {
-        let tcp_stream = Cell::new(s);
+    for tcp_stream in acceptor.incoming() {
         let (conn_po, conn_ch) = stream();
         mc.add_dest_chan(conn_ch);
         do named_task(format!("websocketWorker_{}", workercount)).spawn {
-            let mut tcp_stream = tcp_stream.take();
-            websocketWorker(&mut tcp_stream, &conn_po);
+            match tcp_stream {
+                Some(tcps) => websocketWorker(&mut BufferedStream::new(tcps), &conn_po),
+                None => fail!("Could not start websocket worker")
+            }
         }
         workercount += 1;
     }

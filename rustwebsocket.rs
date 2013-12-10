@@ -2,9 +2,10 @@ extern mod std;
 extern mod extra;
 extern mod crypto;
 
-use std::{io,str,vec};
+use std::vec;
 use std::hashmap::HashMap;
-use std::io::Reader;
+use std::io::Stream;
+use std::io::buffered::BufferedStream;
 
 use extra::base64::{ToBase64, STANDARD};
 
@@ -73,25 +74,13 @@ fn headerfns() -> HeaderFns {
     hdrFns
 }
 
-fn read_line<T: io::Reader>(rdr: &mut T) -> ~str {
-    let mut bytes = ~[];
-    loop {
-        match rdr.read_byte() {
-            Some(ch) => {
-                if ch == -1 || ch == '\n' as u8 {
-                    break;
-                }
-                bytes.push(ch as u8);
-            }
-            None => break
-        }
-    }
-    str::from_utf8(bytes).to_owned()
-}
-
-pub fn wsParseHandshake<T: io::Reader>(rdr: &mut T) -> Option<Handshake> {
+pub fn wsParseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake> {
     let hdrFns = headerfns();
-    let line = read_line(rdr);
+    let line = s.read_line();
+    if line.is_none() {
+        return None;
+    }
+    let line = line.unwrap();
     let prop: ~[~str] = line.split_str(" ").map(|s|s.to_owned()).collect();
     let resource = prop[1].trim();
     let mut hs = Handshake {
@@ -104,11 +93,17 @@ pub fn wsParseHandshake<T: io::Reader>(rdr: &mut T) -> Option<Handshake> {
 
     let mut hasHandshake = false;
     loop {
-        let line = read_line(rdr);
+        let line = s.read_line();
+        if line.is_none() {
+            return if hasHandshake { Some(hs) } else { None };
+        }
+
+        let line = line.unwrap();
         let line = line.trim();
         if line.is_empty() {
             return if hasHandshake { Some(hs) } else { None };
         }
+
         let prop: ~[~str] = line.split_str(": ").map(|s|s.to_owned()).collect();
         if prop.len() != 2 {
             println!("Unexpected line: '{}'", line);
@@ -157,9 +152,9 @@ fn frameTypeFrom(i: u8) -> WSFrameType {
     unsafe { std::cast::transmute(i) }
 }
 
-pub fn wsParseInputFrame<T: io::Reader>(rdr: &mut T) -> (Option<~[u8]>, WSFrameType) {
+pub fn wsParseInputFrame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<~[u8]>, WSFrameType) {
     //io::println("reading header");
-    let hdr = rdr.read_bytes(2 as uint);
+    let hdr = s.read_bytes(2 as uint);
     if hdr.len() != 2 {
         return (None, WS_ERROR_FRAME);
     }
@@ -180,7 +175,7 @@ pub fn wsParseInputFrame<T: io::Reader>(rdr: &mut T) -> (Option<~[u8]>, WSFrameT
         let payloadLength = hdr[1] & 0x7F;
         if payloadLength < 0x7E { //Only handle short payloads right now.
             let toread = (payloadLength + 4) as uint; //+4 for mask
-            let masked_payload = rdr.read_bytes(toread);
+            let masked_payload = s.read_bytes(toread);
             let payload = masked_payload.tailn(4).iter()
                 .enumerate()
                 .map(|(i, t)| { t ^ masked_payload[i%4] })
