@@ -7,7 +7,6 @@ extern mod crypto;
 use std::{cast,os,ptr,task};
 use std::hashmap::HashMap;
 use std::task::TaskBuilder;
-use std::cell::Cell;
 
 use std::io::{io_error,Acceptor,Listener,Stream};
 use std::io::net::tcp::{TcpListener};
@@ -21,7 +20,7 @@ use extra::treemap::TreeMap;
 use rustpcap::*;
 use rustwebsocket::*;
 use ring::RingBuffer;
-use multicast::Multicast;
+use multicast::{Multicast, MulticastChan};
 
 mod rustpcap;
 mod ring;
@@ -39,18 +38,17 @@ impl<T: Ord+IterBytes> OrdAddrs<T> {
     }
 }
 
-type AddrChanMap<T> = HashMap<~OrdAddrs<T>, ~Chan<~PktMeta<T>>>;
-
 struct ProtocolHandler<T, C> {
     typ: &'static str,
     count: u64,
     size: u64,
-    ch: C,
+    ch: MulticastChan<C>,
     routes: HashMap<~OrdAddrs<T>, ~RouteStats<T>>
 }
 
-impl<T: Ord+IterBytes+Eq+Clone+Send+ToStr, C: GenericChan<~str>+Clone+Send> ProtocolHandler<T,C> {
-    fn new(typ: &'static str, ch: C) -> ProtocolHandler<T,C> {
+impl<T: Ord+IterBytes+Eq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
+    fn new(typ: &'static str, ch: MulticastChan<~str>) -> ProtocolHandler<T,~str> {
+        //FIXME:  this is the map that's hitting https://github.com/mozilla/rust/issues/11102
         ProtocolHandler { typ: typ, count: 0, size: 0, ch: ch, routes: HashMap::new() }
     }
     fn update(&mut self, pkt: &PktMeta<T>) {
@@ -62,10 +60,10 @@ impl<T: Ord+IterBytes+Eq+Clone+Send+ToStr, C: GenericChan<~str>+Clone+Send> Prot
         let msg = route_msg(self.typ, *stats);
         self.ch.send(msg);
     }
-    fn spawn(typ: &'static str, ch: &C) -> Chan<~PktMeta<T>> {
-        let (port, chan) = stream();
+    fn spawn(typ: &'static str, ch: &MulticastChan<~str>) -> Chan<~PktMeta<T>> {
+        let (port, chan) = Chan::new();
         let oc = ch.clone();
-        do spawn {
+        do named_task(format!("{}_handler", typ)).spawn {
             let mut handler = ProtocolHandler::new(typ, oc);
             loop {
                 let pkt: ~PktMeta<T> = port.recv();
@@ -328,11 +326,21 @@ fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Port<~str>
     io_error::cond.trap(|_| ()).inside(|| {
         loop {
             let mut counter = 0;
-            while data_po.peek() && counter < 100 {
-                let msg = data_po.recv();
-                tcps.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
-                tcps.flush();
-                counter += 1;
+            loop {
+                match data_po.try_recv() {
+                    Some(msg) => {
+                        tcps.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
+                        tcps.flush();
+                        if counter < 100 {
+                            counter += 1;
+                        } else {
+                            break
+                        }
+                    },
+                    None => {
+                        break
+                    }
+                }
             }
             let (_, frameType) = wsParseInputFrame(tcps);
             match frameType {
@@ -357,7 +365,7 @@ fn uiServer(mc: Multicast<~str>, port: u16) {
 
     let mut workercount = 0;
     for tcp_stream in acceptor.incoming() {
-        let (conn_po, conn_ch) = stream();
+        let (conn_po, conn_ch) = Chan::new();
         mc.add_dest_chan(conn_ch);
         do named_task(format!("websocketWorker_{}", workercount)).spawn {
             match tcp_stream {
@@ -408,6 +416,9 @@ fn main() {
             ip4: ProtocolHandler::spawn("ip4", &data_ch),
             ip6: ProtocolHandler::spawn("ip6", &data_ch)
         };
+
+        //FIXME: lame workaround for https://github.com/mozilla/rust/issues/11102
+        std::io::timer::sleep(1000);
 
         let dev = matches.opt_str(INTERFACE_OPT);
         match dev {

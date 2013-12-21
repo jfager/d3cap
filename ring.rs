@@ -11,7 +11,7 @@ use std::iter::{Iterator};
 // allocation occurs: when the struct is first created and buffer is allocated.
 // Copying a RingBuffer will cause a heap allocation but the compiler will
 // warn us on attempts to copy it implicitly.
-struct RingBuffer<T> {
+pub struct RingBuffer<T> {
     priv buffer: ~[T],
     priv capacity: uint,        // number of elements the buffer is able to hold (can't guarantee that vec capacity is exactly what we set it to)
     priv size: uint,            // number of elements with legit values in the buffer
@@ -85,13 +85,13 @@ impl<T> RingBuffer<T> {
 //     }
 // }
 
-pub struct RingIterator<'self, T> {
-    rb: &'self RingBuffer<T>,
+pub struct RingIterator<'s, T> {
+    rb: &'s RingBuffer<T>,
     i: uint
 }
 
-impl<'self, T> Iterator<&'self T> for RingIterator<'self, T> {
-    fn next(&mut self) -> Option<&'self T> {
+impl<'s, T> Iterator<&'s T> for RingIterator<'s, T> {
+    fn next(&mut self) -> Option<&'s T> {
         if self.i < self.rb.size {
             let out = Some(self.rb.get(self.i));
             self.i += 1;

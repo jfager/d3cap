@@ -26,7 +26,7 @@ extern {
 }
 
 unsafe fn get_device(errbuf: &mut [c_char]) -> Option<*c_char> {
-    let dev = pcap_lookupdev(vec::raw::to_ptr(errbuf));
+    let dev = pcap_lookupdev(errbuf.as_ptr());
     if dev != ptr::null() {
         return Some(dev);
     } else {
@@ -35,7 +35,7 @@ unsafe fn get_device(errbuf: &mut [c_char]) -> Option<*c_char> {
 }
 
 unsafe fn start_session(dev: *c_char, errbuf: &mut [c_char]) -> Option<*pcap_t> {
-    let eb = vec::raw::to_ptr(errbuf);
+    let eb = errbuf.as_ptr();
     let handle = pcap_open_live(dev, 65535, 0, 1000, eb);
     if handle == ptr::null() {
         None
