@@ -1,4 +1,5 @@
 use std::comm::SharedChan;
+use std::task;
 
 enum MulticastMsg<T> {
     Msg(T),
@@ -12,11 +13,28 @@ pub struct Multicast<T> {
 impl<T:Send+Clone> Multicast<T> {
     pub fn new() -> Multicast<T> {
         let (po, ch): (Port<MulticastMsg<T>>, SharedChan<MulticastMsg<T>>) = SharedChan::new();
-        do spawn {
+        let mut t = task::task();
+        t.name("multicast");
+        do t.spawn {
             let mut mc_chans: ~[Chan<T>] = ~[];
+            let mut to_remove = ~[];
             loop {
                 match po.recv_opt() {
-                    Some(Msg(msg)) => for mc_chan in mc_chans.iter() { mc_chan.send(msg.clone()) },
+                    Some(Msg(msg)) => {
+                        to_remove.truncate(0);
+                        for (i, mc_chan) in mc_chans.iter().enumerate() {
+                            if !mc_chan.try_send(msg.clone()) {
+                                to_remove.push(i);
+                            }
+                        }
+                        if to_remove.len() > 0 {
+                            //Walk in reverse to avoid changing indices of
+                            //channels to be removed.
+                            for i in to_remove.rev_iter() {
+                                mc_chans.remove(*i);
+                            }
+                        }
+                    },
                     Some(MsgDest(c)) => mc_chans.push(c),
                     None => break
                 }
