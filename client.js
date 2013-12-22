@@ -34,7 +34,7 @@ $(document).ready(function() {
 
     function mkConnsTab(tabId, type, active) {
         var boundary = $('.tab-content');
-        var width = boundary[0].offsetWidth;
+        var width = boundary[0].offsetWidth - 200;
         var height = width * 0.66;
         return mkTab(tabId, type, active)
             .append("svg").attr("width", width)
