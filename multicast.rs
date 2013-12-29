@@ -16,10 +16,11 @@ impl<T:Send+Clone> Multicast<T> {
         let mut t = task::task();
         t.name("multicast");
         do t.spawn {
-            let mut mc_chans: ~[Chan<T>] = ~[];
+            let mut mc_chans = ~[];
             let mut to_remove = ~[];
             loop {
                 match po.recv_opt() {
+                    Some(MsgDest(c)) => mc_chans.push(c),
                     Some(Msg(msg)) => {
                         to_remove.truncate(0);
                         for (i, mc_chan) in mc_chans.iter().enumerate() {
@@ -35,7 +36,6 @@ impl<T:Send+Clone> Multicast<T> {
                             }
                         }
                     },
-                    Some(MsgDest(c)) => mc_chans.push(c),
                     None => break
                 }
             }
