@@ -388,11 +388,13 @@ fn main() {
 
     let PORT_OPT = "p";
     let INTERFACE_OPT = "i";
+    let PROMISC_FLAG = "P";
 
     let args = os::args();
     let opts = ~[
         optopt(PORT_OPT),
-        optopt(INTERFACE_OPT)
+        optopt(INTERFACE_OPT),
+        optflag(PROMISC_FLAG)
     ];
 
     let matches = match getopts(args.tail(), opts) {
@@ -420,10 +422,11 @@ fn main() {
         //FIXME: lame workaround for https://github.com/mozilla/rust/issues/11102
         std::io::timer::sleep(1000);
 
+        let promisc = matches.opt_present(PROMISC_FLAG);
         let dev = matches.opt_str(INTERFACE_OPT);
         match dev {
-            Some(d) => capture_loop_dev(d, ctx, handler),
-            None => capture_loop(ctx, handler)
+            Some(d) => capture_loop_dev(d, promisc, ctx, handler),
+            None => capture_loop(ctx, promisc, handler)
         };
     }
 }

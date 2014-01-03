@@ -34,9 +34,10 @@ unsafe fn get_device(errbuf: &mut [c_char]) -> Option<*c_char> {
     }
 }
 
-unsafe fn start_session(dev: *c_char, errbuf: &mut [c_char]) -> Option<*pcap_t> {
+unsafe fn start_session(dev: *c_char, promisc: bool, errbuf: &mut [c_char]) -> Option<*pcap_t> {
     let eb = errbuf.as_ptr();
-    let handle = pcap_open_live(dev, 65535, 0, 1000, eb);
+    println!("Promiscuous mode: {}", promisc);
+    let handle = pcap_open_live(dev, 65535, promisc as c_int, 1000, eb);
     if handle == ptr::null() {
         None
     } else {
@@ -44,9 +45,9 @@ unsafe fn start_session(dev: *c_char, errbuf: &mut [c_char]) -> Option<*pcap_t> 
     }
 }
 
-fn do_capture_loop_dev<C>(ctx: ~C, dev: *c_char, errbuf: &mut [c_char],
+fn do_capture_loop_dev<C>(ctx: ~C, dev: *c_char, promisc: bool, errbuf: &mut [c_char],
                           handler:extern "C" fn(*u8, *pcap_pkthdr, *u8)) {
-    let session = unsafe { start_session(dev, errbuf) };
+    let session = unsafe { start_session(dev, promisc, errbuf) };
     match session {
         Some(s) => unsafe {
             println!("Starting capture loop on dev {}", str::raw::from_c_str(dev));
@@ -58,17 +59,19 @@ fn do_capture_loop_dev<C>(ctx: ~C, dev: *c_char, errbuf: &mut [c_char],
     }
 }
 
-pub fn capture_loop_dev<C>(dev: &str, ctx: ~C, handler: extern "C" fn(*u8, *pcap_pkthdr, *u8)) {
+type pcap_handler = extern "C" fn(*u8, *pcap_pkthdr, *u8);
+
+pub fn capture_loop_dev<C>(dev: &str, promisc: bool, ctx: ~C, handler: pcap_handler) {
     let mut errbuf = vec::with_capacity(256);
     let c_dev = unsafe { dev.to_c_str().unwrap() };
-    do_capture_loop_dev(ctx, c_dev, errbuf, handler);
+    do_capture_loop_dev(ctx, c_dev, promisc, errbuf, handler);
 }
 
-pub fn capture_loop<C>(ctx: ~C, handler: extern "C" fn(*u8, *pcap_pkthdr, *u8)) {
+pub fn capture_loop<C>(ctx: ~C, promisc: bool, handler: pcap_handler) {
     let mut errbuf = vec::with_capacity(256);
     let dev = unsafe { get_device(errbuf) };
     match dev {
-        Some(d) => do_capture_loop_dev(ctx, d, errbuf, handler),
+        Some(d) => do_capture_loop_dev(ctx, d, promisc, errbuf, handler),
         None => fail!("No device available")
     }
 }
