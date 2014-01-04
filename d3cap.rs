@@ -4,7 +4,7 @@ extern mod std;
 extern mod extra;
 extern mod crypto;
 
-use std::{cast,os,ptr,task};
+use std::{cast,os};
 use std::hashmap::HashMap;
 
 use extra::{json,time};
@@ -345,12 +345,20 @@ fn main() {
         //FIXME: lame workaround for https://github.com/mozilla/rust/issues/11102
         std::io::timer::sleep(1000);
 
-        let promisc = matches.opt_present(PROMISC_FLAG);
-        let monitor = matches.opt_present(MONITOR_FLAG);
         let dev = matches.opt_str(INTERFACE_OPT);
-        match dev {
-            Some(d) => capture_loop_dev(d, promisc, monitor, ctx, handler),
-            None => capture_loop(ctx, promisc, monitor, handler)
+        let mut sessBuilder = match dev {
+            Some(d) => PcapSessionBuilder::new_dev(d),
+            None => PcapSessionBuilder::new()
         };
+
+        let mut sess = sessBuilder
+            .buffer_size(65535)
+            .timeout(1000)
+            .promisc(matches.opt_present(PROMISC_FLAG))
+            .rfmon(matches.opt_present(MONITOR_FLAG))
+            .activate();
+
+        println!("Starting capture loop");
+        sess.start_loop(ctx, handler);
     }
 }

@@ -47,58 +47,87 @@ unsafe fn get_device(errbuf: &mut [c_char]) -> Option<*c_char> {
     }
 }
 
-unsafe fn start_session(dev: *c_char, promisc: bool, monitor: bool, errbuf: &mut [c_char]) -> Option<*pcap_t> {
-    let eb = errbuf.as_ptr();
-    println!("Promiscuous mode: {}", promisc);
-    println!("Monitor mode: {}", monitor);
-    let handle = pcap_create(dev, eb);
-    if handle == ptr::null() {
-        None
-    } else {
-        //TODO: handle errors
-        pcap_set_buffer_size(handle, 65535);
-        pcap_set_timeout(handle, 1000);
-        pcap_set_promisc(handle, promisc as c_int);
-
-        println!("can set rfmon: {}", pcap_can_set_rfmon(handle));
-        if monitor && pcap_can_set_rfmon(handle) == 1 {
-            pcap_set_rfmon(handle, monitor as c_int);
-        }
-        pcap_activate(handle);
-        Some(handle)
-    }
-}
-
-fn do_capture_loop_dev<C>(ctx: ~C, dev: *c_char, promisc: bool, monitor: bool, errbuf: &mut [c_char],
-                          handler:extern "C" fn(*u8, *pcap_pkthdr, *u8)) {
-    let session = unsafe { start_session(dev, promisc, monitor, errbuf) };
-    match session {
-        Some(s) => unsafe {
-            let dl = pcap_datalink(s);
-            println!("Datalink type: {}", dl);
-            println!("Starting capture loop on dev {}", str::raw::from_c_str(dev));
-
-            pcap_loop(s, -1, handler, cast::transmute(ptr::to_unsafe_ptr(ctx)));
-        },
-        None => unsafe {
-            println!("Couldn't open device {}: {:?}\n", str::raw::from_c_str(dev), errbuf);
-        }
-    }
-}
-
 type pcap_handler = extern "C" fn(*u8, *pcap_pkthdr, *u8);
 
-pub fn capture_loop_dev<C>(dev: &str, promisc: bool, monitor: bool, ctx: ~C, handler: pcap_handler) {
-    let mut errbuf = vec::with_capacity(256);
-    let c_dev = unsafe { dev.to_c_str().unwrap() };
-    do_capture_loop_dev(ctx, c_dev, promisc, monitor, errbuf, handler);
+//TODO: http://www.tcpdump.org/linktypes.html
+type DataLinkType = c_int;
+static DLT_NULL: DataLinkType = 0;
+static DLT_ETHERNET: DataLinkType = 1;
+static DLT_IEEE802_11_RADIO: DataLinkType = 127;
+
+pub struct PcapSessionBuilder {
+    priv p: *pcap_t,
+    activated: bool
 }
 
-pub fn capture_loop<C>(ctx: ~C, promisc: bool, monitor: bool, handler: pcap_handler) {
-    let mut errbuf = vec::with_capacity(256);
-    let dev = unsafe { get_device(errbuf) };
-    match dev {
-        Some(d) => do_capture_loop_dev(ctx, d, promisc, monitor, errbuf, handler),
-        None => fail!("No device available")
+impl PcapSessionBuilder {
+
+    pub fn new_dev(dev: &str) -> PcapSessionBuilder {
+        let mut errbuf = vec::with_capacity(256);
+        let c_dev = unsafe { dev.to_c_str().unwrap() };
+        PcapSessionBuilder::do_new(c_dev, errbuf)
+    }
+
+    pub fn new() -> PcapSessionBuilder {
+        let mut errbuf = vec::with_capacity(256);
+        let dev = unsafe { get_device(errbuf) };
+        match dev {
+            Some(d) => {
+                println!("Using dev {}", unsafe { str::raw::from_c_str(d) });
+                PcapSessionBuilder::do_new(d, errbuf)
+            },
+            None => fail!("No device available")
+        }
+    }
+
+    fn do_new(dev: *c_char, errbuf: &mut [c_char]) -> PcapSessionBuilder {
+        let p = unsafe { pcap_create(dev, errbuf.as_ptr()) };
+        if p == ptr::null() { fail!("Could not initialize device"); }
+        PcapSessionBuilder { p: p, activated: false }
+    }
+
+    pub fn buffer_size<'a>(&'a mut self, sz: i32) -> &'a mut PcapSessionBuilder {
+        if self.activated { fail!("Session already activated") }
+        unsafe { pcap_set_buffer_size(self.p, sz); }
+        self
+    }
+
+    pub fn timeout<'a>(&'a mut self, to: i32) -> &'a mut PcapSessionBuilder {
+        if self.activated { fail!("Session already activated") }
+        unsafe { pcap_set_timeout(self.p, to); }
+        self
+    }
+
+    pub fn promisc<'a>(&'a mut self, promisc: bool) -> &'a mut PcapSessionBuilder {
+        if self.activated { fail!("Session already activated") }
+        unsafe { pcap_set_promisc(self.p, promisc as c_int); }
+        self
+    }
+
+    pub fn rfmon<'a>(&'a mut self, rfmon: bool) -> &'a mut PcapSessionBuilder {
+        if self.activated { fail!("Session already activated") }
+        unsafe { pcap_set_rfmon(self.p, rfmon as c_int); }
+        self
+    }
+
+    pub fn activate(&mut self) -> PcapSession {
+        if self.activated { fail!("Session already activated") }
+        unsafe { pcap_activate(self.p); }
+        self.activated = true;
+        PcapSession { p: self.p }
+    }
+}
+
+struct PcapSession {
+    priv p: *pcap_t
+}
+
+impl PcapSession {
+    pub fn datalink(&self) -> DataLinkType {
+        unsafe { pcap_datalink(self.p) }
+    }
+
+    pub fn start_loop<C>(&mut self, ctx: ~C, handler: pcap_handler) {
+        unsafe { pcap_loop(self.p, -1, handler, cast::transmute(ptr::to_unsafe_ptr(ctx))); }
     }
 }
