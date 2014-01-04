@@ -6,7 +6,7 @@ use std::io::buffered::{BufferedStream};
 use rustwebsocket::*;
 use util::{named_task};
 
-use multicast::{Multicast, MulticastChan};
+use multicast::Multicast;
 
 fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Port<~str>) {
     println!("websocketWorker");
