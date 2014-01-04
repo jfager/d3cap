@@ -6,27 +6,24 @@ extern mod crypto;
 
 use std::{cast,os,ptr,task};
 use std::hashmap::HashMap;
-use std::task::TaskBuilder;
-
-use std::io::{io_error,Acceptor,Listener,Stream};
-use std::io::net::tcp::{TcpListener};
-use std::io::net::ip::{Ipv4Addr,SocketAddr};
-use std::io::buffered::{BufferedStream};
 
 use extra::{json,time};
 use extra::json::ToJson;
 use extra::treemap::TreeMap;
 
 use rustpcap::*;
-use rustwebsocket::*;
 use ring::RingBuffer;
 use multicast::{Multicast, MulticastChan};
+use uiserver::uiServer;
+use util::{named_task, transmute_offset};
 
 mod rustpcap;
 mod ring;
 mod rustwebsocket;
 mod multicast;
 mod fixed_vec_macros;
+mod uiserver;
+mod util;
 
 type Addrs<T> = (T, T);
 
@@ -299,10 +296,6 @@ impl IP6Header {
     }
 }
 
-unsafe fn transmute_offset<T,U>(base: *T, offset: int) -> U {
-    cast::transmute(ptr::offset(base, offset))
-}
-
 extern fn handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
     unsafe {
         let ctx: *mut ProtocolHandlers = cast::transmute(args);
@@ -311,90 +304,20 @@ extern fn handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
     }
 }
 
-fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Port<~str>) {
-    println!("websocketWorker");
-    let handshake = wsParseHandshake(tcps);
-    match handshake {
-        Some(hs) => {
-            let rsp = hs.getAnswer();
-            tcps.write(rsp.as_bytes());
-            tcps.flush();
-        }
-        None => tcps.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
-    }
-
-    io_error::cond.trap(|_| ()).inside(|| {
-        loop {
-            let mut counter = 0;
-            loop {
-                match data_po.try_recv() {
-                    Some(msg) => {
-                        tcps.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
-                        tcps.flush();
-                        if counter < 100 {
-                            counter += 1;
-                        } else {
-                            break
-                        }
-                    },
-                    None => {
-                        break
-                    }
-                }
-            }
-            let (_, frameType) = wsParseInputFrame(tcps);
-            match frameType {
-                WS_CLOSING_FRAME |
-                WS_ERROR_FRAME   => {
-                    tcps.write(wsMakeFrame([], WS_CLOSING_FRAME));
-                    tcps.flush();
-                    break;
-                }
-                _ => ()
-            }
-        }
-    });
-    println!("Done with worker");
-}
-
-fn uiServer(mc: Multicast<~str>, port: u16) {
-    let addr = SocketAddr { ip: Ipv4Addr(127, 0, 0, 1), port: port };
-    let listener = TcpListener::bind(addr);
-    let mut acceptor = listener.listen();
-    println!("Server listening on port {}", port as uint);
-
-    let mut workercount = 0;
-    for tcp_stream in acceptor.incoming() {
-        let (conn_po, conn_ch) = Chan::new();
-        mc.add_dest_chan(conn_ch);
-        do named_task(format!("websocketWorker_{}", workercount)).spawn {
-            match tcp_stream {
-                Some(tcps) => websocketWorker(&mut BufferedStream::new(tcps), &conn_po),
-                None => fail!("Could not start websocket worker")
-            }
-        }
-        workercount += 1;
-    }
-}
-
-pub fn named_task(name: ~str) -> TaskBuilder {
-    let mut ui_task = task::task();
-    ui_task.name(name);
-    ui_task
-}
-
 fn main() {
     use extra::getopts::*;
 
     let PORT_OPT = "p";
     let INTERFACE_OPT = "i";
     let PROMISC_FLAG = "P";
+    let MONITOR_FLAG = "M";
 
     let args = os::args();
     let opts = ~[
         optopt(PORT_OPT),
         optopt(INTERFACE_OPT),
-        optflag(PROMISC_FLAG)
+        optflag(PROMISC_FLAG),
+        optflag(MONITOR_FLAG)
     ];
 
     let matches = match getopts(args.tail(), opts) {
@@ -423,10 +346,11 @@ fn main() {
         std::io::timer::sleep(1000);
 
         let promisc = matches.opt_present(PROMISC_FLAG);
+        let monitor = matches.opt_present(MONITOR_FLAG);
         let dev = matches.opt_str(INTERFACE_OPT);
         match dev {
-            Some(d) => capture_loop_dev(d, promisc, ctx, handler),
-            None => capture_loop(ctx, promisc, handler)
+            Some(d) => capture_loop_dev(d, promisc, monitor, ctx, handler),
+            None => capture_loop(ctx, promisc, monitor, handler)
         };
     }
 }
