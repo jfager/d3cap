@@ -30,6 +30,8 @@ extern {
     pub fn pcap_activate(p: *pcap_t) -> c_int;
 
     pub fn pcap_datalink(p: *pcap_t) -> c_int;
+    pub fn pcap_list_datalinks(p: *pcap_t, dlt_buf: **c_int) -> c_int;
+    pub fn pcap_free_datalinks(dlt_list: *c_int);
 
     pub fn pcap_open_live(dev: *c_char, snaplen: c_int, promisc: c_int, to_ms: c_int, ebuf: *c_char) -> *pcap_t;
 
@@ -51,9 +53,9 @@ type pcap_handler = extern "C" fn(*u8, *pcap_pkthdr, *u8);
 
 //TODO: http://www.tcpdump.org/linktypes.html
 type DataLinkType = c_int;
-static DLT_NULL: DataLinkType = 0;
-static DLT_ETHERNET: DataLinkType = 1;
-static DLT_IEEE802_11_RADIO: DataLinkType = 127;
+pub static DLT_NULL: DataLinkType = 0;
+pub static DLT_ETHERNET: DataLinkType = 1;
+pub static DLT_IEEE802_11_RADIO: DataLinkType = 127;
 
 pub struct PcapSessionBuilder {
     priv p: *pcap_t,
@@ -127,7 +129,22 @@ impl PcapSession {
         unsafe { pcap_datalink(self.p) }
     }
 
+    pub fn list_datalinks(&self) -> ~[i32] {
+        unsafe {
+            let mut dlt_buf: *c_int = ptr::null();
+            let sz = pcap_list_datalinks(self.p, &dlt_buf);
+            let out = vec::raw::from_buf_raw(dlt_buf, sz as uint);
+            pcap_free_datalinks(dlt_buf);
+            out
+        }
+    }
+
     pub fn start_loop<C>(&mut self, ctx: ~C, handler: pcap_handler) {
         unsafe { pcap_loop(self.p, -1, handler, cast::transmute(ptr::to_unsafe_ptr(ctx))); }
     }
+}
+
+pub struct PcapPacket {
+    header: *pcap_pkthdr,
+    packet: *u8
 }

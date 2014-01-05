@@ -147,22 +147,18 @@ struct ProtocolHandlers {
     ip6: Chan<~PktMeta<IP6Addr>>
 }
 
-struct Packet {
-    header: *pcap_pkthdr,
-    packet: *u8
-}
-impl Packet {
-    fn parse(&self, ctx: &mut ProtocolHandlers) {
-        let hdr = unsafe { *self.header };
+impl ProtocolHandlers {
+    fn parse(&mut self, pkt: &PcapPacket) {
+        let hdr = unsafe { *pkt.header };
         if hdr.caplen < hdr.len {
             println!("WARN: Capd only [{}] bytes of packet with length [{}]",
                      hdr.caplen, hdr.len);
         }
         if hdr.len > ETHERNET_HEADER_BYTES as u32 {
             unsafe {
-                let ehp: *EthernetHeader = cast::transmute(self.packet);
-                (*ehp).parse(ctx, hdr.len);
-                (*ehp).dispatch(self, ctx);
+                let ehp: *EthernetHeader = cast::transmute(pkt.packet);
+                (*ehp).parse(self, hdr.len);
+                (*ehp).dispatch(pkt, self);
             }
         }
     }
@@ -185,7 +181,6 @@ impl ToStr for MacAddr {
     }
 }
 
-
 struct EthernetHeader {
     dst: MacAddr,
     src: MacAddr,
@@ -199,7 +194,7 @@ impl EthernetHeader {
 }
 
 impl EthernetHeader {
-    fn dispatch(&self, p: &Packet, ctx: &mut ProtocolHandlers) {
+    fn dispatch(&self, p: &PcapPacket, ctx: &mut ProtocolHandlers) {
         match self.typ {
             ETHERTYPE_ARP => {
                 //io::println("ARP!");
@@ -296,11 +291,13 @@ impl IP6Header {
     }
 }
 
-extern fn handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
+extern fn ethernet_handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
     unsafe {
+        //let mut ctx: ~Parser = cast::transmute(args);
         let ctx: *mut ProtocolHandlers = cast::transmute(args);
-        let p = Packet { header: header, packet: packet };
-        p.parse(&mut *ctx);
+        let p = PcapPacket { header: header, packet: packet };
+        (*ctx).parse(&p);
+        //ctx.parse(&p);
     }
 }
 
@@ -359,6 +356,12 @@ fn main() {
             .activate();
 
         println!("Starting capture loop");
-        sess.start_loop(ctx, handler);
+
+        println!("Available datalink types: {:?}", sess.list_datalinks());
+
+        match sess.datalink() {
+            1 => sess.start_loop(ctx, ethernet_handler),
+            x => fail!("unsupported datalink type: {}", x)
+        }
     }
 }
