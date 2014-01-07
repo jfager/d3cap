@@ -7,26 +7,32 @@ macro_rules! fixed_vec(
 
         impl IterBytes for $t {
             fn iter_bytes(&self, lsb0: bool, f: std::to_bytes::Cb) -> bool {
-                self.as_slice().iter_bytes(lsb0, f)
+                let &$t(a) = self;
+                a.as_slice().iter_bytes(lsb0, f)
             }
         }
 
         impl Eq for $t {
             fn eq(&self, other: &$t) -> bool {
-                self.as_slice().eq(&other.as_slice())
+                let &$t(a) = self;
+                let &$t(b) = other;
+                a.as_slice().eq(&b.as_slice())
             }
         }
 
         impl Ord for $t {
             fn lt(&self, other: &$t) -> bool {
-                self.as_slice().lt(&other.as_slice())
+                let &$t(a) = self;
+                let &$t(b) = other;
+                a.as_slice().lt(&b.as_slice())
             }
         }
 
         impl Clone for $t {
             fn clone(&self) -> $t {
                 let mut new_vec: [$arrt, ..$len] = [0, .. $len];
-                for (x,y) in new_vec.mut_iter().zip((**self).iter()) {
+                let &$t(a) = self;
+                for (x,y) in new_vec.mut_iter().zip(a.iter()) {
                     *x = y.clone();
                 }
                 $t(new_vec)

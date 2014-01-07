@@ -50,7 +50,8 @@ impl<T: Ord+IterBytes+Eq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
     }
     fn update(&mut self, pkt: &PktMeta<T>) {
         let key = ~OrdAddrs::from(pkt.src.clone(), pkt.dst.clone());
-        let stats = self.routes.find_or_insert_with(key, |k| {
+        let stats = self.routes.find_or_insert_with(key, |k_| {
+            let &~OrdAddrs(ref k) = k_;
             ~RouteStats::new(self.typ, k.first(), k.second())
         });
         stats.update(pkt);
@@ -174,9 +175,10 @@ fixed_vec!(MacAddr, u8, ETHERNET_MAC_ADDR_BYTES)
 impl ToStr for MacAddr {
     fn to_str(&self) -> ~str {
         let f = |x: u8,y| x.to_str_radix(y);
+        let &MacAddr(a) = self;
         return format!("{}:{}:{}:{}:{}:{}",
-                       f(self[0], 16), f(self[1], 16), f(self[2], 16),
-                       f(self[3], 16), f(self[4], 16), f(self[5], 16)
+                       f(a[0], 16), f(a[1], 16), f(a[2], 16),
+                       f(a[3], 16), f(a[4], 16), f(a[5], 16)
                       );
     }
 }
@@ -227,8 +229,8 @@ fixed_vec!(IP4Addr, u8, 4)
 
 impl ToStr for IP4Addr {
     fn to_str(&self) -> ~str {
-        format!("{}.{}.{}.{}",
-                self[0] as uint, self[1] as uint, self[2] as uint, self[3] as uint)
+        let &IP4Addr(a) = self;
+        format!("{}.{}.{}.{}", a[0] as uint, a[1] as uint, a[2] as uint, a[3] as uint)
     }
 }
 
@@ -255,7 +257,8 @@ fixed_vec!(IP6Addr, u16, 8)
 
 impl ToStr for IP6Addr {
     fn to_str(&self) -> ~str {
-        match (**self) {
+        let &IP6Addr(a) = self;
+        match (a) {
             //ip4-compatible
             [0,0,0,0,0,0,g,h] => {
                 format!("::{}.{}.{}.{}", (g >> 8) as u8, g as u8,
@@ -291,13 +294,42 @@ impl IP6Header {
     }
 }
 
+#[packed]
+struct RadiotapHeader {
+    it_version: u8,
+    it_pad: u8,
+    it_len: u16,
+    it_present: u32
+}
+
+struct RadiotapParser;
+impl RadiotapParser {
+    fn parse(&mut self, pkt: &PcapPacket) {
+        let hdr = unsafe { *pkt.header };
+        if hdr.caplen < hdr.len {
+            println!("WARN: Capd only [{}] bytes of packet with length [{}]",
+                     hdr.caplen, hdr.len);
+        }
+        unsafe {
+            let rth: *RadiotapHeader = cast::transmute(pkt.packet);
+            println!("{:?}", *rth);
+        }
+    }
+}
+
 extern fn ethernet_handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
     unsafe {
-        //let mut ctx: ~Parser = cast::transmute(args);
         let ctx: *mut ProtocolHandlers = cast::transmute(args);
         let p = PcapPacket { header: header, packet: packet };
         (*ctx).parse(&p);
-        //ctx.parse(&p);
+    }
+}
+
+extern fn radiotap_handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
+    unsafe {
+        let ctx: *mut RadiotapParser = cast::transmute(args);
+        let p = PcapPacket { header: header, packet: packet };
+        (*ctx).parse(&p);
     }
 }
 
@@ -333,14 +365,6 @@ fn main() {
     }
 
     do named_task(~"packet_capture").spawn {
-        let ctx = ~ProtocolHandlers {
-            mac: ProtocolHandler::spawn("mac", &data_ch),
-            ip4: ProtocolHandler::spawn("ip4", &data_ch),
-            ip6: ProtocolHandler::spawn("ip6", &data_ch)
-        };
-
-        //FIXME: lame workaround for https://github.com/mozilla/rust/issues/11102
-        std::io::timer::sleep(1000);
 
         let dev = matches.opt_str(INTERFACE_OPT);
         let mut sessBuilder = match dev {
@@ -360,7 +384,22 @@ fn main() {
         println!("Available datalink types: {:?}", sess.list_datalinks());
 
         match sess.datalink() {
-            1 => sess.start_loop(ctx, ethernet_handler),
+            DLT_ETHERNET => {
+                let ctx = ~ProtocolHandlers {
+                    mac: ProtocolHandler::spawn("mac", &data_ch),
+                    ip4: ProtocolHandler::spawn("ip4", &data_ch),
+                    ip6: ProtocolHandler::spawn("ip6", &data_ch)
+                };
+
+                //FIXME: lame workaround for https://github.com/mozilla/rust/issues/11102
+                std::io::timer::sleep(1000);
+                sess.start_loop(ctx, ethernet_handler);
+            },
+            DLT_IEEE802_11_RADIO => {
+                let ctx = ~RadiotapParser;
+                sess.start_loop(ctx, radiotap_handler);
+
+            },
             x => fail!("unsupported datalink type: {}", x)
         }
     }
