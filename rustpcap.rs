@@ -1,7 +1,7 @@
 #[link(name="rustpcap", vers="0.0.1")];
 
 use std::libc::{c_char,c_int,c_ulonglong};
-use std::{cast,ptr,str,vec};
+use std::{ptr,str,vec};
 
 pub enum pcap_t {}
 
@@ -131,7 +131,7 @@ impl PcapSession {
 
     pub fn list_datalinks(&self) -> ~[i32] {
         unsafe {
-            let mut dlt_buf: *c_int = ptr::null();
+            let dlt_buf: *c_int = ptr::null();
             let sz = pcap_list_datalinks(self.p, &dlt_buf);
             let out = vec::raw::from_buf_raw(dlt_buf, sz as uint);
             pcap_free_datalinks(dlt_buf);

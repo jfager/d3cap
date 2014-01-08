@@ -4,7 +4,7 @@ extern mod std;
 extern mod extra;
 extern mod crypto;
 
-use std::{cast,os,ptr};
+use std::{mem,os,ptr};
 use std::hashmap::HashMap;
 
 use extra::{json,time};
@@ -132,8 +132,7 @@ struct PktMeta<T> {
 }
 impl<T> PktMeta<T> {
     fn new(src: T, dst: T, size: u32) -> PktMeta<T> {
-        let t = time::get_time();
-        PktMeta { src: src, dst: dst, size: size, time: t }
+        PktMeta { src: src, dst: dst, size: size, time: time::get_time() }
     }
 }
 impl<T:Clone> PktMeta<T> {
@@ -155,7 +154,7 @@ impl ProtocolHandlers {
             println!("WARN: Capd only [{}] bytes of packet with length [{}]",
                      hdr.caplen, hdr.len);
         }
-        if hdr.len > ETHERNET_HEADER_BYTES as u32 {
+        if hdr.len > mem::size_of::<EthernetHeader>() as u32 {
             unsafe {
                 let ehp = pkt.packet as *EthernetHeader;
                 (*ehp).parse(self, hdr.len);
@@ -165,12 +164,7 @@ impl ProtocolHandlers {
     }
 }
 
-static ETHERNET_MAC_ADDR_BYTES: int = 6;
-static ETHERNET_ETHERTYPE_BYTES: int = 2;
-static ETHERNET_HEADER_BYTES: int =
-    (ETHERNET_MAC_ADDR_BYTES * 2) + ETHERNET_ETHERTYPE_BYTES;
-
-fixed_vec!(MacAddr, u8, ETHERNET_MAC_ADDR_BYTES)
+fixed_vec!(MacAddr, u8, 6)
 
 impl ToStr for MacAddr {
     fn to_str(&self) -> ~str {
@@ -202,11 +196,11 @@ impl EthernetHeader {
                 //io::println("ARP!");
             },
             ETHERTYPE_IP4 => unsafe {
-                let ipp = ptr::offset(p.packet, ETHERNET_HEADER_BYTES) as *IP4Header;
+                let ipp = ptr::offset(p.packet as *EthernetHeader, 1) as *IP4Header;
                 (*ipp).parse(ctx, (*p.header).len);
             },
             ETHERTYPE_IP6 => unsafe {
-                let ipp = ptr::offset(p.packet, ETHERNET_HEADER_BYTES) as *IP6Header;
+                let ipp = ptr::offset(p.packet as *EthernetHeader, 1) as *IP6Header;
                 (*ipp).parse(ctx, (*p.header).len);
             },
             ETHERTYPE_802_1X => {
@@ -304,6 +298,21 @@ struct RadiotapHeader {
 
 struct RadiotapParser;
 impl RadiotapParser {
+    fn parse(&mut self, pkt: &PcapPacket) {
+        let hdr = unsafe { *pkt.header };
+        if hdr.caplen < hdr.len {
+            println!("WARN: Capd only [{}] bytes of packet with length [{}]",
+                     hdr.caplen, hdr.len);
+        }
+        unsafe {
+            let rth = pkt.packet as *RadiotapHeader;
+            println!("{:?}", *rth);
+        }
+    }
+}
+
+struct X802_11_Parser;
+impl X802_11_Parser {
     fn parse(&mut self, pkt: &PcapPacket) {
         let hdr = unsafe { *pkt.header };
         if hdr.caplen < hdr.len {

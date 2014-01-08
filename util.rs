@@ -1,4 +1,4 @@
-use std::{cast,ptr,task};
+use std::task;
 use std::task::TaskBuilder;
 
 pub fn named_task(name: ~str) -> TaskBuilder {
