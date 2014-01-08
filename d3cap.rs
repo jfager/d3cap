@@ -4,7 +4,7 @@ extern mod std;
 extern mod extra;
 extern mod crypto;
 
-use std::{cast,os};
+use std::{cast,os,ptr};
 use std::hashmap::HashMap;
 
 use extra::{json,time};
@@ -15,7 +15,7 @@ use rustpcap::*;
 use ring::RingBuffer;
 use multicast::{Multicast, MulticastChan};
 use uiserver::uiServer;
-use util::{named_task, transmute_offset};
+use util::named_task;
 
 mod rustpcap;
 mod ring;
@@ -157,7 +157,7 @@ impl ProtocolHandlers {
         }
         if hdr.len > ETHERNET_HEADER_BYTES as u32 {
             unsafe {
-                let ehp: *EthernetHeader = cast::transmute(pkt.packet);
+                let ehp = pkt.packet as *EthernetHeader;
                 (*ehp).parse(self, hdr.len);
                 (*ehp).dispatch(pkt, self);
             }
@@ -202,11 +202,11 @@ impl EthernetHeader {
                 //io::println("ARP!");
             },
             ETHERTYPE_IP4 => unsafe {
-                let ipp: *IP4Header = transmute_offset(p.packet, ETHERNET_HEADER_BYTES);
+                let ipp = ptr::offset(p.packet, ETHERNET_HEADER_BYTES) as *IP4Header;
                 (*ipp).parse(ctx, (*p.header).len);
             },
             ETHERTYPE_IP6 => unsafe {
-                let ipp: *IP6Header = transmute_offset(p.packet, ETHERNET_HEADER_BYTES);
+                let ipp = ptr::offset(p.packet, ETHERNET_HEADER_BYTES) as *IP6Header;
                 (*ipp).parse(ctx, (*p.header).len);
             },
             ETHERTYPE_802_1X => {
@@ -311,7 +311,7 @@ impl RadiotapParser {
                      hdr.caplen, hdr.len);
         }
         unsafe {
-            let rth: *RadiotapHeader = cast::transmute(pkt.packet);
+            let rth = pkt.packet as *RadiotapHeader;
             println!("{:?}", *rth);
         }
     }
@@ -319,7 +319,7 @@ impl RadiotapParser {
 
 extern fn ethernet_handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
     unsafe {
-        let ctx: *mut ProtocolHandlers = cast::transmute(args);
+        let ctx = args as *mut ProtocolHandlers;
         let p = PcapPacket { header: header, packet: packet };
         (*ctx).parse(&p);
     }
@@ -327,7 +327,7 @@ extern fn ethernet_handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
 
 extern fn radiotap_handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
     unsafe {
-        let ctx: *mut RadiotapParser = cast::transmute(args);
+        let ctx = args as *mut RadiotapParser;
         let p = PcapPacket { header: header, packet: packet };
         (*ctx).parse(&p);
     }

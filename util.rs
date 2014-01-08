@@ -6,7 +6,3 @@ pub fn named_task(name: ~str) -> TaskBuilder {
     ui_task.name(name);
     ui_task
 }
-
-pub unsafe fn transmute_offset<T,U>(base: *T, offset: int) -> U {
-    cast::transmute(ptr::offset(base, offset))
-}
