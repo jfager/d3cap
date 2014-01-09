@@ -143,8 +143,3 @@ impl PcapSession {
         unsafe { pcap_loop(self.p, -1, handler, ptr::to_unsafe_ptr(ctx) as *u8); }
     }
 }
-
-pub struct PcapPacket {
-    header: *pcap_pkthdr,
-    packet: *u8
-}

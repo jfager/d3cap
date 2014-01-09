@@ -141,25 +141,17 @@ impl<T:Clone> PktMeta<T> {
     }
 }
 
-struct ProtocolHandlers {
+struct EthernetCtx {
     mac: Chan<~PktMeta<MacAddr>>,
     ip4: Chan<~PktMeta<IP4Addr>>,
     ip6: Chan<~PktMeta<IP6Addr>>
 }
 
-impl ProtocolHandlers {
-    fn parse(&mut self, pkt: &PcapPacket) {
-        let hdr = unsafe { *pkt.header };
-        if hdr.caplen < hdr.len {
-            println!("WARN: Capd only [{}] bytes of packet with length [{}]",
-                     hdr.caplen, hdr.len);
-        }
-        if hdr.len > mem::size_of::<EthernetHeader>() as u32 {
-            unsafe {
-                let ehp = pkt.packet as *EthernetHeader;
-                (*ehp).parse(self, hdr.len);
-                (*ehp).dispatch(pkt, self);
-            }
+impl EthernetCtx {
+    fn parse(&mut self, pkt: *EthernetHeader, size: u32) {
+        unsafe {
+            (*pkt).parse(self, size);
+            (*pkt).dispatch(self);
         }
     }
 }
@@ -177,6 +169,7 @@ impl ToStr for MacAddr {
     }
 }
 
+#[packed]
 struct EthernetHeader {
     dst: MacAddr,
     src: MacAddr,
@@ -184,24 +177,24 @@ struct EthernetHeader {
 }
 
 impl EthernetHeader {
-    fn parse(&self, ctx: &mut ProtocolHandlers, size: u32) {
+    fn parse(&self, ctx: &mut EthernetCtx, size: u32) {
         ctx.mac.send(~PktMeta::new(self.src, self.dst, size));
     }
 }
 
 impl EthernetHeader {
-    fn dispatch(&self, p: &PcapPacket, ctx: &mut ProtocolHandlers) {
+    fn dispatch(&self, ctx: &mut EthernetCtx) {
         match self.typ {
             ETHERTYPE_ARP => {
                 //io::println("ARP!");
             },
             ETHERTYPE_IP4 => unsafe {
-                let ipp = ptr::offset(p.packet as *EthernetHeader, 1) as *IP4Header;
-                (*ipp).parse(ctx, (*p.header).len);
+                let ipp = ptr::offset(self as *EthernetHeader, 1) as *IP4Header;
+                (*ipp).parse(ctx);
             },
             ETHERTYPE_IP6 => unsafe {
-                let ipp = ptr::offset(p.packet as *EthernetHeader, 1) as *IP6Header;
-                (*ipp).parse(ctx, (*p.header).len);
+                let ipp = ptr::offset(self as *EthernetHeader, 1) as *IP6Header;
+                (*ipp).parse(ctx);
             },
             ETHERTYPE_802_1X => {
                 //io::println("802.1X!");
@@ -213,7 +206,7 @@ impl EthernetHeader {
     }
 }
 
-
+//in big-endian order to match packet
 static ETHERTYPE_ARP: u16 = 0x0608;
 static ETHERTYPE_IP4: u16 = 0x0008;
 static ETHERTYPE_IP6: u16 = 0xDD86;
@@ -228,6 +221,7 @@ impl ToStr for IP4Addr {
     }
 }
 
+#[packed]
 struct IP4Header {
     ver_ihl: u8,
     dscp_ecn: u8,
@@ -242,8 +236,8 @@ struct IP4Header {
 }
 
 impl IP4Header {
-    fn parse(&self, ctx: &mut ProtocolHandlers, size: u32) {
-        ctx.ip4.send(~PktMeta::new(self.src, self.dst, size));
+    fn parse(&self, ctx: &mut EthernetCtx) {
+        ctx.ip4.send(~PktMeta::new(self.src, self.dst, ntohs(self.len) as u32));
     }
 }
 
@@ -273,7 +267,7 @@ impl ToStr for IP6Addr {
 }
 
 
-
+#[packed]
 struct IP6Header {
     ver_tc_fl: u32,
     len: u16,
@@ -283,9 +277,14 @@ struct IP6Header {
     dst: IP6Addr
 }
 impl IP6Header {
-    fn parse(&self, ctx: &mut ProtocolHandlers, size: u32) {
-        ctx.ip6.send(~PktMeta::new(self.src, self.dst, size));
+    fn parse(&self, ctx: &mut EthernetCtx) {
+        ctx.ip6.send(~PktMeta::new(self.src, self.dst, ntohs(self.len) as u32));
     }
+}
+
+//TODO: this is dumb and just assumes we're on a little-endian system.
+fn ntohs(n: u16) -> u16 {
+    (n>>8) | (n<<8)
 }
 
 #[packed]
@@ -296,49 +295,33 @@ struct RadiotapHeader {
     it_present: u32
 }
 
-struct RadiotapParser;
-impl RadiotapParser {
-    fn parse(&mut self, pkt: &PcapPacket) {
-        let hdr = unsafe { *pkt.header };
-        if hdr.caplen < hdr.len {
-            println!("WARN: Capd only [{}] bytes of packet with length [{}]",
-                     hdr.caplen, hdr.len);
-        }
+struct RadiotapCtx;
+impl RadiotapCtx {
+    fn parse(&mut self, pkt: *RadiotapHeader) {
         unsafe {
-            let rth = pkt.packet as *RadiotapHeader;
-            println!("{:?}", *rth);
+            println!("RadiotapHeader: {:?}", *pkt);
+            let wifiHeader = ptr::offset(pkt as *u8, (*pkt).it_len as int) as *IEEE802_11_Header;
+            println!("WifiHeader: {:?}", *wifiHeader);
         }
     }
 }
 
-struct X802_11_Parser;
-impl X802_11_Parser {
-    fn parse(&mut self, pkt: &PcapPacket) {
-        let hdr = unsafe { *pkt.header };
-        if hdr.caplen < hdr.len {
-            println!("WARN: Capd only [{}] bytes of packet with length [{}]",
-                     hdr.caplen, hdr.len);
-        }
-        unsafe {
-            let rth = pkt.packet as *RadiotapHeader;
-            println!("{:?}", *rth);
-        }
-    }
-}
+// https://github.com/simsong/tcpflow/blob/master/src/wifipcap/ieee802_11_radio.h
+// https://github.com/simsong/tcpflow/blob/master/src/wifipcap/wifipcap.h
+struct IEEE802_11_Header;
+
 
 extern fn ethernet_handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
     unsafe {
-        let ctx = args as *mut ProtocolHandlers;
-        let p = PcapPacket { header: header, packet: packet };
-        (*ctx).parse(&p);
+        let ctx = args as *mut EthernetCtx;
+        (*ctx).parse(packet as *EthernetHeader, (*header).len);
     }
 }
 
 extern fn radiotap_handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
     unsafe {
-        let ctx = args as *mut RadiotapParser;
-        let p = PcapPacket { header: header, packet: packet };
-        (*ctx).parse(&p);
+        let ctx = args as *mut RadiotapCtx;
+        (*ctx).parse(packet as *RadiotapHeader);
     }
 }
 
@@ -394,7 +377,7 @@ fn main() {
 
         match sess.datalink() {
             DLT_ETHERNET => {
-                let ctx = ~ProtocolHandlers {
+                let ctx = ~EthernetCtx {
                     mac: ProtocolHandler::spawn("mac", &data_ch),
                     ip4: ProtocolHandler::spawn("ip4", &data_ch),
                     ip6: ProtocolHandler::spawn("ip6", &data_ch)
@@ -405,7 +388,7 @@ fn main() {
                 sess.start_loop(ctx, ethernet_handler);
             },
             DLT_IEEE802_11_RADIO => {
-                let ctx = ~RadiotapParser;
+                let ctx = ~RadiotapCtx;
                 sess.start_loop(ctx, radiotap_handler);
 
             },
