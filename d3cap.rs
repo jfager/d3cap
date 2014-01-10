@@ -180,9 +180,7 @@ impl EthernetHeader {
     fn parse(&self, ctx: &mut EthernetCtx, size: u32) {
         ctx.mac.send(~PktMeta::new(self.src, self.dst, size));
     }
-}
 
-impl EthernetHeader {
     fn dispatch(&self, ctx: &mut EthernetCtx) {
         match self.typ {
             ETHERTYPE_ARP => {
