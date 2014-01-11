@@ -285,6 +285,8 @@ fn ntohs(n: u16) -> u16 {
     (n>>8) | (n<<8)
 }
 
+//For possible reference:
+//https://github.com/simsong/tcpflow/blob/master/src/wifipcap/ieee802_11_radio.h
 #[packed]
 struct RadiotapHeader {
     it_version: u8,
@@ -298,15 +300,33 @@ impl RadiotapCtx {
     fn parse(&mut self, pkt: *RadiotapHeader) {
         unsafe {
             println!("RadiotapHeader: {:?}", *pkt);
-            let wifiHeader = ptr::offset(pkt as *u8, (*pkt).it_len as int) as *IEEE802_11_Header;
-            println!("WifiHeader: {:?}", *wifiHeader);
+            let wifiHeader = ptr::offset(pkt as *u8, (*pkt).it_len as int) as *Dot11MacBaseHeader;
+            println!("WifiHeader: {:?}, Mac1: {}", *wifiHeader, (*wifiHeader).addr1.to_str());
         }
     }
 }
 
-// https://github.com/simsong/tcpflow/blob/master/src/wifipcap/ieee802_11_radio.h
+// For possible reference:
 // https://github.com/simsong/tcpflow/blob/master/src/wifipcap/wifipcap.h
-struct IEEE802_11_Header;
+// For definitive reference:
+// http://standards.ieee.org/getieee802/download/802.11-2012.pdf
+#[packed]
+struct Dot11MacBaseHeader {
+    fr_ctrl: u16,
+    dur_id: u16,
+    addr1: MacAddr,
+}
+
+#[packed]
+struct Dot11MacFullHeader {
+    base: Dot11MacBaseHeader,
+    addr2: MacAddr,
+    addr3: MacAddr,
+    seq_ctrl: u16,
+    addr4: MacAddr,
+    qos_ctrl: u16,
+    ht_ctrl: u32
+}
 
 
 extern fn ethernet_handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
