@@ -185,14 +185,12 @@ impl EthernetCtx {
 struct RadiotapCtx;
 impl RadiotapCtx {
     fn parse(&mut self, pkt: &RadiotapHeader) {
-        unsafe {
-            println!("RadiotapHeader: {:?}", pkt);
-            let wifiHeader = unsafe {
-                let us_pkt = ptr::to_unsafe_ptr(pkt);
-                &*(ptr::offset(us_pkt as *u8, pkt.it_len as int) as *Dot11MacBaseHeader)
-            };
-            println!("WifiHeader: {:?}, Mac1: {}", wifiHeader, wifiHeader.addr1.to_str());
-        }
+        println!("RadiotapHeader: {:?}", pkt);
+        let wifiHeader = unsafe {
+            let us_pkt = ptr::to_unsafe_ptr(pkt);
+            &*(ptr::offset(us_pkt as *u8, pkt.it_len as int) as *Dot11MacBaseHeader)
+        };
+        println!("WifiHeader: {:?}, Mac1: {}", wifiHeader, wifiHeader.addr1.to_str());
     }
 }
 
