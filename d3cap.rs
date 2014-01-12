@@ -147,14 +147,6 @@ impl<T:Clone> PktMeta<T> {
     }
 }
 
-trait Parse<C> {
-    fn parse(&self, ctx: &mut C);
-}
-
-trait ParseSized<C> {
-    fn parse(&self, ctx: &mut C, size: u32);
-}
-
 struct EthernetCtx {
     mac: Chan<~PktMeta<MacAddr>>,
     ip4: Chan<~PktMeta<IP4Addr>>,
@@ -163,10 +155,8 @@ struct EthernetCtx {
 
 impl EthernetCtx {
     fn parse(&mut self, pkt: &EthernetHeader, size: u32) {
-        unsafe {
-            pkt.parse(self, size);
-            self.dispatch(pkt);
-        }
+        self.mac.send(~PktMeta::new(pkt.src, pkt.dst, size));
+        self.dispatch(pkt);
     }
 
     fn dispatch(&mut self, pkt: &EthernetHeader) {
@@ -174,13 +164,13 @@ impl EthernetCtx {
             ETHERTYPE_ARP => {
                 //io::println("ARP!");
             },
-            ETHERTYPE_IP4 => unsafe {
-                let ipp = ptr::offset(pkt, 1) as *IP4Header;
-                (*ipp).parse(self);
+            ETHERTYPE_IP4 => {
+                let ipp = unsafe { &*(ptr::offset(pkt, 1) as *IP4Header) };
+                self.ip4.send(~PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32));
             },
-            ETHERTYPE_IP6 => unsafe {
-                let ipp = ptr::offset(pkt, 1) as *IP6Header;
-                (*ipp).parse(self);
+            ETHERTYPE_IP6 => {
+                let ipp = unsafe { &*(ptr::offset(pkt, 1) as *IP6Header) };
+                self.ip6.send(~PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32));
             },
             ETHERTYPE_802_1X => {
                 //io::println("802.1X!");
@@ -192,31 +182,16 @@ impl EthernetCtx {
     }
 }
 
-impl ParseSized<EthernetCtx> for EthernetHeader {
-    fn parse(&self, ctx: &mut EthernetCtx, size: u32) {
-        ctx.mac.send(~PktMeta::new(self.src, self.dst, size));
-    }
-}
-
-impl Parse<EthernetCtx> for IP4Header {
-    fn parse(&self, ctx: &mut EthernetCtx) {
-        ctx.ip4.send(~PktMeta::new(self.src, self.dst, ntohs(self.len) as u32));
-    }
-}
-
-impl Parse<EthernetCtx> for IP6Header {
-    fn parse(&self, ctx: &mut EthernetCtx) {
-        ctx.ip6.send(~PktMeta::new(self.src, self.dst, ntohs(self.len) as u32));
-    }
-}
-
 struct RadiotapCtx;
 impl RadiotapCtx {
-    fn parse(&mut self, pkt: *RadiotapHeader) {
+    fn parse(&mut self, pkt: &RadiotapHeader) {
         unsafe {
-            println!("RadiotapHeader: {:?}", *pkt);
-            let wifiHeader = ptr::offset(pkt as *u8, (*pkt).it_len as int) as *Dot11MacBaseHeader;
-            println!("WifiHeader: {:?}, Mac1: {}", *wifiHeader, (*wifiHeader).addr1.to_str());
+            println!("RadiotapHeader: {:?}", pkt);
+            let wifiHeader = unsafe {
+                let us_pkt = ptr::to_unsafe_ptr(pkt);
+                &*(ptr::offset(us_pkt as *u8, pkt.it_len as int) as *Dot11MacBaseHeader)
+            };
+            println!("WifiHeader: {:?}, Mac1: {}", wifiHeader, wifiHeader.addr1.to_str());
         }
     }
 }
@@ -231,7 +206,7 @@ extern fn ethernet_handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
 extern fn radiotap_handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
     unsafe {
         let ctx = args as *mut RadiotapCtx;
-        (*ctx).parse(packet as *RadiotapHeader);
+        (*ctx).parse(&*(packet as *RadiotapHeader));
     }
 }
 
