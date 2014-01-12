@@ -16,8 +16,7 @@ use ring::RingBuffer;
 use multicast::{Multicast, MulticastChan};
 use uiserver::uiServer;
 use util::*;
-use ip4::*;
-use ip6::*;
+use ip::*;
 use ether::*;
 use dot11::*;
 
@@ -28,8 +27,7 @@ mod multicast;
 mod fixed_vec_macros;
 mod uiserver;
 mod util;
-mod ip4;
-mod ip6;
+mod ip;
 mod ether;
 mod dot11;
 
