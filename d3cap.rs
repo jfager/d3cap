@@ -15,7 +15,11 @@ use rustpcap::*;
 use ring::RingBuffer;
 use multicast::{Multicast, MulticastChan};
 use uiserver::uiServer;
-use util::named_task;
+use util::*;
+use ip4::*;
+use ip6::*;
+use ether::*;
+use dot11::*;
 
 mod rustpcap;
 mod ring;
@@ -24,6 +28,10 @@ mod multicast;
 mod fixed_vec_macros;
 mod uiserver;
 mod util;
+mod ip4;
+mod ip6;
+mod ether;
+mod dot11;
 
 type Addrs<T> = (T, T);
 
@@ -141,6 +149,14 @@ impl<T:Clone> PktMeta<T> {
     }
 }
 
+trait Parse<C> {
+    fn parse(&self, ctx: &mut C);
+}
+
+trait ParseSized<C> {
+    fn parse(&self, ctx: &mut C, size: u32);
+}
+
 struct EthernetCtx {
     mac: Chan<~PktMeta<MacAddr>>,
     ip4: Chan<~PktMeta<IP4Addr>>,
@@ -148,51 +164,25 @@ struct EthernetCtx {
 }
 
 impl EthernetCtx {
-    fn parse(&mut self, pkt: *EthernetHeader, size: u32) {
+    fn parse(&mut self, pkt: &EthernetHeader, size: u32) {
         unsafe {
-            (*pkt).parse(self, size);
-            (*pkt).dispatch(self);
+            pkt.parse(self, size);
+            self.dispatch(pkt);
         }
     }
-}
 
-fixed_vec!(MacAddr, u8, 6)
-
-impl ToStr for MacAddr {
-    fn to_str(&self) -> ~str {
-        let f = |x: u8,y| x.to_str_radix(y);
-        let &MacAddr(a) = self;
-        return format!("{}:{}:{}:{}:{}:{}",
-                       f(a[0], 16), f(a[1], 16), f(a[2], 16),
-                       f(a[3], 16), f(a[4], 16), f(a[5], 16)
-                      );
-    }
-}
-
-#[packed]
-struct EthernetHeader {
-    dst: MacAddr,
-    src: MacAddr,
-    typ: u16
-}
-
-impl EthernetHeader {
-    fn parse(&self, ctx: &mut EthernetCtx, size: u32) {
-        ctx.mac.send(~PktMeta::new(self.src, self.dst, size));
-    }
-
-    fn dispatch(&self, ctx: &mut EthernetCtx) {
-        match self.typ {
+    fn dispatch(&mut self, pkt: &EthernetHeader) {
+        match pkt.typ {
             ETHERTYPE_ARP => {
                 //io::println("ARP!");
             },
             ETHERTYPE_IP4 => unsafe {
-                let ipp = ptr::offset(self as *EthernetHeader, 1) as *IP4Header;
-                (*ipp).parse(ctx);
+                let ipp = ptr::offset(pkt, 1) as *IP4Header;
+                (*ipp).parse(self);
             },
             ETHERTYPE_IP6 => unsafe {
-                let ipp = ptr::offset(self as *EthernetHeader, 1) as *IP6Header;
-                (*ipp).parse(ctx);
+                let ipp = ptr::offset(pkt, 1) as *IP6Header;
+                (*ipp).parse(self);
             },
             ETHERTYPE_802_1X => {
                 //io::println("802.1X!");
@@ -204,95 +194,22 @@ impl EthernetHeader {
     }
 }
 
-//in big-endian order to match packet
-static ETHERTYPE_ARP: u16 = 0x0608;
-static ETHERTYPE_IP4: u16 = 0x0008;
-static ETHERTYPE_IP6: u16 = 0xDD86;
-static ETHERTYPE_802_1X: u16 = 0x8E88;
-
-fixed_vec!(IP4Addr, u8, 4)
-
-impl ToStr for IP4Addr {
-    fn to_str(&self) -> ~str {
-        let &IP4Addr(a) = self;
-        format!("{}.{}.{}.{}", a[0] as uint, a[1] as uint, a[2] as uint, a[3] as uint)
+impl ParseSized<EthernetCtx> for EthernetHeader {
+    fn parse(&self, ctx: &mut EthernetCtx, size: u32) {
+        ctx.mac.send(~PktMeta::new(self.src, self.dst, size));
     }
 }
 
-#[packed]
-struct IP4Header {
-    ver_ihl: u8,
-    dscp_ecn: u8,
-    len: u16,
-    ident: u16,
-    flags_frag: u16,
-    ttl: u8,
-    proto: u8,
-    hchk: u16,
-    src: IP4Addr,
-    dst: IP4Addr,
-}
-
-impl IP4Header {
+impl Parse<EthernetCtx> for IP4Header {
     fn parse(&self, ctx: &mut EthernetCtx) {
         ctx.ip4.send(~PktMeta::new(self.src, self.dst, ntohs(self.len) as u32));
     }
 }
 
-fixed_vec!(IP6Addr, u16, 8)
-
-impl ToStr for IP6Addr {
-    fn to_str(&self) -> ~str {
-        let &IP6Addr(a) = self;
-        match (a) {
-            //ip4-compatible
-            [0,0,0,0,0,0,g,h] => {
-                format!("::{}.{}.{}.{}", (g >> 8) as u8, g as u8,
-                        (h >> 8) as u8, h as u8)
-            }
-
-            // ip4-mapped address
-            [0, 0, 0, 0, 0, 0xFFFF, g, h] => {
-                format!("::FFFF:{}.{}.{}.{}", (g >> 8) as u8, g as u8,
-                        (h >> 8) as u8, h as u8)
-            }
-
-            [a, b, c, d, e, f, g, h] => {
-                format!("{}:{}:{}:{}:{}:{}:{}:{}", a, b, c, d, e, f, g, h)
-            }
-        }
-    }
-}
-
-
-#[packed]
-struct IP6Header {
-    ver_tc_fl: u32,
-    len: u16,
-    nxthdr: u8,
-    hoplim: u8,
-    src: IP6Addr,
-    dst: IP6Addr
-}
-impl IP6Header {
+impl Parse<EthernetCtx> for IP6Header {
     fn parse(&self, ctx: &mut EthernetCtx) {
         ctx.ip6.send(~PktMeta::new(self.src, self.dst, ntohs(self.len) as u32));
     }
-}
-
-//TODO: this is dumb and just assumes we're on a little-endian system.
-fn ntohs(n: u16) -> u16 {
-    (n>>8) | (n<<8)
-}
-
-//For possible reference:
-//https://github.com/simsong/tcpflow/blob/master/src/wifipcap/ieee802_11_radio.h
-#[packed]
-struct RadiotapHeader {
-    it_version: u8,
-    it_pad: u8,
-    it_len: u16,
-    it_present: u32
 }
 
 struct RadiotapCtx;
@@ -306,33 +223,10 @@ impl RadiotapCtx {
     }
 }
 
-// For possible reference:
-// https://github.com/simsong/tcpflow/blob/master/src/wifipcap/wifipcap.h
-// For definitive reference:
-// http://standards.ieee.org/getieee802/download/802.11-2012.pdf
-#[packed]
-struct Dot11MacBaseHeader {
-    fr_ctrl: u16,
-    dur_id: u16,
-    addr1: MacAddr,
-}
-
-#[packed]
-struct Dot11MacFullHeader {
-    base: Dot11MacBaseHeader,
-    addr2: MacAddr,
-    addr3: MacAddr,
-    seq_ctrl: u16,
-    addr4: MacAddr,
-    qos_ctrl: u16,
-    ht_ctrl: u32
-}
-
-
 extern fn ethernet_handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
     unsafe {
         let ctx = args as *mut EthernetCtx;
-        (*ctx).parse(packet as *EthernetHeader, (*header).len);
+        (*ctx).parse(&*(packet as *EthernetHeader), (*header).len);
     }
 }
 

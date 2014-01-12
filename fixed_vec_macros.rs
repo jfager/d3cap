@@ -3,10 +3,10 @@
 macro_rules! fixed_vec(
     ($t:ident, $arrt: ty, $len:expr) => (
 
-        struct $t([$arrt,..$len]);
+        pub struct $t([$arrt,..$len]);
 
         impl IterBytes for $t {
-            fn iter_bytes(&self, lsb0: bool, f: std::to_bytes::Cb) -> bool {
+            fn iter_bytes(&self, lsb0: bool, f: ::std::to_bytes::Cb) -> bool {
                 let &$t(a) = self;
                 a.as_slice().iter_bytes(lsb0, f)
             }
