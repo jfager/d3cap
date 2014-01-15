@@ -190,7 +190,9 @@ impl RadiotapCtx {
             let us_pkt = ptr::to_unsafe_ptr(pkt);
             &*(ptr::offset(us_pkt as *u8, pkt.it_len as int) as *Dot11MacBaseHeader)
         };
-        println!("WifiHeader: {:?}, Mac1: {}", wifiHeader, wifiHeader.addr1.to_str());
+        let frc = wifiHeader.fr_ctrl;
+        println!("protocol_version: {:x}, frame_type: {:x}, frame_subtype: {:x}",
+                 frc.protocol_version(), frc.frame_type(), frc.frame_subtype());
     }
 }
 
@@ -273,7 +275,6 @@ fn main() {
             DLT_IEEE802_11_RADIO => {
                 let ctx = ~RadiotapCtx;
                 sess.start_loop(ctx, radiotap_handler);
-
             },
             x => fail!("unsupported datalink type: {}", x)
         }

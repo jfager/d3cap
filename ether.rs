@@ -2,12 +2,10 @@ fixed_vec!(MacAddr, u8, 6)
 
 impl ToStr for MacAddr {
     fn to_str(&self) -> ~str {
-        let f = |x: u8,y| x.to_str_radix(y);
+        let f = |x: u8| if x <= 0xf { "0"+x.to_str_radix(16) } else { x.to_str_radix(16) };
         let &MacAddr(a) = self;
         return format!("{}:{}:{}:{}:{}:{}",
-                       f(a[0], 16), f(a[1], 16), f(a[2], 16),
-                       f(a[3], 16), f(a[4], 16), f(a[5], 16)
-                      );
+                       f(a[0]), f(a[1]), f(a[2]), f(a[3]), f(a[4]), f(a[5]));
     }
 }
 

@@ -16,9 +16,27 @@ pub struct RadiotapHeader {
 // http://standards.ieee.org/getieee802/download/802.11-2012.pdf
 #[packed]
 pub struct Dot11MacBaseHeader {
-    fr_ctrl: u16,
+    fr_ctrl: FrameControl,
     dur_id: u16,
     addr1: MacAddr,
+}
+
+#[packed]
+pub struct FrameControl {
+    ty: u8,
+    flags: u8,
+}
+
+impl FrameControl {
+    pub fn protocol_version(&self) -> u8 {
+        self.ty & 0b00000011 //not sure why this isn't always spitting back 0
+    }
+    pub fn frame_type(&self) -> u8 {
+        (self.ty & 0b00001100) >> 2
+    }
+    pub fn frame_subtype(&self) -> u8 {
+        (self.ty & 0b11110000) >> 4
+    }
 }
 
 #[packed]
