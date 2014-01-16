@@ -1,3 +1,4 @@
+use std::comm;
 use std::io::{io_error,Acceptor,Listener,Stream};
 use std::io::net::tcp::{TcpListener};
 use std::io::net::ip::{Ipv4Addr,SocketAddr};
@@ -25,7 +26,7 @@ fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Port<~str>
             let mut counter = 0;
             loop {
                 match data_po.try_recv() {
-                    Some(msg) => {
+                    comm::Data(msg) => {
                         tcps.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
                         tcps.flush();
                         if counter < 100 {
@@ -34,8 +35,11 @@ fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Port<~str>
                             break
                         }
                     },
-                    None => {
+                    comm::Empty => {
                         break
+                    },
+                    comm::Disconnected => {
+                        fail!("Disconnected from client")
                     }
                 }
             }

@@ -28,8 +28,12 @@ pub struct FrameControl {
 }
 
 impl FrameControl {
+    /// When this is non-zero, the packet is bogus; however, being 0 is not sufficient
+    /// to imply that the packet is good.  From verifying with Wireshark and reading
+    /// around, bogus packets can be pretty common (and are on my network and card), so
+    /// you need to be able to handle them.
     pub fn protocol_version(&self) -> u8 {
-        self.ty & 0b00000011 //not sure why this isn't always spitting back 0
+        self.ty & 0b00000011
     }
     pub fn frame_type(&self) -> u8 {
         (self.ty & 0b00001100) >> 2

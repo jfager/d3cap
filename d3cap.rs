@@ -191,8 +191,8 @@ impl RadiotapCtx {
             &*(ptr::offset(us_pkt as *u8, pkt.it_len as int) as *Dot11MacBaseHeader)
         };
         let frc = wifiHeader.fr_ctrl;
-        println!("protocol_version: {:x}, frame_type: {:x}, frame_subtype: {:x}",
-                 frc.protocol_version(), frc.frame_type(), frc.frame_subtype());
+        println!("protocol_version: {:x}, frame_type: {:x}, frame_subtype: {:x}, Mac1: {}",
+                 frc.protocol_version(), frc.frame_type(), frc.frame_subtype(), wifiHeader.addr1.to_str());
     }
 }
 
