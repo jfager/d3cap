@@ -1,8 +1,7 @@
 use std::comm;
-use std::io::{io_error,Acceptor,Listener,Stream};
+use std::io::{io_error,Acceptor,Listener,Stream,BufferedStream};
 use std::io::net::tcp::{TcpListener};
 use std::io::net::ip::{Ipv4Addr,SocketAddr};
-use std::io::buffered::{BufferedStream};
 
 use rustwebsocket::*;
 use util::{named_task};

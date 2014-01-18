@@ -4,8 +4,7 @@ extern mod crypto;
 
 use std::vec;
 use std::hashmap::HashMap;
-use std::io::Stream;
-use std::io::buffered::BufferedStream;
+use std::io::{Stream,BufferedStream};
 
 use extra::base64::{ToBase64, STANDARD};
 
