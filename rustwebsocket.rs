@@ -51,8 +51,7 @@ struct Handshake {
 
 impl Handshake {
     pub fn getAnswer(&self) -> ~str {
-        let s = self.key + SECRET;
-        let res = hash::hash(hash::SHA1, s.as_bytes());
+        let res = hash::hash(hash::SHA1, (self.key + SECRET).as_bytes());
         let responseKey = res.to_base64(STANDARD);
         format!("HTTP/1.1 101 Switching Protocols\r\n\
                  {}: {}\r\n\
@@ -79,14 +78,12 @@ pub fn wsParseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshak
     if line.is_none() {
         return None;
     }
-    let line = line.unwrap();
-    let prop: ~[~str] = line.split_str(" ").map(|s|s.to_owned()).collect();
-    let resource = prop[1].trim();
+    let prop: ~[~str] = line.unwrap().split_str(" ").map(|s|s.to_owned()).collect();
     let mut hs = Handshake {
         //host: ~"",
         //origin: ~"",
         key: ~"",
-        resource: resource.to_owned(),
+        resource: prop[1].trim().to_owned(),
         frameType: WS_OPENING_FRAME
     };
 

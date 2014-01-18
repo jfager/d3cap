@@ -4,7 +4,7 @@ extern mod std;
 extern mod extra;
 extern mod crypto;
 
-use std::{mem,os,ptr};
+use std::{os,ptr};
 use std::hashmap::HashMap;
 
 use extra::{json,time};
@@ -61,8 +61,7 @@ impl<T: Ord+IterBytes+Eq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
             ~RouteStats::new(self.typ, k.first(), k.second())
         });
         stats.update(pkt);
-        let msg = route_msg(self.typ, *stats);
-        self.ch.send(msg);
+        self.ch.send(route_msg(self.typ, *stats));
     }
     fn spawn(typ: &'static str, ch: &MulticastChan<~str>) -> Chan<~PktMeta<T>> {
         let (port, chan) = Chan::new();
@@ -243,9 +242,8 @@ fn main() {
 
     do named_task(~"packet_capture").spawn {
 
-        let dev = matches.opt_str(INTERFACE_OPT);
-        let mut sessBuilder = match dev {
-            Some(d) => PcapSessionBuilder::new_dev(d),
+        let mut sessBuilder = match matches.opt_str(INTERFACE_OPT) {
+            Some(dev) => PcapSessionBuilder::new_dev(dev),
             None => PcapSessionBuilder::new()
         };
 

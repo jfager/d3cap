@@ -13,8 +13,7 @@ fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Port<~str>
     let handshake = wsParseHandshake(tcps);
     match handshake {
         Some(hs) => {
-            let rsp = hs.getAnswer();
-            tcps.write(rsp.as_bytes());
+            tcps.write(hs.getAnswer().as_bytes());
             tcps.flush();
         }
         None => tcps.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
@@ -59,8 +58,7 @@ fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Port<~str>
 
 pub fn uiServer(mc: Multicast<~str>, port: u16) {
     let addr = SocketAddr { ip: Ipv4Addr(127, 0, 0, 1), port: port };
-    let listener = TcpListener::bind(addr);
-    let mut acceptor = listener.listen();
+    let mut acceptor = TcpListener::bind(addr).listen();
     println!("Server listening on port {}", port as uint);
 
     let mut workercount = 0;
