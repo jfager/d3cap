@@ -65,12 +65,12 @@ pub fn uiServer(mc: Multicast<~str>, port: u16) {
     for tcp_stream in acceptor.incoming() {
         let (conn_po, conn_ch) = Chan::new();
         mc.add_dest_chan(conn_ch);
-        do named_task(format!("websocketWorker_{}", workercount)).spawn {
+        named_task(format!("websocketWorker_{}", workercount)).spawn(proc() {
             match tcp_stream {
                 Some(tcps) => websocketWorker(&mut BufferedStream::new(tcps), &conn_po),
                 None => fail!("Could not start websocket worker")
             }
-        }
+        });
         workercount += 1;
     }
 }

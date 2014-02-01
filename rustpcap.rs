@@ -121,7 +121,7 @@ impl PcapSessionBuilder {
 }
 
 struct PcapSession {
-    priv p: *pcap_t
+    p: *pcap_t
 }
 
 impl PcapSession {

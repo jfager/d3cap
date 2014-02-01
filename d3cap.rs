@@ -66,13 +66,13 @@ impl<T: Ord+IterBytes+Eq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
     fn spawn(typ: &'static str, ch: &MulticastChan<~str>) -> Chan<~PktMeta<T>> {
         let (port, chan) = Chan::new();
         let oc = ch.clone();
-        do named_task(format!("{}_handler", typ)).spawn {
+        named_task(format!("{}_handler", typ)).spawn(proc() {
             let mut handler = ProtocolHandler::new(typ, oc);
             loop {
                 let pkt: ~PktMeta<T> = port.recv();
                 handler.update(pkt);
             }
-        }
+        });
         chan
     }
 }
@@ -236,11 +236,11 @@ fn main() {
     let mc = Multicast::new();
     let data_ch = mc.get_chan();
 
-    do named_task(~"socket_listener").spawn {
+    named_task(~"socket_listener").spawn(proc() {
         uiServer(mc, port);
-    }
+    });
 
-    do named_task(~"packet_capture").spawn {
+    named_task(~"packet_capture").spawn(proc() {
 
         let mut sessBuilder = match matches.opt_str(INTERFACE_OPT) {
             Some(dev) => PcapSessionBuilder::new_dev(dev),
@@ -276,5 +276,5 @@ fn main() {
             },
             x => fail!("unsupported datalink type: {}", x)
         }
-    }
+    });
 }

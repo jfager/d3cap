@@ -15,7 +15,7 @@ impl<T:Send+Clone> Multicast<T> {
         let (po, ch): (Port<MulticastMsg<T>>, SharedChan<MulticastMsg<T>>) = SharedChan::new();
         let mut t = task::task();
         t.name("multicast");
-        do t.spawn {
+        t.spawn(proc() {
             let mut mc_chans = ~[];
             let mut to_remove = ~[];
             loop {
@@ -39,7 +39,7 @@ impl<T:Send+Clone> Multicast<T> {
                     None => break
                 }
             }
-        }
+        });
         Multicast { ch: ch }
     }
 
