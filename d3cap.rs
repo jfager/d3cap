@@ -3,6 +3,7 @@
 extern mod std;
 extern mod extra;
 extern mod crypto;
+extern mod getopts;
 
 use std::{os,ptr};
 use std::hashmap::HashMap;
@@ -210,7 +211,7 @@ extern fn radiotap_handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
 }
 
 fn main() {
-    use extra::getopts::*;
+    use getopts::*;
 
     let PORT_OPT = "p";
     let INTERFACE_OPT = "i";
@@ -219,10 +220,10 @@ fn main() {
 
     let args = os::args();
     let opts = ~[
-        optopt(PORT_OPT),
-        optopt(INTERFACE_OPT),
-        optflag(PROMISC_FLAG),
-        optflag(MONITOR_FLAG)
+        optopt(PORT_OPT, "port", "Websocket port", ""),
+        optopt(INTERFACE_OPT, "interface", "Network interface to listen on", ""),
+        optflag(PROMISC_FLAG, "promisc", "Turn on promiscuous mode"),
+        optflag(MONITOR_FLAG, "monitor", "Turn on monitor mode")
     ];
 
     let matches = match getopts(args.tail(), opts) {

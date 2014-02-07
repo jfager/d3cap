@@ -74,11 +74,12 @@ fn headerfns() -> HeaderFns {
 
 pub fn wsParseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake> {
     let hdrFns = headerfns();
-    let line = s.read_line();
-    if line.is_none() {
-        return None;
-    }
-    let prop: ~[~str] = line.unwrap().split_str(" ").map(|s|s.to_owned()).collect();
+    let line = match s.read_line() {
+        Ok(ln) => ln,
+        _ => return None
+    };
+
+    let prop: ~[~str] = line.split_str(" ").map(|s|s.to_owned()).collect();
     let mut hs = Handshake {
         //host: ~"",
         //origin: ~"",
@@ -89,12 +90,11 @@ pub fn wsParseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshak
 
     let mut hasHandshake = false;
     loop {
-        let line = s.read_line();
-        if line.is_none() {
-            return if hasHandshake { Some(hs) } else { None };
-        }
+        let line = match s.read_line() {
+            Ok(ln) => ln,
+            _ => return if hasHandshake { Some(hs) } else { None }
+        };
 
-        let line = line.unwrap();
         let line = line.trim();
         if line.is_empty() {
             return if hasHandshake { Some(hs) } else { None };
@@ -150,10 +150,12 @@ fn frameTypeFrom(i: u8) -> WSFrameType {
 
 pub fn wsParseInputFrame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<~[u8]>, WSFrameType) {
     //io::println("reading header");
-    let hdr = s.read_bytes(2 as uint);
-    if hdr.len() != 2 {
-        return (None, WS_ERROR_FRAME);
-    }
+    let hdr = match s.read_bytes(2 as uint) {
+        Ok(h) => if h.len() == 2 { h } else { return (None, WS_ERROR_FRAME) },
+        //Ok(h) if h.len() == 2 => h //Fails w/ cannot bind by-move into a pattern guard
+        //Ok(ref h) if h.len() == 2 => h.clone(),
+        _ => return (None, WS_ERROR_FRAME)
+    };
 
     if hdr[0] & 0x70 != 0x0    //extensions must be off
     || hdr[0] & 0x80 != 0x80   //no continuation frames
@@ -171,7 +173,10 @@ pub fn wsParseInputFrame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<~[u8]>
         let payloadLength = hdr[1] & 0x7F;
         if payloadLength < 0x7E { //Only handle short payloads right now.
             let toread = (payloadLength + 4) as uint; //+4 for mask
-            let masked_payload = s.read_bytes(toread);
+            let masked_payload = match s.read_bytes(toread) {
+                Ok(mp) => mp,
+                _ => return (None, WS_ERROR_FRAME)
+            };
             let payload = masked_payload.tailn(4).iter()
                 .enumerate()
                 .map(|(i, t)| { t ^ masked_payload[i%4] })

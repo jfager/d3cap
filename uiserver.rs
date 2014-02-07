@@ -1,5 +1,5 @@
 use std::comm;
-use std::io::{io_error,Acceptor,Listener,Stream,BufferedStream};
+use std::io::{Acceptor,Listener,Stream,BufferedStream};
 use std::io::net::tcp::{TcpListener};
 use std::io::net::ip::{Ipv4Addr,SocketAddr};
 
@@ -13,46 +13,52 @@ fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Port<~str>
     let handshake = wsParseHandshake(tcps);
     match handshake {
         Some(hs) => {
-            tcps.write(hs.getAnswer().as_bytes());
-            tcps.flush();
+            match tcps.write(hs.getAnswer().as_bytes()) {
+                Ok(_) => match tcps.flush() {
+                    Ok(_) => (),
+                    _ => fail!("Couldn't flush")
+                },
+                _ => fail!("Couldn't write bytes")
+            }
         }
-        None => tcps.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
+        None => match tcps.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()) {
+            Ok(_) => (),
+            _ => fail!("Couldn't write Not Found error")
+        }
     }
 
-    io_error::cond.trap(|_| ()).inside(|| {
+    loop {
+        let mut counter = 0;
         loop {
-            let mut counter = 0;
-            loop {
-                match data_po.try_recv() {
-                    comm::Data(msg) => {
-                        tcps.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
-                        tcps.flush();
-                        if counter < 100 {
-                            counter += 1;
-                        } else {
-                            break
-                        }
-                    },
-                    comm::Empty => {
-                        break
-                    },
-                    comm::Disconnected => {
-                        fail!("Disconnected from client")
-                    }
-                }
-            }
-            let (_, frameType) = wsParseInputFrame(tcps);
-            match frameType {
-                WS_CLOSING_FRAME |
-                WS_ERROR_FRAME   => {
-                    tcps.write(wsMakeFrame([], WS_CLOSING_FRAME));
+            match data_po.try_recv() {
+                comm::Data(msg) => {
+                    tcps.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
                     tcps.flush();
-                    break;
+                    if counter < 100 {
+                        counter += 1;
+                    } else {
+                        break
+                    }
+                },
+                comm::Empty => {
+                    break
+                },
+                comm::Disconnected => {
+                    fail!("Disconnected from client")
                 }
-                _ => ()
             }
         }
-    });
+        let (_, frameType) = wsParseInputFrame(tcps);
+        match frameType {
+            WS_CLOSING_FRAME |
+                WS_ERROR_FRAME   => {
+                tcps.write(wsMakeFrame([], WS_CLOSING_FRAME));
+                tcps.flush();
+                break;
+            }
+            _ => ()
+        }
+    }
     println!("Done with worker");
 }
 
@@ -67,8 +73,8 @@ pub fn uiServer(mc: Multicast<~str>, port: u16) {
         mc.add_dest_chan(conn_ch);
         named_task(format!("websocketWorker_{}", workercount)).spawn(proc() {
             match tcp_stream {
-                Some(tcps) => websocketWorker(&mut BufferedStream::new(tcps), &conn_po),
-                None => fail!("Could not start websocket worker")
+                Ok(tcps) => websocketWorker(&mut BufferedStream::new(tcps), &conn_po),
+                _ => fail!("Could not start websocket worker")
             }
         });
         workercount += 1;

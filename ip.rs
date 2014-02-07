@@ -28,7 +28,7 @@ fixed_vec!(IP6Addr, u16, 8)
 impl ToStr for IP6Addr {
     fn to_str(&self) -> ~str {
         let &IP6Addr(a) = self;
-        match (a) {
+        match a {
             //ip4-compatible
             [0,0,0,0,0,0,g,h] => {
                 format!("::{}.{}.{}.{}", (g >> 8) as u8, g as u8,
