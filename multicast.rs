@@ -1,5 +1,5 @@
-use std::comm::SharedChan;
-use std::task;
+use std::comm::Chan;
+use std::task::{task};
 
 enum MulticastMsg<T> {
     Msg(T),
@@ -7,15 +7,13 @@ enum MulticastMsg<T> {
 }
 
 pub struct Multicast<T> {
-    priv ch: SharedChan<MulticastMsg<T>>
+    priv ch: Chan<MulticastMsg<T>>
 }
 
 impl<T:Send+Clone> Multicast<T> {
     pub fn new() -> Multicast<T> {
-        let (po, ch): (Port<MulticastMsg<T>>, SharedChan<MulticastMsg<T>>) = SharedChan::new();
-        let mut t = task::task();
-        t.name("multicast");
-        t.spawn(proc() {
+        let (po, ch): (Port<MulticastMsg<T>>, Chan<MulticastMsg<T>>) = Chan::new();
+        task().named("multicast").spawn(proc() {
             let mut mc_chans = ~[];
             let mut to_remove = ~[];
             loop {
@@ -53,7 +51,7 @@ impl<T:Send+Clone> Multicast<T> {
 }
 
 pub struct MulticastChan<T> {
-    priv ch: SharedChan<MulticastMsg<T>>
+    priv ch: Chan<MulticastMsg<T>>
 }
 
 impl<T:Send> Clone for MulticastChan<T> {

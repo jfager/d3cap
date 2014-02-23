@@ -1,7 +1,7 @@
 RUSTC?=rustc
 RUST_FLAGS?=--cfg ndebug --cfg ncpuspew
 RUST_DBG_FLAGS?=-Z debug-info
-RUST_LD_FLAGS?=-L../rustcrypto
+RUST_LD_FLAGS?=-L../rust-openssl/build
 
 .PHONY: all
 all:	d3cap

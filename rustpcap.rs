@@ -139,7 +139,7 @@ impl PcapSession {
         }
     }
 
-    pub fn start_loop<C>(&mut self, ctx: ~C, handler: pcap_handler) {
-        unsafe { pcap_loop(self.p, -1, handler, ptr::to_unsafe_ptr(ctx) as *u8); }
+    pub fn start_loop<C>(&mut self, ctx: &C, handler: pcap_handler) {
+        unsafe { pcap_loop(self.p, -1, handler, ctx as *C as *u8); }
     }
 }

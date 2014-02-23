@@ -1,14 +1,12 @@
-extern mod std;
-extern mod extra;
-extern mod crypto;
+extern crate std;
 
 use std::vec;
 use std::hashmap::HashMap;
 use std::io::{Stream,BufferedStream};
 
-use extra::base64::{ToBase64, STANDARD};
+use serialize::base64::{ToBase64, STANDARD};
 
-use crypto::hash;
+use openssl::crypto::hash;
 
 static CONNECTION_FIELD: &'static str = "Connection";
 static UPGRADE: &'static str = "upgrade";

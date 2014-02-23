@@ -1,16 +1,21 @@
 #[feature(globs, macro_rules)];
 
-extern mod std;
-extern mod extra;
-extern mod crypto;
-extern mod getopts;
+extern crate std;
+extern crate extra;
+extern crate openssl;
+extern crate getopts;
+extern crate serialize;
+extern crate collections;
+extern crate time;
 
 use std::{os,ptr};
 use std::hashmap::HashMap;
+use std::task::{task};
 
-use extra::{json,time};
+use extra::{json};
 use extra::json::ToJson;
-use extra::treemap::TreeMap;
+
+use collections::treemap::TreeMap;
 
 use rustpcap::*;
 use ring::RingBuffer;
@@ -57,9 +62,10 @@ impl<T: Ord+IterBytes+Eq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
     }
     fn update(&mut self, pkt: &PktMeta<T>) {
         let key = ~OrdAddrs::from(pkt.src.clone(), pkt.dst.clone());
-        let stats = self.routes.find_or_insert_with(key, |k_| {
-            let &~OrdAddrs(ref k) = k_;
-            ~RouteStats::new(self.typ, k.first(), k.second())
+        let typ = self.typ;
+        let stats = self.routes.find_or_insert_with(key, |k| {
+            let &~OrdAddrs((ref v0, ref v1)) = k;
+            ~RouteStats::new(typ, v0.clone(), v1.clone())
         });
         stats.update(pkt);
         self.ch.send(route_msg(self.typ, *stats));
@@ -67,7 +73,7 @@ impl<T: Ord+IterBytes+Eq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
     fn spawn(typ: &'static str, ch: &MulticastChan<~str>) -> Chan<~PktMeta<T>> {
         let (port, chan) = Chan::new();
         let oc = ch.clone();
-        named_task(format!("{}_handler", typ)).spawn(proc() {
+        task().named(format!("{}_handler", typ)).spawn(proc() {
             let mut handler = ProtocolHandler::new(typ, oc);
             loop {
                 let pkt: ~PktMeta<T> = port.recv();
@@ -165,11 +171,11 @@ impl EthernetCtx {
                 //io::println("ARP!");
             },
             ETHERTYPE_IP4 => {
-                let ipp = unsafe { &*(ptr::offset(pkt, 1) as *IP4Header) };
+                let ipp = unsafe { &*((pkt as *EthernetHeader).offset(1) as *IP4Header) };
                 self.ip4.send(~PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32));
             },
             ETHERTYPE_IP6 => {
-                let ipp = unsafe { &*(ptr::offset(pkt, 1) as *IP6Header) };
+                let ipp = unsafe { &*((pkt as *EthernetHeader).offset(1) as *IP6Header) };
                 self.ip6.send(~PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32));
             },
             ETHERTYPE_802_1X => {
@@ -187,8 +193,7 @@ impl RadiotapCtx {
     fn parse(&mut self, pkt: &RadiotapHeader) {
         println!("RadiotapHeader: {:?}", pkt);
         let wifiHeader = unsafe {
-            let us_pkt = ptr::to_unsafe_ptr(pkt);
-            &*(ptr::offset(us_pkt as *u8, pkt.it_len as int) as *Dot11MacBaseHeader)
+            &*((pkt as *RadiotapHeader).offset(pkt.it_len as int) as *Dot11MacBaseHeader)
         };
         let frc = wifiHeader.fr_ctrl;
         println!("protocol_version: {:x}, frame_type: {:x}, frame_subtype: {:x}, Mac1: {}",
@@ -237,11 +242,11 @@ fn main() {
     let mc = Multicast::new();
     let data_ch = mc.get_chan();
 
-    named_task(~"socket_listener").spawn(proc() {
+    task().named(~"socket_listener").spawn(proc() {
         uiServer(mc, port);
     });
 
-    named_task(~"packet_capture").spawn(proc() {
+    task().named(~"packet_capture").spawn(proc() {
 
         let mut sessBuilder = match matches.opt_str(INTERFACE_OPT) {
             Some(dev) => PcapSessionBuilder::new_dev(dev),

@@ -3,7 +3,7 @@
 // Fixed size buffer: when it is at capacity push will drop the oldest element.
 // Demonstrates custom data structure, custom iteration, operator overloading, struct encapsulation.
 // To run execute: rustc --test ring.rs && ./ring
-extern mod std;
+extern crate std;
 
 use std::iter::{Iterator};
 
