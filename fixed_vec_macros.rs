@@ -2,13 +2,12 @@
 
 macro_rules! fixed_vec(
     ($t:ident, $arrt: ty, $len:expr) => (
-
         pub struct $t([$arrt,..$len]);
 
-        impl IterBytes for $t {
-            fn iter_bytes(&self, lsb0: bool, f: ::std::to_bytes::Cb) -> bool {
+        impl<S: Writer> Hash<S> for $t {
+            fn hash(&self, state: &mut S) {
                 let &$t(a) = self;
-                a.as_slice().iter_bytes(lsb0, f)
+                a.hash(state)
             }
         }
 

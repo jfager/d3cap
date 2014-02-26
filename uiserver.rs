@@ -32,8 +32,11 @@ fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Port<~str>
         loop {
             match data_po.try_recv() {
                 comm::Data(msg) => {
-                    tcps.write(wsMakeFrame(msg.as_bytes(), WS_TEXT_FRAME));
-                    tcps.flush();
+                    let res = wsWriteFrame(msg.as_bytes(), WS_TEXT_FRAME, tcps);
+                    if res.is_err() {
+                        println!("Error writing msg frame: {}", res);
+                        break
+                    }
                     if counter < 100 {
                         counter += 1;
                     } else {
@@ -51,9 +54,11 @@ fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Port<~str>
         let (_, frameType) = wsParseInputFrame(tcps);
         match frameType {
             WS_CLOSING_FRAME |
-                WS_ERROR_FRAME   => {
-                tcps.write(wsMakeFrame([], WS_CLOSING_FRAME));
-                tcps.flush();
+            WS_ERROR_FRAME   => {
+                let res = wsWriteFrame([], WS_CLOSING_FRAME, tcps);
+                if res.is_err() {
+                    println!("Error writing closing frame: {}", res);
+                }
                 break;
             }
             _ => ()

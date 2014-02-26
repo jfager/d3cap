@@ -5,7 +5,9 @@
 // To run execute: rustc --test ring.rs && ./ring
 extern crate std;
 
-use std::iter::{Iterator};
+use std::iter::Iterator;
+use std::fmt;
+use std::fmt::{Show,Formatter};
 
 // This contains the data that represents our ring buffer. In general only one
 // allocation occurs: when the struct is first created and buffer is allocated.
@@ -106,10 +108,18 @@ impl<'s, T> Iterator<&'s T> for RingIterator<'s, T> {
 // structs (and any other type). But because of the way that elements wrap
 // around this can be confusing. Here we provide a to_str method that shows
 // the elements in the same order as they appear to users.
-impl<T: ToStr> ToStr for RingBuffer<T> {
-    fn to_str(&self) -> ~str {
-        let elements: ~[~str] = self.iter().map(|e| {e.to_str()}).collect();
-        format!("[{}]", elements.connect(", "))
+impl<T: Show> Show for RingBuffer<T> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f.buf, "[");
+        let mut first = true;
+        for e in self.iter() {
+            if !first {
+                write!(f.buf, ",");
+            }
+            first = false;
+            e.fmt(f);
+        }
+        write!(f.buf, "]")
     }
 }
 

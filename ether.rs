@@ -1,11 +1,14 @@
+use std::hash::Hash;
+use std::fmt;
+use std::fmt::{Show,Formatter};
+
 fixed_vec!(MacAddr, u8, 6)
 
-impl ToStr for MacAddr {
-    fn to_str(&self) -> ~str {
-        let f = |x: u8| if x <= 0xf { "0"+x.to_str_radix(16) } else { x.to_str_radix(16) };
+impl Show for MacAddr {
+    fn fmt(&self, fo: &mut Formatter) -> fmt::Result {
         let &MacAddr(a) = self;
-        return format!("{}:{}:{}:{}:{}:{}",
-                       f(a[0]), f(a[1]), f(a[2]), f(a[3]), f(a[4]), f(a[5]));
+        write!(fo.buf, "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+               a[0], a[1], a[2], a[3], a[4], a[5])
     }
 }
 

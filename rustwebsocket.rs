@@ -1,8 +1,8 @@
 extern crate std;
 
-use std::vec;
-use std::hashmap::HashMap;
-use std::io::{Stream,BufferedStream};
+use std::io::{Stream,BufferedStream,IoResult};
+
+use collections::hashmap::HashMap;
 
 use serialize::base64::{ToBase64, STANDARD};
 
@@ -121,25 +121,20 @@ static MED_FRAME: uint = 65535;
 static MED_FRAME_FLAG: u8 = 126;
 static LARGE_FRAME_FLAG: u8 = 127;
 
-pub fn wsMakeFrame(data: &[u8], frameType: WSFrameType) -> ~[u8] {
-    let mut out = vec::with_capacity(data.len());
-    out.push((0x80 | frameType as int) as u8);
+pub fn wsWriteFrame<W:Writer>(data: &[u8], frameType: WSFrameType, w: &mut W) -> IoResult<()> {
+    try!(w.write_u8((0x80 | frameType as int) as u8));
 
     if data.len() <= SMALL_FRAME {
-        out.push(data.len() as u8);
+        try!(w.write_u8(data.len() as u8));
     } else if data.len() <= MED_FRAME {
-        out.push(MED_FRAME_FLAG);
-        (data.len() as u16).iter_bytes(false, |bytes| {
-            out.push_all(bytes); true
-        });
+        try!(w.write_u8(MED_FRAME_FLAG));
+        try!(w.write_be_u16(data.len() as u16));
     } else {
-        out.push(LARGE_FRAME_FLAG);
-        (data.len() as u64).iter_bytes(false, |bytes| {
-            out.push_all(bytes); true
-        });
+        try!(w.write_u8(LARGE_FRAME_FLAG));
+        try!(w.write_be_u64(data.len() as u64));
     }
-    out.push_all(data);
-    out
+    try!(w.write(data));
+    w.flush()
 }
 
 fn frameTypeFrom(i: u8) -> WSFrameType {
@@ -147,7 +142,6 @@ fn frameTypeFrom(i: u8) -> WSFrameType {
 }
 
 pub fn wsParseInputFrame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<~[u8]>, WSFrameType) {
-    //io::println("reading header");
     let hdr = match s.read_bytes(2 as uint) {
         Ok(h) => if h.len() == 2 { h } else { return (None, WS_ERROR_FRAME) },
         //Ok(h) if h.len() == 2 => h //Fails w/ cannot bind by-move into a pattern guard

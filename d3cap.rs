@@ -1,4 +1,4 @@
-#[feature(globs, macro_rules)];
+#[feature(globs, macro_rules, default_type_params)];
 
 extern crate std;
 extern crate extra;
@@ -8,14 +8,15 @@ extern crate serialize;
 extern crate collections;
 extern crate time;
 
-use std::{os,ptr};
-use std::hashmap::HashMap;
+use std::{os};
 use std::task::{task};
+use std::hash::Hash;
 
-use extra::{json};
-use extra::json::ToJson;
+use serialize::{json};
+use serialize::json::ToJson;
 
 use collections::treemap::TreeMap;
+use collections::hashmap::HashMap;
 
 use rustpcap::*;
 use ring::RingBuffer;
@@ -39,9 +40,9 @@ mod dot11;
 
 type Addrs<T> = (T, T);
 
-#[deriving(Eq, IterBytes)]
+#[deriving(Eq, Hash)]
 struct OrdAddrs<T>(Addrs<T>);
-impl<T: Ord+IterBytes> OrdAddrs<T> {
+impl<T: Ord+Hash> OrdAddrs<T> {
     fn from(a: T, b: T) -> OrdAddrs<T> {
         if a <= b { OrdAddrs((a, b)) } else { OrdAddrs((b, a)) }
     }
@@ -55,7 +56,7 @@ struct ProtocolHandler<T, C> {
     routes: HashMap<~OrdAddrs<T>, ~RouteStats<T>>
 }
 
-impl<T: Ord+IterBytes+Eq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
+impl<T: Ord+Hash+Eq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
     fn new(typ: &'static str, ch: MulticastChan<~str>) -> ProtocolHandler<T,~str> {
         //FIXME:  this is the map that's hitting https://github.com/mozilla/rust/issues/11102
         ProtocolHandler { typ: typ, count: 0, size: 0, ch: ch, routes: HashMap::new() }
@@ -118,7 +119,7 @@ struct RouteStats<T> {
     last: RingBuffer<~PktMeta<T>>
 }
 
-impl<T: IterBytes+Eq+Clone+Send+ToStr> RouteStats<T> {
+impl<T: Hash+Eq+Clone+Send+ToStr> RouteStats<T> {
     fn new(typ: &'static str, a: T, b: T) -> RouteStats<T> {
         RouteStats {
             typ: typ,
@@ -145,11 +146,6 @@ struct PktMeta<T> {
 impl<T> PktMeta<T> {
     fn new(src: T, dst: T, size: u32) -> PktMeta<T> {
         PktMeta { src: src, dst: dst, size: size, time: time::get_time() }
-    }
-}
-impl<T:Clone> PktMeta<T> {
-    fn addrs(&self) -> Addrs<T> {
-        (self.src.clone(), self.dst.clone())
     }
 }
 
@@ -182,7 +178,7 @@ impl EthernetCtx {
                 //io::println("802.1X!");
             },
             x => {
-                println!("Unknown type: {}", x.to_str_radix(16));
+                println!("Unknown type: {:x}", x);
             }
         }
     }
