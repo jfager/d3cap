@@ -8,7 +8,7 @@ use rustwebsocket::*;
 
 use multicast::Multicast;
 
-fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Port<~str>) {
+fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Receiver<~str>) {
     println!("websocketWorker");
     let handshake = wsParseHandshake(tcps);
     match handshake {
@@ -74,11 +74,11 @@ pub fn uiServer(mc: Multicast<~str>, port: u16) {
 
     let mut workercount = 0;
     for tcp_stream in acceptor.incoming() {
-        let (conn_po, conn_ch) = Chan::new();
-        mc.add_dest_chan(conn_ch);
+        let (conn_tx, conn_rx) = channel();
+        mc.add_dest_chan(conn_tx);
         task().named(format!("websocketWorker_{}", workercount)).spawn(proc() {
             match tcp_stream {
-                Ok(tcps) => websocketWorker(&mut BufferedStream::new(tcps), &conn_po),
+                Ok(tcps) => websocketWorker(&mut BufferedStream::new(tcps), &conn_rx),
                 _ => fail!("Could not start websocket worker")
             }
         });

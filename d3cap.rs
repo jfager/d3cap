@@ -1,7 +1,6 @@
 #[feature(globs, macro_rules, default_type_params)];
 
 extern crate std;
-extern crate extra;
 extern crate openssl;
 extern crate getopts;
 extern crate serialize;
@@ -20,7 +19,7 @@ use collections::hashmap::HashMap;
 
 use rustpcap::*;
 use ring::RingBuffer;
-use multicast::{Multicast, MulticastChan};
+use multicast::{Multicast, MulticastSender};
 use uiserver::uiServer;
 use util::*;
 use ip::*;
@@ -52,14 +51,14 @@ struct ProtocolHandler<T, C> {
     typ: &'static str,
     count: u64,
     size: u64,
-    ch: MulticastChan<C>,
+    tx: MulticastSender<C>,
     routes: HashMap<~OrdAddrs<T>, ~RouteStats<T>>
 }
 
 impl<T: Ord+Hash+Eq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
-    fn new(typ: &'static str, ch: MulticastChan<~str>) -> ProtocolHandler<T,~str> {
+    fn new(typ: &'static str, tx: MulticastSender<~str>) -> ProtocolHandler<T,~str> {
         //FIXME:  this is the map that's hitting https://github.com/mozilla/rust/issues/11102
-        ProtocolHandler { typ: typ, count: 0, size: 0, ch: ch, routes: HashMap::new() }
+        ProtocolHandler { typ: typ, count: 0, size: 0, tx: tx, routes: HashMap::new() }
     }
     fn update(&mut self, pkt: &PktMeta<T>) {
         let key = ~OrdAddrs::from(pkt.src.clone(), pkt.dst.clone());
@@ -69,19 +68,19 @@ impl<T: Ord+Hash+Eq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
             ~RouteStats::new(typ, v0.clone(), v1.clone())
         });
         stats.update(pkt);
-        self.ch.send(route_msg(self.typ, *stats));
+        self.tx.send(route_msg(self.typ, *stats));
     }
-    fn spawn(typ: &'static str, ch: &MulticastChan<~str>) -> Chan<~PktMeta<T>> {
-        let (port, chan) = Chan::new();
-        let oc = ch.clone();
+    fn spawn(typ: &'static str, mc_tx: &MulticastSender<~str>) -> Sender<~PktMeta<T>> {
+        let (tx, rx) = channel();
+        let mc_tx = mc_tx.clone();
         task().named(format!("{}_handler", typ)).spawn(proc() {
-            let mut handler = ProtocolHandler::new(typ, oc);
+            let mut handler = ProtocolHandler::new(typ, mc_tx);
             loop {
-                let pkt: ~PktMeta<T> = port.recv();
+                let pkt: ~PktMeta<T> = rx.recv();
                 handler.update(pkt);
             }
         });
-        chan
+        tx
     }
 }
 
@@ -150,9 +149,9 @@ impl<T> PktMeta<T> {
 }
 
 struct EthernetCtx {
-    mac: Chan<~PktMeta<MacAddr>>,
-    ip4: Chan<~PktMeta<IP4Addr>>,
-    ip6: Chan<~PktMeta<IP6Addr>>
+    mac: Sender<~PktMeta<MacAddr>>,
+    ip4: Sender<~PktMeta<IP4Addr>>,
+    ip6: Sender<~PktMeta<IP6Addr>>
 }
 
 impl EthernetCtx {
@@ -236,7 +235,7 @@ fn main() {
     let port = from_str::<u16>(port).unwrap();
 
     let mc = Multicast::new();
-    let data_ch = mc.get_chan();
+    let data_tx = mc.get_sender();
 
     task().named(~"socket_listener").spawn(proc() {
         uiServer(mc, port);
@@ -263,9 +262,9 @@ fn main() {
         match sess.datalink() {
             DLT_ETHERNET => {
                 let ctx = ~EthernetCtx {
-                    mac: ProtocolHandler::spawn("mac", &data_ch),
-                    ip4: ProtocolHandler::spawn("ip4", &data_ch),
-                    ip6: ProtocolHandler::spawn("ip6", &data_ch)
+                    mac: ProtocolHandler::spawn("mac", &data_tx),
+                    ip4: ProtocolHandler::spawn("ip4", &data_tx),
+                    ip6: ProtocolHandler::spawn("ip6", &data_tx)
                 };
 
                 //FIXME: lame workaround for https://github.com/mozilla/rust/issues/11102
