@@ -17,7 +17,6 @@ use serialize::json::ToJson;
 use collections::treemap::TreeMap;
 use collections::hashmap::HashMap;
 
-use pcap::Struct_pcap_pkthdr;
 use rustpcap::*;
 use ring::RingBuffer;
 use multicast::{Multicast, MulticastSender};
@@ -187,7 +186,7 @@ impl EthernetCtx {
 
 struct RadiotapCtx;
 impl RadiotapCtx {
-    fn parse(&mut self, pkt: &RadiotapHeader) {
+    fn parse(&mut self, pkt: &RadiotapHeader, sz: u32) {
         println!("RadiotapHeader: {:?}", pkt);
         let wifiHeader = unsafe {
             &*((pkt as *RadiotapHeader).offset(pkt.it_len as int) as *Dot11MacBaseHeader)
@@ -195,20 +194,6 @@ impl RadiotapCtx {
         let frc = wifiHeader.fr_ctrl;
         println!("protocol_version: {:x}, frame_type: {:x}, frame_subtype: {:x}, Mac1: {}",
                  frc.protocol_version(), frc.frame_type(), frc.frame_subtype(), wifiHeader.addr1.to_str());
-    }
-}
-
-extern fn ethernet_handler(args: *mut u8, header: *Struct_pcap_pkthdr, packet: *u8) {
-    unsafe {
-        let ctx = args as *mut EthernetCtx;
-        (*ctx).parse(&*(packet as *EthernetHeader), (*header).len);
-    }
-}
-
-extern fn radiotap_handler(args: *mut u8, header: *Struct_pcap_pkthdr, packet: *u8) {
-    unsafe {
-        let ctx = args as *mut RadiotapCtx;
-        (*ctx).parse(&*(packet as *RadiotapHeader));
     }
 }
 
@@ -263,7 +248,7 @@ fn main() {
 
         match sess.datalink() {
             DLT_ETHERNET => {
-                let ctx = ~EthernetCtx {
+                let mut ctx = ~EthernetCtx {
                     mac: ProtocolHandler::spawn("mac", &data_tx),
                     ip4: ProtocolHandler::spawn("ip4", &data_tx),
                     ip6: ProtocolHandler::spawn("ip6", &data_tx)
@@ -271,11 +256,11 @@ fn main() {
 
                 //FIXME: lame workaround for https://github.com/mozilla/rust/issues/11102
                 std::io::timer::sleep(1000);
-                sess.start_loop(ctx, Some(ethernet_handler));
+                loop { sess.next(|t,sz| ctx.parse(t, sz)); }
             },
             DLT_IEEE802_11_RADIO => {
-                let ctx = ~RadiotapCtx;
-                sess.start_loop(ctx, Some(radiotap_handler));
+                let mut ctx = ~RadiotapCtx;
+                loop { sess.next(|t,sz| ctx.parse(t, sz)); }
             },
             x => fail!("unsupported datalink type: {}", x)
         }

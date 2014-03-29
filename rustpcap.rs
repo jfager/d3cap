@@ -1,6 +1,6 @@
 #![link(name="rustpcap", vers="0.0.1")]
 
-use std::libc::{c_char,c_int,c_ulonglong};
+use std::libc::{c_char,c_int};
 use std::{ptr,slice,str};
 use pcap::*;
 
@@ -90,7 +90,21 @@ impl PcapSession {
         }
     }
 
-    pub fn start_loop<C>(&mut self, ctx: &C, handler: pcap_handler) {
-        unsafe { pcap_loop(self.p, -1, handler, ctx as *C as *mut u8); }
+    //TODO: add a return value indicating success
+    pub fn next<T>(&self, f: |&T, u32|) {
+        let mut head_ptr: *mut Struct_pcap_pkthdr = ptr::mut_null();
+        let mut data_ptr: *u_char = ptr::null();
+        let res = unsafe { pcap_next_ex(self.p, &mut head_ptr, &mut data_ptr) };
+        match res {
+            0 => return, //timed out
+            1 => {
+                let (t, sz) = unsafe { (&*(data_ptr as *T), (*head_ptr).len) };
+                f(t, sz);
+            }
+            _ => {
+                fail!("pcap_next_ex failed with {}, find something better to do than blow up",
+                      res);
+            }
+        }
     }
 }
