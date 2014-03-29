@@ -1,4 +1,4 @@
-#[feature(globs, macro_rules, default_type_params)];
+#![feature(globs, macro_rules, default_type_params)]
 
 extern crate std;
 extern crate openssl;
@@ -39,7 +39,7 @@ mod dot11;
 
 type Addrs<T> = (T, T);
 
-#[deriving(Eq, Hash)]
+#[deriving(Eq,TotalEq, Hash)]
 struct OrdAddrs<T>(Addrs<T>);
 impl<T: Ord+Hash> OrdAddrs<T> {
     fn from(a: T, b: T) -> OrdAddrs<T> {
@@ -55,7 +55,7 @@ struct ProtocolHandler<T, C> {
     routes: HashMap<~OrdAddrs<T>, ~RouteStats<T>>
 }
 
-impl<T: Ord+Hash+Eq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
+impl<T: Ord+Hash+TotalEq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
     fn new(typ: &'static str, tx: MulticastSender<~str>) -> ProtocolHandler<T,~str> {
         //FIXME:  this is the map that's hitting https://github.com/mozilla/rust/issues/11102
         ProtocolHandler { typ: typ, count: 0, size: 0, tx: tx, routes: HashMap::new() }

@@ -1,4 +1,4 @@
-#[macro_escape];
+#![macro_escape]
 
 macro_rules! fixed_vec(
     ($t:ident, $arrt: ty, $len:expr) => (
@@ -18,6 +18,8 @@ macro_rules! fixed_vec(
                 a.as_slice().eq(&b.as_slice())
             }
         }
+
+        impl TotalEq for $t {}
 
         impl Ord for $t {
             fn lt(&self, other: &$t) -> bool {

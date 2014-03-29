@@ -142,7 +142,7 @@ fn frameTypeFrom(i: u8) -> WSFrameType {
 }
 
 pub fn wsParseInputFrame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<~[u8]>, WSFrameType) {
-    let hdr = match s.read_bytes(2 as uint) {
+    let hdr = match s.read_exact(2 as uint) {
         Ok(h) => if h.len() == 2 { h } else { return (None, WS_ERROR_FRAME) },
         //Ok(h) if h.len() == 2 => h //Fails w/ cannot bind by-move into a pattern guard
         //Ok(ref h) if h.len() == 2 => h.clone(),
@@ -165,7 +165,7 @@ pub fn wsParseInputFrame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<~[u8]>
         let payloadLength = hdr[1] & 0x7F;
         if payloadLength < 0x7E { //Only handle short payloads right now.
             let toread = (payloadLength + 4) as uint; //+4 for mask
-            let masked_payload = match s.read_bytes(toread) {
+            let masked_payload = match s.read_exact(toread) {
                 Ok(mp) => mp,
                 _ => return (None, WS_ERROR_FRAME)
             };

@@ -1,7 +1,7 @@
-#[link(name="rustpcap", vers="0.0.1")];
+#![link(name="rustpcap", vers="0.0.1")]
 
 use std::libc::{c_char,c_int,c_ulonglong};
-use std::{ptr,str,vec};
+use std::{ptr,slice,str};
 
 pub enum pcap_t {}
 
@@ -65,13 +65,13 @@ pub struct PcapSessionBuilder {
 impl PcapSessionBuilder {
 
     pub fn new_dev(dev: &str) -> PcapSessionBuilder {
-        let mut errbuf = vec::with_capacity(256);
+        let mut errbuf = slice::with_capacity(256);
         let c_dev = unsafe { dev.to_c_str().unwrap() };
         PcapSessionBuilder::do_new(c_dev, errbuf)
     }
 
     pub fn new() -> PcapSessionBuilder {
-        let mut errbuf = vec::with_capacity(256);
+        let mut errbuf = slice::with_capacity(256);
         let dev = unsafe { get_device(errbuf) };
         match dev {
             Some(d) => {
@@ -133,7 +133,7 @@ impl PcapSession {
         unsafe {
             let dlt_buf: *c_int = ptr::null();
             let sz = pcap_list_datalinks(self.p, &dlt_buf);
-            let out = vec::raw::from_buf_raw(dlt_buf, sz as uint);
+            let out = slice::raw::from_buf_raw(dlt_buf, sz as uint);
             pcap_free_datalinks(dlt_buf);
             out
         }
