@@ -17,6 +17,7 @@ use serialize::json::ToJson;
 use collections::treemap::TreeMap;
 use collections::hashmap::HashMap;
 
+use pcap::Struct_pcap_pkthdr;
 use rustpcap::*;
 use ring::RingBuffer;
 use multicast::{Multicast, MulticastSender};
@@ -26,6 +27,7 @@ use ip::*;
 use ether::*;
 use dot11::*;
 
+mod pcap;
 mod rustpcap;
 mod ring;
 mod rustwebsocket;
@@ -196,14 +198,14 @@ impl RadiotapCtx {
     }
 }
 
-extern fn ethernet_handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
+extern fn ethernet_handler(args: *mut u8, header: *Struct_pcap_pkthdr, packet: *u8) {
     unsafe {
         let ctx = args as *mut EthernetCtx;
         (*ctx).parse(&*(packet as *EthernetHeader), (*header).len);
     }
 }
 
-extern fn radiotap_handler(args: *u8, header: *pcap_pkthdr, packet: *u8) {
+extern fn radiotap_handler(args: *mut u8, header: *Struct_pcap_pkthdr, packet: *u8) {
     unsafe {
         let ctx = args as *mut RadiotapCtx;
         (*ctx).parse(&*(packet as *RadiotapHeader));
@@ -269,11 +271,11 @@ fn main() {
 
                 //FIXME: lame workaround for https://github.com/mozilla/rust/issues/11102
                 std::io::timer::sleep(1000);
-                sess.start_loop(ctx, ethernet_handler);
+                sess.start_loop(ctx, Some(ethernet_handler));
             },
             DLT_IEEE802_11_RADIO => {
                 let ctx = ~RadiotapCtx;
-                sess.start_loop(ctx, radiotap_handler);
+                sess.start_loop(ctx, Some(radiotap_handler));
             },
             x => fail!("unsupported datalink type: {}", x)
         }

@@ -2,54 +2,7 @@
 
 use std::libc::{c_char,c_int,c_ulonglong};
 use std::{ptr,slice,str};
-
-pub enum pcap_t {}
-
-pub struct pcap_pkthdr {
-    ts: timeval, // time stamp
-    caplen: u32, // length of portion present
-    len: u32     // length this packet (off wire)
-}
-
-pub struct timeval {
-    tv_sec: c_ulonglong,
-    tv_usec: c_ulonglong
-}
-
-#[link(name="pcap")]
-extern {
-    pub fn pcap_lookupdev(errbuf: *c_char) -> *c_char;
-    pub fn pcap_create(source: *c_char, errbuf: *c_char) -> *pcap_t;
-
-    pub fn pcap_set_promisc(p: *pcap_t, promisc: c_int) -> c_int;
-    pub fn pcap_can_set_rfmon(p: *pcap_t) -> c_int;
-    pub fn pcap_set_rfmon(p: *pcap_t, rfmon: c_int) -> c_int;
-    pub fn pcap_set_buffer_size(p: *pcap_t, buffer_size: c_int) -> c_int;
-    pub fn pcap_set_timeout(p: *pcap_t, to_ms: c_int) -> c_int;
-
-    pub fn pcap_activate(p: *pcap_t) -> c_int;
-
-    pub fn pcap_datalink(p: *pcap_t) -> c_int;
-    pub fn pcap_list_datalinks(p: *pcap_t, dlt_buf: **c_int) -> c_int;
-    pub fn pcap_free_datalinks(dlt_list: *c_int);
-
-    pub fn pcap_open_live(dev: *c_char, snaplen: c_int, promisc: c_int, to_ms: c_int, ebuf: *c_char) -> *pcap_t;
-
-    pub fn pcap_next(p: *pcap_t, h: &mut pcap_pkthdr) -> *u8;
-    pub fn pcap_loop(p: *pcap_t, cnt: c_int, callback: extern "C" fn(*u8, *pcap_pkthdr, *u8), user: *u8);
-    pub fn pcap_close(p: *pcap_t);
-}
-
-unsafe fn get_device(errbuf: &mut [c_char]) -> Option<*c_char> {
-    let dev = pcap_lookupdev(errbuf.as_ptr());
-    if dev != ptr::null() {
-        return Some(dev);
-    } else {
-        return None;
-    }
-}
-
-type pcap_handler = extern "C" fn(*u8, *pcap_pkthdr, *u8);
+use pcap::*;
 
 //TODO: http://www.tcpdump.org/linktypes.html
 type DataLinkType = c_int;
@@ -58,7 +11,7 @@ pub static DLT_ETHERNET: DataLinkType = 1;
 pub static DLT_IEEE802_11_RADIO: DataLinkType = 127;
 
 pub struct PcapSessionBuilder {
-    priv p: *pcap_t,
+    priv p: *mut pcap_t,
     activated: bool
 }
 
@@ -72,19 +25,17 @@ impl PcapSessionBuilder {
 
     pub fn new() -> PcapSessionBuilder {
         let mut errbuf = slice::with_capacity(256);
-        let dev = unsafe { get_device(errbuf) };
-        match dev {
-            Some(d) => {
-                println!("Using dev {}", unsafe { str::raw::from_c_str(d) });
-                PcapSessionBuilder::do_new(d, errbuf)
-            },
-            None => fail!("No device available")
+        let dev = unsafe { pcap_lookupdev(errbuf.as_mut_ptr()) };
+        if dev.is_null() {
+            fail!("No device available");
         }
+        println!("Using dev {}", unsafe { str::raw::from_c_str(dev as *c_char) });
+        PcapSessionBuilder::do_new(dev as *c_char, errbuf)
     }
 
     fn do_new(dev: *c_char, errbuf: &mut [c_char]) -> PcapSessionBuilder {
-        let p = unsafe { pcap_create(dev, errbuf.as_ptr()) };
-        if p == ptr::null() { fail!("Could not initialize device"); }
+        let p = unsafe { pcap_create(dev, errbuf.as_mut_ptr()) };
+        if p.is_null() { fail!("Could not initialize device"); }
         PcapSessionBuilder { p: p, activated: false }
     }
 
@@ -121,7 +72,7 @@ impl PcapSessionBuilder {
 }
 
 struct PcapSession {
-    p: *pcap_t
+    p: *mut pcap_t
 }
 
 impl PcapSession {
@@ -131,15 +82,15 @@ impl PcapSession {
 
     pub fn list_datalinks(&self) -> ~[i32] {
         unsafe {
-            let dlt_buf: *c_int = ptr::null();
-            let sz = pcap_list_datalinks(self.p, &dlt_buf);
-            let out = slice::raw::from_buf_raw(dlt_buf, sz as uint);
+            let mut dlt_buf: *mut c_int = ptr::mut_null();
+            let sz = pcap_list_datalinks(self.p, &mut dlt_buf);
+            let out = slice::raw::from_buf_raw(dlt_buf as *c_int, sz as uint);
             pcap_free_datalinks(dlt_buf);
             out
         }
     }
 
     pub fn start_loop<C>(&mut self, ctx: &C, handler: pcap_handler) {
-        unsafe { pcap_loop(self.p, -1, handler, ctx as *C as *u8); }
+        unsafe { pcap_loop(self.p, -1, handler, ctx as *C as *mut u8); }
     }
 }
