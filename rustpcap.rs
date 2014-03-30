@@ -90,7 +90,7 @@ impl PcapSession {
         }
     }
 
-    //TODO: add a return value indicating success
+    //TODO: add a return value for success/failure
     pub fn next<T>(&self, f: |&T, u32|) {
         let mut head_ptr: *mut Struct_pcap_pkthdr = ptr::mut_null();
         let mut data_ptr: *u_char = ptr::null();

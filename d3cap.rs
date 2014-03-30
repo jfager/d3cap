@@ -186,7 +186,7 @@ impl EthernetCtx {
 
 struct RadiotapCtx;
 impl RadiotapCtx {
-    fn parse(&mut self, pkt: &RadiotapHeader, sz: u32) {
+    fn parse(&mut self, pkt: &RadiotapHeader) {
         println!("RadiotapHeader: {:?}", pkt);
         let wifiHeader = unsafe {
             &*((pkt as *RadiotapHeader).offset(pkt.it_len as int) as *Dot11MacBaseHeader)
@@ -200,17 +200,17 @@ impl RadiotapCtx {
 fn main() {
     use getopts::*;
 
-    let PORT_OPT = "p";
-    let INTERFACE_OPT = "i";
-    let PROMISC_FLAG = "P";
-    let MONITOR_FLAG = "M";
+    let port_opt = "p";
+    let interface_opt = "i";
+    let promisc_flag = "P";
+    let monitor_flag = "M";
 
     let args = os::args();
     let opts = ~[
-        optopt(PORT_OPT, "port", "Websocket port", ""),
-        optopt(INTERFACE_OPT, "interface", "Network interface to listen on", ""),
-        optflag(PROMISC_FLAG, "promisc", "Turn on promiscuous mode"),
-        optflag(MONITOR_FLAG, "monitor", "Turn on monitor mode")
+        optopt(port_opt, "port", "Websocket port", ""),
+        optopt(interface_opt, "interface", "Network interface to listen on", ""),
+        optflag(promisc_flag, "promisc", "Turn on promiscuous mode"),
+        optflag(monitor_flag, "monitor", "Turn on monitor mode")
     ];
 
     let matches = match getopts(args.tail(), opts) {
@@ -218,7 +218,7 @@ fn main() {
         Err(f) => { fail!(f.to_err_msg()) }
     };
 
-    let port = matches.opt_str(PORT_OPT).unwrap_or(~"7432");
+    let port = matches.opt_str(port_opt).unwrap_or(~"7432");
     let port = from_str::<u16>(port).unwrap();
 
     let mc = Multicast::new();
@@ -230,16 +230,16 @@ fn main() {
 
     task().named(~"packet_capture").spawn(proc() {
 
-        let mut sessBuilder = match matches.opt_str(INTERFACE_OPT) {
+        let mut sessBuilder = match matches.opt_str(interface_opt) {
             Some(dev) => PcapSessionBuilder::new_dev(dev),
             None => PcapSessionBuilder::new()
         };
 
-        let mut sess = sessBuilder
+        let sess = sessBuilder
             .buffer_size(65535)
             .timeout(1000)
-            .promisc(matches.opt_present(PROMISC_FLAG))
-            .rfmon(matches.opt_present(MONITOR_FLAG))
+            .promisc(matches.opt_present(promisc_flag))
+            .rfmon(matches.opt_present(monitor_flag))
             .activate();
 
         println!("Starting capture loop");
@@ -260,7 +260,7 @@ fn main() {
             },
             DLT_IEEE802_11_RADIO => {
                 let mut ctx = ~RadiotapCtx;
-                loop { sess.next(|t,sz| ctx.parse(t, sz)); }
+                loop { sess.next(|t,_| ctx.parse(t)); }
             },
             x => fail!("unsupported datalink type: {}", x)
         }
