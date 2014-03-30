@@ -3,3 +3,7 @@
 pub fn ntohs(n: u16) -> u16 {
     (n>>8) | (n<<8)
 }
+
+pub unsafe fn trans_off<T,U>(t: &T, len: int) -> &U {
+    &*((t as *T).offset(len) as *U)
+}

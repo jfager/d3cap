@@ -167,11 +167,11 @@ impl EthernetCtx {
                 //io::println("ARP!");
             },
             ETHERTYPE_IP4 => {
-                let ipp = unsafe { &*((pkt as *EthernetHeader).offset(1) as *IP4Header) };
+                let ipp: &IP4Header = unsafe { trans_off(pkt, 1) };
                 self.ip4.send(~PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32));
             },
             ETHERTYPE_IP6 => {
-                let ipp = unsafe { &*((pkt as *EthernetHeader).offset(1) as *IP6Header) };
+                let ipp: &IP6Header = unsafe { trans_off(pkt, 1) };
                 self.ip6.send(~PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32));
             },
             ETHERTYPE_802_1X => {
@@ -188,9 +188,7 @@ struct RadiotapCtx;
 impl RadiotapCtx {
     fn parse(&mut self, pkt: &RadiotapHeader) {
         println!("RadiotapHeader: {:?}", pkt);
-        let wifiHeader = unsafe {
-            &*((pkt as *RadiotapHeader).offset(pkt.it_len as int) as *Dot11MacBaseHeader)
-        };
+        let wifiHeader: &Dot11MacBaseHeader = unsafe { trans_off(pkt, pkt.it_len as int) };
         let frc = wifiHeader.fr_ctrl;
         println!("protocol_version: {:x}, frame_type: {:x}, frame_subtype: {:x}, Mac1: {}",
                  frc.protocol_version(), frc.frame_type(), frc.frame_subtype(), wifiHeader.addr1.to_str());

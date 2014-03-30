@@ -82,7 +82,7 @@ impl PcapSession {
 
     pub fn list_datalinks(&self) -> ~[i32] {
         unsafe {
-            let mut dlt_buf: *mut c_int = ptr::mut_null();
+            let mut dlt_buf = ptr::mut_null();
             let sz = pcap_list_datalinks(self.p, &mut dlt_buf);
             let out = slice::raw::from_buf_raw(dlt_buf as *c_int, sz as uint);
             pcap_free_datalinks(dlt_buf);
@@ -92,8 +92,8 @@ impl PcapSession {
 
     //TODO: add a return value for success/failure
     pub fn next<T>(&self, f: |&T, u32|) {
-        let mut head_ptr: *mut Struct_pcap_pkthdr = ptr::mut_null();
-        let mut data_ptr: *u_char = ptr::null();
+        let mut head_ptr = ptr::mut_null();
+        let mut data_ptr = ptr::null();
         let res = unsafe { pcap_next_ex(self.p, &mut head_ptr, &mut data_ptr) };
         match res {
             0 => return, //timed out
