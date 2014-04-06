@@ -294,9 +294,9 @@ pub static PCAP_D_INOUT: c_uint = 0;
 pub static PCAP_D_IN: c_uint = 1;
 pub static PCAP_D_OUT: c_uint = 2;
 pub struct Struct_pcap_pkthdr {
-    ts: Struct_timeval,
-    caplen: bpf_u_int32,
-    len: bpf_u_int32,
+    pub ts: Struct_timeval,
+    pub caplen: bpf_u_int32,
+    pub len: bpf_u_int32,
 }
 pub struct Struct_pcap_stat {
     ps_recv: u_int,

@@ -7,7 +7,7 @@ enum MulticastMsg<T> {
 }
 
 pub struct Multicast<T> {
-    priv tx: Sender<MulticastMsg<T>>
+    tx: Sender<MulticastMsg<T>>
 }
 
 impl<T:Send+Clone> Multicast<T> {
@@ -51,7 +51,7 @@ impl<T:Send+Clone> Multicast<T> {
 }
 
 pub struct MulticastSender<T> {
-    priv tx: Sender<MulticastMsg<T>>
+    tx: Sender<MulticastMsg<T>>
 }
 
 impl<T:Send> Clone for MulticastSender<T> {

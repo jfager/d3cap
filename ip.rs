@@ -13,16 +13,16 @@ impl Show for IP4Addr {
 
 #[packed]
 pub struct IP4Header {
-    ver_ihl: u8,
-    dscp_ecn: u8,
-    len: u16,
-    ident: u16,
-    flags_frag: u16,
-    ttl: u8,
-    proto: u8,
-    hchk: u16,
-    src: IP4Addr,
-    dst: IP4Addr,
+    pub ver_ihl: u8,
+    pub dscp_ecn: u8,
+    pub len: u16,
+    pub ident: u16,
+    pub flags_frag: u16,
+    pub ttl: u8,
+    pub proto: u8,
+    pub hchk: u16,
+    pub src: IP4Addr,
+    pub dst: IP4Addr,
 }
 
 
@@ -54,10 +54,10 @@ impl Show for IP6Addr {
 
 #[packed]
 pub struct IP6Header {
-    ver_tc_fl: u32,
-    len: u16,
-    nxthdr: u8,
-    hoplim: u8,
-    src: IP6Addr,
-    dst: IP6Addr
+    pub ver_tc_fl: u32,
+    pub len: u16,
+    pub nxthdr: u8,
+    pub hoplim: u8,
+    pub src: IP6Addr,
+    pub dst: IP6Addr
 }

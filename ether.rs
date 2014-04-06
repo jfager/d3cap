@@ -14,9 +14,9 @@ impl Show for MacAddr {
 
 #[packed]
 pub struct EthernetHeader {
-    dst: MacAddr,
-    src: MacAddr,
-    typ: u16
+    pub dst: MacAddr,
+    pub src: MacAddr,
+    pub typ: u16
 }
 
 //in big-endian order to match packet

@@ -14,10 +14,10 @@ use std::fmt::{Show,Formatter};
 // Copying a RingBuffer will cause a heap allocation but the compiler will
 // warn us on attempts to copy it implicitly.
 pub struct RingBuffer<T> {
-    priv buffer: ~[T],
-    priv capacity: uint,        // number of elements the buffer is able to hold (can't guarantee that vec capacity is exactly what we set it to)
-    priv size: uint,            // number of elements with legit values in the buffer
-    priv next: uint,            // index at which new elements land
+    buffer: ~[T],
+    capacity: uint,        // number of elements the buffer is able to hold (can't guarantee that vec capacity is exactly what we set it to)
+    size: uint,            // number of elements with legit values in the buffer
+    next: uint,            // index at which new elements land
 }
 
 

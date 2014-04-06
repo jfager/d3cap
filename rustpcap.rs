@@ -11,7 +11,7 @@ pub static DLT_ETHERNET: DataLinkType = 1;
 pub static DLT_IEEE802_11_RADIO: DataLinkType = 127;
 
 pub struct PcapSessionBuilder {
-    priv p: *mut pcap_t,
+    p: *mut pcap_t,
     activated: bool
 }
 

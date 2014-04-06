@@ -138,10 +138,10 @@ impl<T: Hash+Eq+Clone+Send+ToStr> RouteStats<T> {
 }
 
 struct PktMeta<T> {
-    src: T,
-    dst: T,
-    size: u32,
-    time: time::Timespec
+    pub src: T,
+    pub dst: T,
+    pub size: u32,
+    pub time: time::Timespec
 }
 impl<T> PktMeta<T> {
     fn new(src: T, dst: T, size: u32) -> PktMeta<T> {

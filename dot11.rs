@@ -4,10 +4,10 @@ use ether::{MacAddr};
 //https://github.com/simsong/tcpflow/blob/master/src/wifipcap/ieee802_11_radio.h
 #[packed]
 pub struct RadiotapHeader {
-    it_version: u8,
-    it_pad: u8,
-    it_len: u16,
-    it_present: u32
+    pub it_version: u8,
+    pub it_pad: u8,
+    pub it_len: u16,
+    pub it_present: u32
 }
 
 // For possible reference:
@@ -16,15 +16,15 @@ pub struct RadiotapHeader {
 // http://standards.ieee.org/getieee802/download/802.11-2012.pdf
 #[packed]
 pub struct Dot11MacBaseHeader {
-    fr_ctrl: FrameControl,
-    dur_id: u16,
-    addr1: MacAddr,
+    pub fr_ctrl: FrameControl,
+    pub dur_id: u16,
+    pub addr1: MacAddr,
 }
 
 #[packed]
 pub struct FrameControl {
-    ty: u8,
-    flags: u8,
+    pub ty: u8,
+    pub flags: u8,
 }
 
 impl FrameControl {
