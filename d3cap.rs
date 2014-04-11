@@ -188,6 +188,25 @@ struct RadiotapCtx;
 impl RadiotapCtx {
     fn parse(&mut self, pkt: &RadiotapHeader) {
         println!("RadiotapHeader: {:?}", pkt);
+        println!("has tsft? {}", pkt.has_field(dot11::TSFT));
+        println!("has flags? {}", pkt.has_field(dot11::FLAGS));
+        println!("has rate? {}", pkt.has_field(dot11::RATE));
+        println!("has channel? {}", pkt.has_field(dot11::CHANNEL));
+        println!("has fhss? {}", pkt.has_field(dot11::FHSS));
+        println!("has antenna_signal? {}", pkt.has_field(dot11::ANTENNA_SIGNAL));
+        println!("has antenna_noise? {}", pkt.has_field(dot11::ANTENNA_NOISE));
+        println!("has lock_quality? {}", pkt.has_field(dot11::LOCK_QUALITY));
+        println!("has tx_attenuation? {}", pkt.has_field(dot11::TX_ATTENUATION));
+        println!("has db_tx_attenuation? {}", pkt.has_field(dot11::DB_TX_ATTENUATION));
+        println!("has dbm_tx_power? {}", pkt.has_field(dot11::DBM_TX_POWER));
+        println!("has antenna? {}", pkt.has_field(dot11::ANTENNA));
+        println!("has db_antenna_signal? {}", pkt.has_field(dot11::DB_ANTENNA_SIGNAL));
+        println!("has db_antenna_noise? {}", pkt.has_field(dot11::DB_ANTENNA_NOISE));
+        println!("has rx_flags? {}", pkt.has_field(dot11::RX_FLAGS));
+        println!("has mcs? {}", pkt.has_field(dot11::MCS));
+        println!("has a_mpdu_status? {}", pkt.has_field(dot11::A_MPDU_STATUS));
+        println!("has vht? {}", pkt.has_field(dot11::VHT));
+        println!("has more_it_present? {}", pkt.has_field(dot11::MORE_IT_PRESENT));
         let wifiHeader: &Dot11MacBaseHeader = unsafe { trans_off(pkt, pkt.it_len as int) };
         let frc = wifiHeader.fr_ctrl;
         println!("protocol_version: {:x}, frame_type: {:x}, frame_subtype: {:x}, Mac1: {}",
