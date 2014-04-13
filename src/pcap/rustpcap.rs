@@ -5,7 +5,7 @@ use std::{ptr,slice,str};
 use pcap::*;
 
 //TODO: http://www.tcpdump.org/linktypes.html
-type DataLinkType = c_int;
+pub type DataLinkType = c_int;
 pub static DLT_NULL: DataLinkType = 0;
 pub static DLT_ETHERNET: DataLinkType = 1;
 pub static DLT_IEEE802_11_RADIO: DataLinkType = 127;
@@ -71,7 +71,7 @@ impl PcapSessionBuilder {
     }
 }
 
-struct PcapSession {
+pub struct PcapSession {
     p: *mut pcap_t
 }
 

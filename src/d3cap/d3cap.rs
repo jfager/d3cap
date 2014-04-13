@@ -1,13 +1,4 @@
-#![feature(globs, macro_rules, default_type_params)]
-
-extern crate std;
-extern crate openssl;
-extern crate getopts;
-extern crate serialize;
-extern crate collections;
-extern crate time;
-
-use std::{os};
+use std;
 use std::task::{task};
 use std::hash::Hash;
 
@@ -17,26 +8,17 @@ use serialize::json::ToJson;
 use collections::treemap::TreeMap;
 use collections::hashmap::HashMap;
 
-use rustpcap::*;
+use time;
+
 use ring::RingBuffer;
 use multicast::{Multicast, MulticastSender};
 use uiserver::uiServer;
-use util::*;
-use ip::*;
-use ether::*;
-use dot11::*;
-
-mod pcap;
-mod rustpcap;
-mod ring;
-mod rustwebsocket;
-mod multicast;
-mod fixed_vec_macros;
-mod uiserver;
-mod util;
-mod ip;
-mod ether;
-mod dot11;
+use util::{ntohs, trans_off};
+use ip::{IP4Addr, IP6Addr, IP4Header, IP6Header};
+use ether::{EthernetHeader, MacAddr,
+            ETHERTYPE_ARP, ETHERTYPE_IP4, ETHERTYPE_IP6, ETHERTYPE_802_1X};
+use dot11::{Dot11MacBaseHeader};
+use tap;
 
 type Addrs<T> = (T, T);
 
@@ -141,11 +123,11 @@ struct PktMeta<T> {
     pub src: T,
     pub dst: T,
     pub size: u32,
-    pub time: time::Timespec
+    pub tm: time::Timespec
 }
 impl<T> PktMeta<T> {
     fn new(src: T, dst: T, size: u32) -> PktMeta<T> {
-        PktMeta { src: src, dst: dst, size: size, time: time::get_time() }
+        PktMeta { src: src, dst: dst, size: size, tm: time::get_time() }
     }
 }
 
@@ -186,27 +168,27 @@ impl EthernetCtx {
 
 struct RadiotapCtx;
 impl RadiotapCtx {
-    fn parse(&mut self, pkt: &RadiotapHeader) {
+    fn parse(&mut self, pkt: &tap::RadiotapHeader) {
         println!("RadiotapHeader: {:?}", pkt);
-        println!("has tsft? {}", pkt.has_field(dot11::TSFT));
-        println!("has flags? {}", pkt.has_field(dot11::FLAGS));
-        println!("has rate? {}", pkt.has_field(dot11::RATE));
-        println!("has channel? {}", pkt.has_field(dot11::CHANNEL));
-        println!("has fhss? {}", pkt.has_field(dot11::FHSS));
-        println!("has antenna_signal? {}", pkt.has_field(dot11::ANTENNA_SIGNAL));
-        println!("has antenna_noise? {}", pkt.has_field(dot11::ANTENNA_NOISE));
-        println!("has lock_quality? {}", pkt.has_field(dot11::LOCK_QUALITY));
-        println!("has tx_attenuation? {}", pkt.has_field(dot11::TX_ATTENUATION));
-        println!("has db_tx_attenuation? {}", pkt.has_field(dot11::DB_TX_ATTENUATION));
-        println!("has dbm_tx_power? {}", pkt.has_field(dot11::DBM_TX_POWER));
-        println!("has antenna? {}", pkt.has_field(dot11::ANTENNA));
-        println!("has db_antenna_signal? {}", pkt.has_field(dot11::DB_ANTENNA_SIGNAL));
-        println!("has db_antenna_noise? {}", pkt.has_field(dot11::DB_ANTENNA_NOISE));
-        println!("has rx_flags? {}", pkt.has_field(dot11::RX_FLAGS));
-        println!("has mcs? {}", pkt.has_field(dot11::MCS));
-        println!("has a_mpdu_status? {}", pkt.has_field(dot11::A_MPDU_STATUS));
-        println!("has vht? {}", pkt.has_field(dot11::VHT));
-        println!("has more_it_present? {}", pkt.has_field(dot11::MORE_IT_PRESENT));
+        println!("has tsft? {}", pkt.has_field(tap::TSFT));
+        println!("has flags? {}", pkt.has_field(tap::FLAGS));
+        println!("has rate? {}", pkt.has_field(tap::RATE));
+        println!("has channel? {}", pkt.has_field(tap::CHANNEL));
+        println!("has fhss? {}", pkt.has_field(tap::FHSS));
+        println!("has antenna_signal? {}", pkt.has_field(tap::ANTENNA_SIGNAL));
+        println!("has antenna_noise? {}", pkt.has_field(tap::ANTENNA_NOISE));
+        println!("has lock_quality? {}", pkt.has_field(tap::LOCK_QUALITY));
+        println!("has tx_attenuation? {}", pkt.has_field(tap::TX_ATTENUATION));
+        println!("has db_tx_attenuation? {}", pkt.has_field(tap::DB_TX_ATTENUATION));
+        println!("has dbm_tx_power? {}", pkt.has_field(tap::DBM_TX_POWER));
+        println!("has antenna? {}", pkt.has_field(tap::ANTENNA));
+        println!("has db_antenna_signal? {}", pkt.has_field(tap::DB_ANTENNA_SIGNAL));
+        println!("has db_antenna_noise? {}", pkt.has_field(tap::DB_ANTENNA_NOISE));
+        println!("has rx_flags? {}", pkt.has_field(tap::RX_FLAGS));
+        println!("has mcs? {}", pkt.has_field(tap::MCS));
+        println!("has a_mpdu_status? {}", pkt.has_field(tap::A_MPDU_STATUS));
+        println!("has vht? {}", pkt.has_field(tap::VHT));
+        println!("has more_it_present? {}", pkt.has_field(tap::MORE_IT_PRESENT));
         let wifiHeader: &Dot11MacBaseHeader = unsafe { trans_off(pkt, pkt.it_len as int) };
         let frc = wifiHeader.fr_ctrl;
         println!("protocol_version: {:x}, frame_type: {:x}, frame_subtype: {:x}, Mac1: {}",
@@ -214,49 +196,29 @@ impl RadiotapCtx {
     }
 }
 
-fn main() {
-    use getopts::*;
-
-    let port_opt = "p";
-    let interface_opt = "i";
-    let promisc_flag = "P";
-    let monitor_flag = "M";
-
-    let args = os::args();
-    let opts = ~[
-        optopt(port_opt, "port", "Websocket port", ""),
-        optopt(interface_opt, "interface", "Network interface to listen on", ""),
-        optflag(promisc_flag, "promisc", "Turn on promiscuous mode"),
-        optflag(monitor_flag, "monitor", "Turn on monitor mode")
-    ];
-
-    let matches = match getopts(args.tail(), opts) {
-        Ok(m) => { m }
-        Err(f) => { fail!(f.to_err_msg()) }
-    };
-
-    let port = matches.opt_str(port_opt).unwrap_or(~"7432");
-    let port = from_str::<u16>(port).unwrap();
+pub fn run(conf: D3capConf) {
+    use cap = pcap::rustpcap;
 
     let mc = Multicast::new();
     let data_tx = mc.get_sender();
 
+    let port = conf.port;
     task().named(~"socket_listener").spawn(proc() {
         uiServer(mc, port);
     });
 
     task().named(~"packet_capture").spawn(proc() {
 
-        let mut sessBuilder = match matches.opt_str(interface_opt) {
-            Some(dev) => PcapSessionBuilder::new_dev(dev),
-            None => PcapSessionBuilder::new()
+        let mut sessBuilder = match conf.interface {
+            Some(dev) => cap::PcapSessionBuilder::new_dev(dev),
+            None => cap::PcapSessionBuilder::new()
         };
 
         let sess = sessBuilder
             .buffer_size(65535)
             .timeout(1000)
-            .promisc(matches.opt_present(promisc_flag))
-            .rfmon(matches.opt_present(monitor_flag))
+            .promisc(conf.promisc)
+            .rfmon(conf.monitor)
             .activate();
 
         println!("Starting capture loop");
@@ -264,7 +226,7 @@ fn main() {
         println!("Available datalink types: {:?}", sess.list_datalinks());
 
         match sess.datalink() {
-            DLT_ETHERNET => {
+            cap::DLT_ETHERNET => {
                 let mut ctx = ~EthernetCtx {
                     mac: ProtocolHandler::spawn("mac", &data_tx),
                     ip4: ProtocolHandler::spawn("ip4", &data_tx),
@@ -275,11 +237,18 @@ fn main() {
                 std::io::timer::sleep(1000);
                 loop { sess.next(|t,sz| ctx.parse(t, sz)); }
             },
-            DLT_IEEE802_11_RADIO => {
+            cap::DLT_IEEE802_11_RADIO => {
                 let mut ctx = ~RadiotapCtx;
                 loop { sess.next(|t,_| ctx.parse(t)); }
             },
             x => fail!("unsupported datalink type: {}", x)
         }
     });
+}
+
+pub struct D3capConf {
+    pub port: u16,
+    pub interface: Option<~str>,
+    pub promisc: bool,
+    pub monitor: bool
 }

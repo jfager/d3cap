@@ -4,13 +4,13 @@ use std::io::net::tcp::{TcpListener};
 use std::io::net::ip::{Ipv4Addr,SocketAddr};
 use std::task::{task};
 
-use rustwebsocket::*;
+use ws = rustwebsocket;
 
 use multicast::Multicast;
 
 fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Receiver<~str>) {
     println!("websocketWorker");
-    let handshake = wsParseHandshake(tcps);
+    let handshake = ws::parseHandshake(tcps);
     match handshake {
         Some(hs) => {
             match tcps.write(hs.getAnswer().as_bytes()) {
@@ -32,7 +32,7 @@ fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Receiver<~
         loop {
             match data_po.try_recv() {
                 comm::Data(msg) => {
-                    let res = wsWriteFrame(msg.as_bytes(), WS_TEXT_FRAME, tcps);
+                    let res = ws::writeFrame(msg.as_bytes(), ws::TEXT_FRAME, tcps);
                     if res.is_err() {
                         println!("Error writing msg frame: {}", res);
                         break
@@ -51,11 +51,11 @@ fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Receiver<~
                 }
             }
         }
-        let (_, frameType) = wsParseInputFrame(tcps);
+        let (_, frameType) = ws::parseInputFrame(tcps);
         match frameType {
-            WS_CLOSING_FRAME |
-            WS_ERROR_FRAME   => {
-                let res = wsWriteFrame([], WS_CLOSING_FRAME, tcps);
+            ws::CLOSING_FRAME |
+            ws::ERROR_FRAME   => {
+                let res = ws::writeFrame([], ws::CLOSING_FRAME, tcps);
                 if res.is_err() {
                     println!("Error writing closing frame: {}", res);
                 }

@@ -21,22 +21,22 @@ static VERSION: &'static str = "13";
 static ACCEPT_FIELD: &'static str = "Sec-WebSocket-Accept";
 static SECRET: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-pub enum WSFrameType {
-    WS_EMPTY_FRAME = 0xF0,
-    WS_ERROR_FRAME = 0xF1,
-    WS_INCOMPLETE_FRAME = 0xF2,
-    WS_TEXT_FRAME = 0x01,
-    WS_BINARY_FRAME = 0x02,
-    WS_PING_FRAME = 0x09,
-    WS_PONG_FRAME = 0x0A,
-    WS_OPENING_FRAME = 0xF3,
-    WS_CLOSING_FRAME = 0x08
+pub enum FrameType {
+    EMPTY_FRAME = 0xF0,
+    ERROR_FRAME = 0xF1,
+    INCOMPLETE_FRAME = 0xF2,
+    TEXT_FRAME = 0x01,
+    BINARY_FRAME = 0x02,
+    PING_FRAME = 0x09,
+    PONG_FRAME = 0x0A,
+    OPENING_FRAME = 0xF3,
+    CLOSING_FRAME = 0x08
 }
 
-enum WSState {
-    WS_STATE_OPENING,
-    WS_STATE_NORMAL,
-    WS_STATE_CLOSING
+enum State {
+    STATE_OPENING,
+    STATE_NORMAL,
+    STATE_CLOSING
 }
 
 struct Handshake {
@@ -44,7 +44,7 @@ struct Handshake {
     //origin: ~str,
     key: ~str,
     resource: ~str,
-    frameType: WSFrameType
+    frameType: FrameType
 }
 
 impl Handshake {
@@ -70,7 +70,7 @@ fn headerfns() -> HeaderFns {
     hdrFns
 }
 
-pub fn wsParseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake> {
+pub fn parseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake> {
     let hdrFns = headerfns();
     let line = match s.read_line() {
         Ok(ln) => ln,
@@ -83,7 +83,7 @@ pub fn wsParseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshak
         //origin: ~"",
         key: ~"",
         resource: prop[1].trim().to_owned(),
-        frameType: WS_OPENING_FRAME
+        frameType: OPENING_FRAME
     };
 
     let mut hasHandshake = false;
@@ -121,7 +121,7 @@ static MED_FRAME: uint = 65535;
 static MED_FRAME_FLAG: u8 = 126;
 static LARGE_FRAME_FLAG: u8 = 127;
 
-pub fn wsWriteFrame<W:Writer>(data: &[u8], frameType: WSFrameType, w: &mut W) -> IoResult<()> {
+pub fn writeFrame<W:Writer>(data: &[u8], frameType: FrameType, w: &mut W) -> IoResult<()> {
     try!(w.write_u8((0x80 | frameType as int) as u8));
 
     if data.len() <= SMALL_FRAME {
@@ -137,37 +137,37 @@ pub fn wsWriteFrame<W:Writer>(data: &[u8], frameType: WSFrameType, w: &mut W) ->
     w.flush()
 }
 
-fn frameTypeFrom(i: u8) -> WSFrameType {
+fn frameTypeFrom(i: u8) -> FrameType {
     unsafe { std::cast::transmute(i) }
 }
 
-pub fn wsParseInputFrame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<~[u8]>, WSFrameType) {
+pub fn parseInputFrame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<~[u8]>, FrameType) {
     let hdr = match s.read_exact(2 as uint) {
-        Ok(h) => if h.len() == 2 { h } else { return (None, WS_ERROR_FRAME) },
+        Ok(h) => if h.len() == 2 { h } else { return (None, ERROR_FRAME) },
         //Ok(h) if h.len() == 2 => h //Fails w/ cannot bind by-move into a pattern guard
         //Ok(ref h) if h.len() == 2 => h.clone(),
-        _ => return (None, WS_ERROR_FRAME)
+        _ => return (None, ERROR_FRAME)
     };
 
     if hdr[0] & 0x70 != 0x0    //extensions must be off
     || hdr[0] & 0x80 != 0x80   //no continuation frames
     || hdr[1] & 0x80 != 0x80 { //masking bit must be set
-        return (None, WS_ERROR_FRAME);
+        return (None, ERROR_FRAME);
     }
 
     let opcode = (hdr[0] & 0x0F) as u8;
-    if opcode == WS_TEXT_FRAME as u8
-    || opcode == WS_BINARY_FRAME as u8
-    || opcode == WS_CLOSING_FRAME as u8
-    || opcode == WS_PING_FRAME as u8
-    || opcode == WS_PONG_FRAME as u8 {
+    if opcode == TEXT_FRAME as u8
+    || opcode == BINARY_FRAME as u8
+    || opcode == CLOSING_FRAME as u8
+    || opcode == PING_FRAME as u8
+    || opcode == PONG_FRAME as u8 {
         let frameType = frameTypeFrom(opcode);
         let payloadLength = hdr[1] & 0x7F;
         if payloadLength < 0x7E { //Only handle short payloads right now.
             let toread = (payloadLength + 4) as uint; //+4 for mask
             let masked_payload = match s.read_exact(toread) {
                 Ok(mp) => mp,
-                _ => return (None, WS_ERROR_FRAME)
+                _ => return (None, ERROR_FRAME)
             };
             let payload = masked_payload.tailn(4).iter()
                 .enumerate()
@@ -179,5 +179,5 @@ pub fn wsParseInputFrame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<~[u8]>
         return (None, frameType);
     }
 
-    return (None, WS_ERROR_FRAME);
+    return (None, ERROR_FRAME);
 }
