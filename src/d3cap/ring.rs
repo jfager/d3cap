@@ -14,7 +14,7 @@ use std::fmt::{Show,Formatter};
 // Copying a RingBuffer will cause a heap allocation but the compiler will
 // warn us on attempts to copy it implicitly.
 pub struct RingBuffer<T> {
-    buffer: ~[T],
+    buffer: Vec<T>,
     capacity: uint,        // number of elements the buffer is able to hold (can't guarantee that vec capacity is exactly what we set it to)
     size: uint,            // number of elements with legit values in the buffer
     next: uint,            // index at which new elements land
@@ -26,7 +26,7 @@ pub struct RingBuffer<T> {
 // methods for our struct.
 impl<T> RingBuffer<T> {
     pub fn new(capacity: uint) -> RingBuffer<T> {
-        let mut ring = RingBuffer {buffer: ~[], capacity: capacity, size: 0, next: 0};
+        let mut ring = RingBuffer {buffer: Vec::new(), capacity: capacity, size: 0, next: 0};
         ring.buffer.reserve(capacity);
         ring
     }
@@ -49,9 +49,9 @@ impl<T> RingBuffer<T> {
         assert!(i < self.size);
 
         if self.size < self.capacity {
-            &self.buffer[i]
+            self.buffer.get(i)
         } else {
-            &self.buffer[(self.next + i) % self.capacity]
+            self.buffer.get((self.next + i) % self.capacity)
         }
     }
 
@@ -66,7 +66,7 @@ impl<T> RingBuffer<T> {
             self.buffer.push(element);
             self.size += 1;
         } else {
-            self.buffer[self.next] = element;
+            *self.buffer.get_mut(self.next) = element;
         }
         self.next = (self.next + 1) % self.capacity;
     }

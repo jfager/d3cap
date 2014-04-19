@@ -2,11 +2,9 @@ extern crate std;
 
 use std::io::{Stream,BufferedStream,IoResult};
 
-use collections::hashmap::HashMap;
-
 use serialize::base64::{ToBase64, STANDARD};
 
-use openssl::crypto::hash;
+use crypto_hash = openssl::crypto::hash;
 
 static CONNECTION_FIELD: &'static str = "Connection";
 static UPGRADE: &'static str = "upgrade";
@@ -22,21 +20,21 @@ static ACCEPT_FIELD: &'static str = "Sec-WebSocket-Accept";
 static SECRET: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 pub enum FrameType {
-    EMPTY_FRAME = 0xF0,
-    ERROR_FRAME = 0xF1,
-    INCOMPLETE_FRAME = 0xF2,
-    TEXT_FRAME = 0x01,
-    BINARY_FRAME = 0x02,
-    PING_FRAME = 0x09,
-    PONG_FRAME = 0x0A,
-    OPENING_FRAME = 0xF3,
-    CLOSING_FRAME = 0x08
+    EmptyFrame = 0xF0,
+    ErrorFrame = 0xF1,
+    IncompleteFrame = 0xF2,
+    TextFrame = 0x01,
+    BinaryFrame = 0x02,
+    PingFrame = 0x09,
+    PongFrame = 0x0A,
+    OpeningFrame = 0xF3,
+    ClosingFrame = 0x08
 }
 
 enum State {
-    STATE_OPENING,
-    STATE_NORMAL,
-    STATE_CLOSING
+    OpeningState,
+    NormalState,
+    ClosingState
 }
 
 struct Handshake {
@@ -49,8 +47,8 @@ struct Handshake {
 
 impl Handshake {
     pub fn getAnswer(&self) -> ~str {
-        let res = hash::hash(hash::SHA1, (self.key + SECRET).as_bytes());
-        let responseKey = res.to_base64(STANDARD);
+        let res = crypto_hash::hash(crypto_hash::SHA1, (self.key + SECRET).as_bytes());
+        let responseKey = res.as_slice().to_base64(STANDARD);
         format!("HTTP/1.1 101 Switching Protocols\r\n\
                  {}: {}\r\n\
                  {}: {}\r\n\
@@ -61,17 +59,7 @@ impl Handshake {
     }
 }
 
-type HeaderFns = HashMap<~str, 'static |&mut Handshake, &str|->()>;
-
-fn headerfns() -> HeaderFns {
-    let mut hdrFns = HashMap::new();
-    hdrFns.insert(KEY_FIELD.to_owned(), |h: &mut Handshake, v: &str| h.key = v.to_owned());
-    //hdrFns.insert(KEY_FIELD, |h: &mut Handshake, v: &str| h.key = v.to_owned());
-    hdrFns
-}
-
 pub fn parseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake> {
-    let hdrFns = headerfns();
     let line = match s.read_line() {
         Ok(ln) => ln,
         _ => return None
@@ -83,7 +71,7 @@ pub fn parseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake>
         //origin: ~"",
         key: ~"",
         resource: prop[1].trim().to_owned(),
-        frameType: OPENING_FRAME
+        frameType: OpeningFrame
     };
 
     let mut hasHandshake = false;
@@ -103,14 +91,16 @@ pub fn parseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake>
             println!("Unexpected line: '{}'", line);
             return None;
         }
-        let key = prop[0].clone();
+        let key = prop[0].trim();
         let val = prop[1].trim();
-        match hdrFns.find(&key) {
-            Some(f) => {
-                (*f)(&mut hs, val);
+
+        match key {
+            //should be KEY_FIELD but https://github.com/mozilla/rust/issues/11940
+            "Sec-WebSocket-Key" => {
+                hs.key = val.to_owned();
                 hasHandshake = true;
             }
-            None => () //do nothing
+            _ => () //do nothing
         }
     }
 }
@@ -143,35 +133,35 @@ fn frameTypeFrom(i: u8) -> FrameType {
 
 pub fn parseInputFrame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<~[u8]>, FrameType) {
     let hdr = match s.read_exact(2 as uint) {
-        Ok(h) => if h.len() == 2 { h } else { return (None, ERROR_FRAME) },
+        Ok(h) => if h.len() == 2 { h } else { return (None, ErrorFrame) },
         //Ok(h) if h.len() == 2 => h //Fails w/ cannot bind by-move into a pattern guard
         //Ok(ref h) if h.len() == 2 => h.clone(),
-        _ => return (None, ERROR_FRAME)
+        _ => return (None, ErrorFrame)
     };
 
-    if hdr[0] & 0x70 != 0x0    //extensions must be off
-    || hdr[0] & 0x80 != 0x80   //no continuation frames
-    || hdr[1] & 0x80 != 0x80 { //masking bit must be set
-        return (None, ERROR_FRAME);
+    if hdr.get(0) & 0x70 != 0x0    //extensions must be off
+    || hdr.get(0) & 0x80 != 0x80   //no continuation frames
+    || hdr.get(1) & 0x80 != 0x80 { //masking bit must be set
+        return (None, ErrorFrame);
     }
 
-    let opcode = (hdr[0] & 0x0F) as u8;
-    if opcode == TEXT_FRAME as u8
-    || opcode == BINARY_FRAME as u8
-    || opcode == CLOSING_FRAME as u8
-    || opcode == PING_FRAME as u8
-    || opcode == PONG_FRAME as u8 {
+    let opcode = (hdr.get(0) & 0x0F) as u8;
+    if opcode == TextFrame as u8
+    || opcode == BinaryFrame as u8
+    || opcode == ClosingFrame as u8
+    || opcode == PingFrame as u8
+    || opcode == PongFrame as u8 {
         let frameType = frameTypeFrom(opcode);
-        let payloadLength = hdr[1] & 0x7F;
+        let payloadLength = hdr.get(1) & 0x7F;
         if payloadLength < 0x7E { //Only handle short payloads right now.
             let toread = (payloadLength + 4) as uint; //+4 for mask
             let masked_payload = match s.read_exact(toread) {
                 Ok(mp) => mp,
-                _ => return (None, ERROR_FRAME)
+                _ => return (None, ErrorFrame)
             };
             let payload = masked_payload.tailn(4).iter()
                 .enumerate()
-                .map(|(i, t)| { t ^ masked_payload[i%4] })
+                .map(|(i, t)| { t ^ *masked_payload.get(i%4) })
                 .collect();
             return (Some(payload), frameType);
         }
@@ -179,5 +169,5 @@ pub fn parseInputFrame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<~[u8]>, 
         return (None, frameType);
     }
 
-    return (None, ERROR_FRAME);
+    return (None, ErrorFrame);
 }

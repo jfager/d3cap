@@ -14,27 +14,27 @@ impl<T:Send+Clone> Multicast<T> {
     pub fn new() -> Multicast<T> {
         let (tx, rx): (Sender<MulticastMsg<T>>, Receiver<MulticastMsg<T>>) = channel();
         task().named("multicast").spawn(proc() {
-            let mut mc_txs = ~[];
-            let mut to_remove = ~[];
+            let mut mc_txs = Vec::new();
+            let mut to_remove = Vec::new();
             loop {
                 match rx.recv_opt() {
-                    Some(MsgDest(c)) => mc_txs.push(c),
-                    Some(Msg(msg)) => {
+                    Ok(MsgDest(c)) => mc_txs.push(c),
+                    Ok(Msg(msg)) => {
                         to_remove.truncate(0);
                         for (i, mc_tx) in mc_txs.iter().enumerate() {
-                            if !mc_tx.try_send(msg.clone()) {
-                                to_remove.push(i);
+                            if mc_tx.send_opt(msg.clone()).is_err() {
+                                to_remove.push(i)
                             }
                         }
                         if to_remove.len() > 0 {
                             //Walk in reverse to avoid changing indices of
                             //channels to be removed.
-                            for i in to_remove.rev_iter() {
+                            for i in to_remove.iter().rev() {
                                 mc_txs.remove(*i);
                             }
                         }
                     },
-                    None => break
+                    Err(_) => break
                 }
             }
         });

@@ -1,6 +1,6 @@
 #![link(name="rustpcap", vers="0.0.1")]
 
-use std::libc::{c_char,c_int};
+use libc::{c_char,c_int};
 use std::{ptr,slice,str};
 use pcap::*;
 
@@ -18,19 +18,19 @@ pub struct PcapSessionBuilder {
 impl PcapSessionBuilder {
 
     pub fn new_dev(dev: &str) -> PcapSessionBuilder {
-        let mut errbuf = slice::with_capacity(256);
+        let mut errbuf = Vec::with_capacity(256u);
         let c_dev = unsafe { dev.to_c_str().unwrap() };
-        PcapSessionBuilder::do_new(c_dev, errbuf)
+        PcapSessionBuilder::do_new(c_dev, errbuf.as_mut_slice())
     }
 
     pub fn new() -> PcapSessionBuilder {
-        let mut errbuf = slice::with_capacity(256);
-        let dev = unsafe { pcap_lookupdev(errbuf.as_mut_ptr()) };
+        let mut errbuf = Vec::with_capacity(256u);
+        let dev = unsafe { pcap_lookupdev(errbuf.as_mut_slice().as_mut_ptr()) };
         if dev.is_null() {
             fail!("No device available");
         }
         println!("Using dev {}", unsafe { str::raw::from_c_str(dev as *c_char) });
-        PcapSessionBuilder::do_new(dev as *c_char, errbuf)
+        PcapSessionBuilder::do_new(dev as *c_char, errbuf.as_mut_slice())
     }
 
     fn do_new(dev: *c_char, errbuf: &mut [c_char]) -> PcapSessionBuilder {

@@ -31,8 +31,8 @@ fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Receiver<~
         let mut counter = 0;
         loop {
             match data_po.try_recv() {
-                comm::Data(msg) => {
-                    let res = ws::writeFrame(msg.as_bytes(), ws::TEXT_FRAME, tcps);
+                Ok(msg) => {
+                    let res = ws::writeFrame(msg.as_bytes(), ws::TextFrame, tcps);
                     if res.is_err() {
                         println!("Error writing msg frame: {}", res);
                         break
@@ -43,19 +43,19 @@ fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Receiver<~
                         break
                     }
                 },
-                comm::Empty => {
+                Err(comm::Empty) => {
                     break
                 },
-                comm::Disconnected => {
+                Err(comm::Disconnected) => {
                     fail!("Disconnected from client")
                 }
             }
         }
         let (_, frameType) = ws::parseInputFrame(tcps);
         match frameType {
-            ws::CLOSING_FRAME |
-            ws::ERROR_FRAME   => {
-                let res = ws::writeFrame([], ws::CLOSING_FRAME, tcps);
+            ws::ClosingFrame |
+            ws::ErrorFrame   => {
+                let res = ws::writeFrame([], ws::ClosingFrame, tcps);
                 if res.is_err() {
                     println!("Error writing closing frame: {}", res);
                 }

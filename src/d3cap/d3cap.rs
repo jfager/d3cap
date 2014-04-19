@@ -210,7 +210,7 @@ pub fn run(conf: D3capConf) {
     task().named(~"packet_capture").spawn(proc() {
 
         let mut sessBuilder = match conf.interface {
-            Some(dev) => cap::PcapSessionBuilder::new_dev(dev),
+            Some(ref dev) => cap::PcapSessionBuilder::new_dev(*dev),
             None => cap::PcapSessionBuilder::new()
         };
 
