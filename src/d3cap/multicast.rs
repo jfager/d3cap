@@ -1,5 +1,5 @@
 use std::comm::{channel, Sender, Receiver};
-use std::task::{task};
+use std::task::{TaskBuilder};
 
 enum MulticastMsg<T> {
     Msg(T),
@@ -13,7 +13,7 @@ pub struct Multicast<T> {
 impl<T:Send+Clone> Multicast<T> {
     pub fn new() -> Multicast<T> {
         let (tx, rx): (Sender<MulticastMsg<T>>, Receiver<MulticastMsg<T>>) = channel();
-        task().named("multicast").spawn(proc() {
+        TaskBuilder::new().named("multicast").spawn(proc() {
             let mut mc_txs = Vec::new();
             let mut to_remove = Vec::new();
             loop {

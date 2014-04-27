@@ -2,7 +2,7 @@ use std::comm;
 use std::io::{Acceptor,Listener,Stream,BufferedStream};
 use std::io::net::tcp::{TcpListener};
 use std::io::net::ip::{Ipv4Addr,SocketAddr};
-use std::task::{task};
+use std::task::{TaskBuilder};
 
 use ws = rustwebsocket;
 
@@ -76,7 +76,7 @@ pub fn uiServer(mc: Multicast<~str>, port: u16) {
     for tcp_stream in acceptor.incoming() {
         let (conn_tx, conn_rx) = channel();
         mc.add_dest_chan(conn_tx);
-        task().named(format!("websocketWorker_{}", workercount)).spawn(proc() {
+        TaskBuilder::new().named(format!("websocketWorker_{}", workercount)).spawn(proc() {
             match tcp_stream {
                 Ok(tcps) => websocketWorker(&mut BufferedStream::new(tcps), &conn_rx),
                 _ => fail!("Could not start websocket worker")

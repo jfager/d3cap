@@ -1,5 +1,5 @@
 use std;
-use std::task::{task};
+use std::task::{TaskBuilder};
 use std::hash::Hash;
 
 use serialize::{json};
@@ -56,7 +56,7 @@ impl<T: Ord+Hash+TotalEq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
     fn spawn(typ: &'static str, mc_tx: &MulticastSender<~str>) -> Sender<~PktMeta<T>> {
         let (tx, rx) = channel();
         let mc_tx = mc_tx.clone();
-        task().named(format!("{}_handler", typ)).spawn(proc() {
+        TaskBuilder::new().named(format!("{}_handler", typ)).spawn(proc() {
             let mut handler = ProtocolHandler::new(typ, mc_tx);
             loop {
                 let pkt: ~PktMeta<T> = rx.recv();
@@ -203,11 +203,11 @@ pub fn run(conf: D3capConf) {
     let data_tx = mc.get_sender();
 
     let port = conf.port;
-    task().named(~"socket_listener").spawn(proc() {
+    TaskBuilder::new().named(~"socket_listener").spawn(proc() {
         uiServer(mc, port);
     });
 
-    task().named(~"packet_capture").spawn(proc() {
+    TaskBuilder::new().named(~"packet_capture").spawn(proc() {
 
         let mut sessBuilder = match conf.interface {
             Some(ref dev) => cap::PcapSessionBuilder::new_dev(*dev),
