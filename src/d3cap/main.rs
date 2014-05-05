@@ -45,7 +45,7 @@ fn main() {
         Err(f) => { fail!(f.to_err_msg()) }
     };
 
-    let port = matches.opt_str(port_opt).unwrap_or(~"7432");
+    let port = matches.opt_str(port_opt).unwrap_or("7432".to_owned());
     let port = from_str::<u16>(port).unwrap();
 
     let conf = D3capConf {

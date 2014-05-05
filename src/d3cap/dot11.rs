@@ -11,10 +11,21 @@ pub struct Dot11MacBaseHeader {
     pub addr1: MacAddr,
 }
 
+bitflags!(FrameControlFlags: u8 {
+    ToDS           = 1 << 0,
+    FromDS         = 1 << 1,
+    MoreFrags      = 1 << 2,
+    Retry          = 1 << 3,
+    PowerMgmt      = 1 << 4,
+    MoreData       = 1 << 5,
+    ProtectedFrame = 1 << 6,
+    Order          = 1 << 7
+})
+
 #[packed]
 pub struct FrameControl {
     pub ty: u8,
-    pub flags: u8,
+    pub flags: FrameControlFlags
 }
 
 impl FrameControl {
@@ -30,6 +41,9 @@ impl FrameControl {
     }
     pub fn frame_subtype(&self) -> u8 {
         (self.ty & 0b11110000) >> 4
+    }
+    pub fn has_flag(&self, flag: FrameControlFlags) -> bool {
+        self.flags.contains(flag)
     }
 }
 

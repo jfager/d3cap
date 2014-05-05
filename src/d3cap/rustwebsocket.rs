@@ -69,7 +69,7 @@ pub fn parseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake>
     let mut hs = Handshake {
         //host: ~"",
         //origin: ~"",
-        key: ~"",
+        key: "".to_owned(),
         resource: prop[1].trim().to_owned(),
         frameType: OpeningFrame
     };

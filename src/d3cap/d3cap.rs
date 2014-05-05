@@ -17,7 +17,7 @@ use util::{ntohs, trans_off};
 use ip::{IP4Addr, IP6Addr, IP4Header, IP6Header};
 use ether::{EthernetHeader, MacAddr,
             ETHERTYPE_ARP, ETHERTYPE_IP4, ETHERTYPE_IP6, ETHERTYPE_802_1X};
-use dot11::{Dot11MacBaseHeader};
+use dot11;
 use tap;
 
 type Addrs<T> = (T, T);
@@ -69,13 +69,13 @@ impl<T: Ord+Hash+TotalEq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
 
 fn route_msg<T:ToStr>(typ: &str, rt: &RouteStats<T>) -> ~str {
     let mut m = ~TreeMap::new();
-    m.insert(~"type", typ.to_str().to_json());
-    m.insert(~"a", rt.a.addr.to_str().to_json());
-    m.insert(~"from_a_count", rt.a.sent_count.to_json());
-    m.insert(~"from_a_size", rt.a.sent_size.to_json());
-    m.insert(~"b", rt.b.addr.to_str().to_json());
-    m.insert(~"from_b_count", rt.b.sent_count.to_json());
-    m.insert(~"from_b_size", rt.b.sent_size.to_json());
+    m.insert("type".to_owned(), typ.to_str().to_json());
+    m.insert("a".to_owned(), rt.a.addr.to_str().to_json());
+    m.insert("from_a_count".to_owned(), rt.a.sent_count.to_json());
+    m.insert("from_a_size".to_owned(), rt.a.sent_size.to_json());
+    m.insert("b".to_owned(), rt.b.addr.to_str().to_json());
+    m.insert("from_b_count".to_owned(), rt.b.sent_count.to_json());
+    m.insert("from_b_size".to_owned(), rt.b.sent_size.to_json());
     json::Object(m).to_str()
 }
 
@@ -169,30 +169,76 @@ impl EthernetCtx {
 struct RadiotapCtx;
 impl RadiotapCtx {
     fn parse(&mut self, pkt: &tap::RadiotapHeader) {
-        println!("RadiotapHeader: {:?}", pkt);
-        println!("has tsft? {}", pkt.has_field(tap::TSFT));
-        println!("has flags? {}", pkt.has_field(tap::FLAGS));
-        println!("has rate? {}", pkt.has_field(tap::RATE));
-        println!("has channel? {}", pkt.has_field(tap::CHANNEL));
-        println!("has fhss? {}", pkt.has_field(tap::FHSS));
-        println!("has antenna_signal? {}", pkt.has_field(tap::ANTENNA_SIGNAL));
-        println!("has antenna_noise? {}", pkt.has_field(tap::ANTENNA_NOISE));
-        println!("has lock_quality? {}", pkt.has_field(tap::LOCK_QUALITY));
-        println!("has tx_attenuation? {}", pkt.has_field(tap::TX_ATTENUATION));
-        println!("has db_tx_attenuation? {}", pkt.has_field(tap::DB_TX_ATTENUATION));
-        println!("has dbm_tx_power? {}", pkt.has_field(tap::DBM_TX_POWER));
-        println!("has antenna? {}", pkt.has_field(tap::ANTENNA));
-        println!("has db_antenna_signal? {}", pkt.has_field(tap::DB_ANTENNA_SIGNAL));
-        println!("has db_antenna_noise? {}", pkt.has_field(tap::DB_ANTENNA_NOISE));
-        println!("has rx_flags? {}", pkt.has_field(tap::RX_FLAGS));
-        println!("has mcs? {}", pkt.has_field(tap::MCS));
-        println!("has a_mpdu_status? {}", pkt.has_field(tap::A_MPDU_STATUS));
-        println!("has vht? {}", pkt.has_field(tap::VHT));
-        println!("has more_it_present? {}", pkt.has_field(tap::MORE_IT_PRESENT));
-        let wifiHeader: &Dot11MacBaseHeader = unsafe { trans_off(pkt, pkt.it_len as int) };
-        let frc = wifiHeader.fr_ctrl;
-        println!("protocol_version: {:x}, frame_type: {:x}, frame_subtype: {:x}, Mac1: {}",
-                 frc.protocol_version(), frc.frame_type(), frc.frame_subtype(), wifiHeader.addr1.to_str());
+        let wifiHeader: &dot11::Dot11MacBaseHeader = unsafe { trans_off(pkt, pkt.it_len as int) };
+        let fc = wifiHeader.fr_ctrl;
+        let proto_version = fc.protocol_version();
+        if proto_version != 0 {
+            //println!("Bogus packet (proto_version: {})", proto_version);
+            return;
+        }
+
+        println!("frame_type: {:x}", fc.frame_type());
+        println!("frame_subtype: {:x}", fc.frame_subtype());
+
+        println!("toDS: {}", fc.has_flag(dot11::ToDS));
+        println!("fromDS: {}", fc.has_flag(dot11::FromDS));
+        println!("protected: {}", fc.has_flag(dot11::ProtectedFrame));
+
+        println!("Mac1: {}", wifiHeader.addr1.to_str());
+
+        match pkt.it_present {
+            a if a == tap::COMMON_A => {
+                match tap::CommonA::parse(pkt) {
+                    Some(vals) => {
+                        println!("tsft: {}", vals.tsft.timer_micros);
+                        println!("channel: {}", vals.channel.mhz);
+                        println!("antenna_signal: {}", vals.antenna_signal.dBm);
+                        println!("antenna_noise: {}", vals.antenna_noise.dBm);
+                        println!("antenna: {}", vals.antenna.idx);
+                    },
+                    _ => {
+                        println!("Couldn't parse as CommonA");
+                    }
+                }
+            },
+            b if b == tap::COMMON_B => {
+                match tap::CommonB::parse(pkt) {
+                    Some(vals) => {
+                        println!("tsft: {}", vals.tsft.timer_micros);
+                        println!("channel: {}", vals.channel.mhz);
+                        println!("antenna_signal: {}", vals.antenna_signal.dBm);
+                        println!("antenna_noise: {}", vals.antenna_noise.dBm);
+                        println!("antenna: {}", vals.antenna.idx);
+                    },
+                    _ => {
+                        println!("Couldn't parse as CommonB");
+                    }
+                }
+            },
+            _ => {
+                // println!("Unknown header!");
+                // println!("has tsft? {}", pkt.has_field(tap::TSFT));
+                // println!("has flags? {}", pkt.has_field(tap::FLAGS));
+                // println!("has rate? {}", pkt.has_field(tap::RATE));
+                // println!("has channel? {}", pkt.has_field(tap::CHANNEL));
+                // println!("has fhss? {}", pkt.has_field(tap::FHSS));
+                // println!("has antenna_signal? {}", pkt.has_field(tap::ANTENNA_SIGNAL));
+                // println!("has antenna_noise? {}", pkt.has_field(tap::ANTENNA_NOISE));
+                // println!("has lock_quality? {}", pkt.has_field(tap::LOCK_QUALITY));
+                // println!("has tx_attenuation? {}", pkt.has_field(tap::TX_ATTENUATION));
+                // println!("has db_tx_attenuation? {}", pkt.has_field(tap::DB_TX_ATTENUATION));
+                // println!("has dbm_tx_power? {}", pkt.has_field(tap::DBM_TX_POWER));
+                // println!("has antenna? {}", pkt.has_field(tap::ANTENNA));
+                // println!("has db_antenna_signal? {}", pkt.has_field(tap::DB_ANTENNA_SIGNAL));
+                // println!("has db_antenna_noise? {}", pkt.has_field(tap::DB_ANTENNA_NOISE));
+                // println!("has rx_flags? {}", pkt.has_field(tap::RX_FLAGS));
+                // println!("has mcs? {}", pkt.has_field(tap::MCS));
+                // println!("has a_mpdu_status? {}", pkt.has_field(tap::A_MPDU_STATUS));
+                // println!("has vht? {}", pkt.has_field(tap::VHT));
+                // println!("has more_it_present? {}", pkt.has_field(tap::MORE_IT_PRESENT));
+            }
+        }
+        println!("");
     }
 }
 
@@ -203,11 +249,11 @@ pub fn run(conf: D3capConf) {
     let data_tx = mc.get_sender();
 
     let port = conf.port;
-    TaskBuilder::new().named(~"socket_listener").spawn(proc() {
+    TaskBuilder::new().named("socket_listener").spawn(proc() {
         uiServer(mc, port);
     });
 
-    TaskBuilder::new().named(~"packet_capture").spawn(proc() {
+    TaskBuilder::new().named("packet_capture").spawn(proc() {
 
         let mut sessBuilder = match conf.interface {
             Some(ref dev) => cap::PcapSessionBuilder::new_dev(*dev),
