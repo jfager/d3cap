@@ -11,15 +11,15 @@ pub struct Dot11MacBaseHeader {
     pub addr1: MacAddr,
 }
 
-bitflags!(FrameControlFlags: u8 {
-    ToDS           = 1 << 0,
-    FromDS         = 1 << 1,
-    MoreFrags      = 1 << 2,
-    Retry          = 1 << 3,
-    PowerMgmt      = 1 << 4,
-    MoreData       = 1 << 5,
-    ProtectedFrame = 1 << 6,
-    Order          = 1 << 7
+bitflags!(flags FrameControlFlags: u8 {
+    static ToDS           = 1 << 0,
+    static FromDS         = 1 << 1,
+    static MoreFrags      = 1 << 2,
+    static Retry          = 1 << 3,
+    static PowerMgmt      = 1 << 4,
+    static MoreData       = 1 << 5,
+    static ProtectedFrame = 1 << 6,
+    static Order          = 1 << 7
 })
 
 #[packed]

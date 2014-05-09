@@ -13,75 +13,75 @@ pub struct RadiotapHeader {
 }
 //size_of should == 8
 
-bitflags!(ItPresent: u32 {
-    TSFT              = 1 << 0,
-    FLAGS             = 1 << 1,
-    RATE              = 1 << 2,
-    CHANNEL           = 1 << 3,
-    FHSS              = 1 << 4,
-    ANTENNA_SIGNAL    = 1 << 5,
-    ANTENNA_NOISE     = 1 << 6,
-    LOCK_QUALITY      = 1 << 7,
-    TX_ATTENUATION    = 1 << 8,
-    DB_TX_ATTENUATION = 1 << 9,
-    DBM_TX_POWER      = 1 << 10,
-    ANTENNA           = 1 << 11,
-    DB_ANTENNA_SIGNAL = 1 << 12,
-    DB_ANTENNA_NOISE  = 1 << 13,
-    RX_FLAGS          = 1 << 14,
-    TX_FLAGS          = 1 << 15,
-    RTS_RETRIES       = 1 << 16,
-    DATA_RETRIES      = 1 << 17,
-    MCS               = 1 << 19,
-    A_MPDU_STATUS     = 1 << 20,
-    VHT               = 1 << 21,
-    MORE_IT_PRESENT   = 1 << 31,
+bitflags!(flags ItPresent: u32 {
+    static TSFT              = 1 << 0,
+    static FLAGS             = 1 << 1,
+    static RATE              = 1 << 2,
+    static CHANNEL           = 1 << 3,
+    static FHSS              = 1 << 4,
+    static ANTENNA_SIGNAL    = 1 << 5,
+    static ANTENNA_NOISE     = 1 << 6,
+    static LOCK_QUALITY      = 1 << 7,
+    static TX_ATTENUATION    = 1 << 8,
+    static DB_TX_ATTENUATION = 1 << 9,
+    static DBM_TX_POWER      = 1 << 10,
+    static ANTENNA           = 1 << 11,
+    static DB_ANTENNA_SIGNAL = 1 << 12,
+    static DB_ANTENNA_NOISE  = 1 << 13,
+    static RX_FLAGS          = 1 << 14,
+    static TX_FLAGS          = 1 << 15,
+    static RTS_RETRIES       = 1 << 16,
+    static DATA_RETRIES      = 1 << 17,
+    static MCS               = 1 << 19,
+    static A_MPDU_STATUS     = 1 << 20,
+    static VHT               = 1 << 21,
+    static MORE_IT_PRESENT   = 1 << 31,
 
-    COMMON_A          = TSFT.bits
-                      | FLAGS.bits
-                      | RATE.bits
-                      | CHANNEL.bits
-                      | ANTENNA_SIGNAL.bits
-                      | ANTENNA_NOISE.bits
-                      | ANTENNA.bits,
+    static COMMON_A          = TSFT.bits
+                             | FLAGS.bits
+                             | RATE.bits
+                             | CHANNEL.bits
+                             | ANTENNA_SIGNAL.bits
+                             | ANTENNA_NOISE.bits
+                             | ANTENNA.bits,
 
-    COMMON_B          = TSFT.bits
-                      | FLAGS.bits
-                      | CHANNEL.bits
-                      | ANTENNA_SIGNAL.bits
-                      | ANTENNA_NOISE.bits
-                      | ANTENNA.bits
-                      | MCS.bits
+    static COMMON_B          = TSFT.bits
+                             | FLAGS.bits
+                             | CHANNEL.bits
+                             | ANTENNA_SIGNAL.bits
+                             | ANTENNA_NOISE.bits
+                             | ANTENNA.bits
+                             | MCS.bits
 })
 
 pub struct Tsft {
     pub timer_micros: u64
 }
 
-bitflags!(Flags: u8 {
-    DuringCFP     = 0x01,
-    ShortPreamble = 0x02,
-    EncryptWep    = 0x04,
-    Fragmentation = 0x08,
-    IncludesFCS   = 0x10,
-    HasPadding    = 0x20,
-    FailedFCSChk  = 0x40,
-    ShortGuard    = 0x80
+bitflags!(flags Flags: u8 {
+    static DuringCFP     = 0x01,
+    static ShortPreamble = 0x02,
+    static EncryptWep    = 0x04,
+    static Fragmentation = 0x08,
+    static IncludesFCS   = 0x10,
+    static HasPadding    = 0x20,
+    static FailedFCSChk  = 0x40,
+    static ShortGuard    = 0x80
 })
 
 pub struct Rate {
     pub in_500kbps: u8
 }
 
-bitflags!(ChannelFlags: u16 {
-    Turbo       = 0x0010,
-    CCK         = 0x0020,
-    OFDM        = 0x0040,
-    Ghz2        = 0x0080,
-    Ghz5        = 0x0100,
-    PsvScan     = 0x0200,
-    DynCCK_OFDM = 0x0400,
-    GFSK        = 0x0800
+bitflags!(flags ChannelFlags: u16 {
+    static Turbo       = 0x0010,
+    static CCK         = 0x0020,
+    static OFDM        = 0x0040,
+    static Ghz2        = 0x0080,
+    static Ghz5        = 0x0100,
+    static PsvScan     = 0x0200,
+    static DynCCK_OFDM = 0x0400,
+    static GFSK        = 0x0800
 })
 
 pub struct Channel {

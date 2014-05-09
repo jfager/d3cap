@@ -35,7 +35,7 @@ struct ProtocolHandler<T, C> {
     count: u64,
     size: u64,
     tx: MulticastSender<C>,
-    routes: HashMap<~OrdAddrs<T>, ~RouteStats<T>>
+    routes: HashMap<OrdAddrs<T>, Box<RouteStats<T>>>
 }
 
 impl<T: Ord+Hash+TotalEq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
@@ -44,23 +44,22 @@ impl<T: Ord+Hash+TotalEq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
         ProtocolHandler { typ: typ, count: 0, size: 0, tx: tx, routes: HashMap::new() }
     }
     fn update(&mut self, pkt: &PktMeta<T>) {
-        let key = ~OrdAddrs::from(pkt.src.clone(), pkt.dst.clone());
+        let key = OrdAddrs::from(pkt.src.clone(), pkt.dst.clone());
         let typ = self.typ;
         let stats = self.routes.find_or_insert_with(key, |k| {
-            let &~OrdAddrs((ref v0, ref v1)) = k;
-            ~RouteStats::new(typ, v0.clone(), v1.clone())
+            let &OrdAddrs((ref v0, ref v1)) = k;
+            box RouteStats::new(typ, v0.clone(), v1.clone())
         });
         stats.update(pkt);
         self.tx.send(route_msg(self.typ, *stats));
     }
-    fn spawn(typ: &'static str, mc_tx: &MulticastSender<~str>) -> Sender<~PktMeta<T>> {
+    fn spawn(typ: &'static str, mc_tx: &MulticastSender<~str>) -> Sender<PktMeta<T>> {
         let (tx, rx) = channel();
         let mc_tx = mc_tx.clone();
         TaskBuilder::new().named(format!("{}_handler", typ)).spawn(proc() {
             let mut handler = ProtocolHandler::new(typ, mc_tx);
             loop {
-                let pkt: ~PktMeta<T> = rx.recv();
-                handler.update(pkt);
+                handler.update(&rx.recv());
             }
         });
         tx
@@ -68,7 +67,7 @@ impl<T: Ord+Hash+TotalEq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
 }
 
 fn route_msg<T:ToStr>(typ: &str, rt: &RouteStats<T>) -> ~str {
-    let mut m = ~TreeMap::new();
+    let mut m = box TreeMap::new();
     m.insert("type".to_owned(), typ.to_str().to_json());
     m.insert("a".to_owned(), rt.a.addr.to_str().to_json());
     m.insert("from_a_count".to_owned(), rt.a.sent_count.to_json());
@@ -98,7 +97,7 @@ struct RouteStats<T> {
     typ: &'static str,
     a: AddrStats<T>,
     b: AddrStats<T>,
-    last: RingBuffer<~PktMeta<T>>
+    last: RingBuffer<PktMeta<T>>
 }
 
 impl<T: Hash+Eq+Clone+Send+ToStr> RouteStats<T> {
@@ -132,14 +131,14 @@ impl<T> PktMeta<T> {
 }
 
 struct EthernetCtx {
-    mac: Sender<~PktMeta<MacAddr>>,
-    ip4: Sender<~PktMeta<IP4Addr>>,
-    ip6: Sender<~PktMeta<IP6Addr>>
+    mac: Sender<PktMeta<MacAddr>>,
+    ip4: Sender<PktMeta<IP4Addr>>,
+    ip6: Sender<PktMeta<IP6Addr>>
 }
 
 impl EthernetCtx {
     fn parse(&mut self, pkt: &EthernetHeader, size: u32) {
-        self.mac.send(~PktMeta::new(pkt.src, pkt.dst, size));
+        self.mac.send(PktMeta::new(pkt.src, pkt.dst, size));
         self.dispatch(pkt);
     }
 
@@ -150,11 +149,11 @@ impl EthernetCtx {
             },
             ETHERTYPE_IP4 => {
                 let ipp: &IP4Header = unsafe { trans_off(pkt, 1) };
-                self.ip4.send(~PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32));
+                self.ip4.send(PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32));
             },
             ETHERTYPE_IP6 => {
                 let ipp: &IP6Header = unsafe { trans_off(pkt, 1) };
-                self.ip6.send(~PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32));
+                self.ip6.send(PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32));
             },
             ETHERTYPE_802_1X => {
                 //io::println("802.1X!");
@@ -273,7 +272,7 @@ pub fn run(conf: D3capConf) {
 
         match sess.datalink() {
             cap::DLT_ETHERNET => {
-                let mut ctx = ~EthernetCtx {
+                let mut ctx = EthernetCtx {
                     mac: ProtocolHandler::spawn("mac", &data_tx),
                     ip4: ProtocolHandler::spawn("ip4", &data_tx),
                     ip6: ProtocolHandler::spawn("ip6", &data_tx)
@@ -284,7 +283,7 @@ pub fn run(conf: D3capConf) {
                 loop { sess.next(|t,sz| ctx.parse(t, sz)); }
             },
             cap::DLT_IEEE802_11_RADIO => {
-                let mut ctx = ~RadiotapCtx;
+                let mut ctx = RadiotapCtx;
                 loop { sess.next(|t,_| ctx.parse(t)); }
             },
             x => fail!("unsupported datalink type: {}", x)

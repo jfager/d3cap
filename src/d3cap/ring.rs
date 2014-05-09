@@ -178,7 +178,7 @@ fn test_basics() {
     assert!(*buffer.get(1) == 3);
     assert!(*buffer.get(2) == 4);
     assert!(*buffer.get(3) == 5);
-    assert!(buffer.to_str() == ~"[2, 3, 4, 5]");
+    assert!(buffer.to_str() == "[2, 3, 4, 5]");
 
     // clear
     buffer.clear();
