@@ -65,12 +65,12 @@ pub fn parseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake>
         _ => return None
     };
 
-    let prop: ~[~str] = line.split_str(" ").map(|s|s.to_owned()).collect();
+    let prop: Vec<~str> = line.split_str(" ").map(|s|s.to_owned()).collect();
     let mut hs = Handshake {
         //host: ~"",
         //origin: ~"",
         key: "".to_owned(),
-        resource: prop[1].trim().to_owned(),
+        resource: prop.get(1).trim().to_owned(),
         frameType: OpeningFrame
     };
 
@@ -86,13 +86,13 @@ pub fn parseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake>
             return if hasHandshake { Some(hs) } else { None };
         }
 
-        let prop: ~[~str] = line.split_str(": ").map(|s|s.to_owned()).collect();
+        let prop: Vec<~str> = line.split_str(": ").map(|s|s.to_owned()).collect();
         if prop.len() != 2 {
             println!("Unexpected line: '{}'", line);
             return None;
         }
-        let key = prop[0].trim();
-        let val = prop[1].trim();
+        let key = prop.get(0).trim();
+        let val = prop.get(1).trim();
 
         match key {
             //should be KEY_FIELD but https://github.com/mozilla/rust/issues/11940
@@ -131,7 +131,7 @@ fn frameTypeFrom(i: u8) -> FrameType {
     unsafe { std::cast::transmute(i) }
 }
 
-pub fn parseInputFrame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<~[u8]>, FrameType) {
+pub fn parseInputFrame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<Vec<u8>>, FrameType) {
     let hdr = match s.read_exact(2 as uint) {
         Ok(h) => if h.len() == 2 { h } else { return (None, ErrorFrame) },
         //Ok(h) if h.len() == 2 => h //Fails w/ cannot bind by-move into a pattern guard

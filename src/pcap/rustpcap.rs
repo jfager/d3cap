@@ -1,7 +1,7 @@
 #![link(name="rustpcap", vers="0.0.1")]
 
 use libc::{c_char,c_int};
-use std::{ptr,slice,str};
+use std::{ptr,str,vec};
 use pcap::*;
 
 //TODO: http://www.tcpdump.org/linktypes.html
@@ -80,11 +80,11 @@ impl PcapSession {
         unsafe { pcap_datalink(self.p) }
     }
 
-    pub fn list_datalinks(&self) -> ~[i32] {
+    pub fn list_datalinks(&self) -> Vec<i32> {
         unsafe {
             let mut dlt_buf = ptr::mut_null();
             let sz = pcap_list_datalinks(self.p, &mut dlt_buf);
-            let out = slice::raw::from_buf_raw(dlt_buf as *c_int, sz as uint);
+            let out = vec::raw::from_buf(dlt_buf as *c_int, sz as uint);
             pcap_free_datalinks(dlt_buf);
             out
         }
