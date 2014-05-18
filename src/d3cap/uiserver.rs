@@ -68,8 +68,7 @@ fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Receiver<~
 }
 
 pub fn uiServer(mc: Multicast<~str>, port: u16) {
-    let addr = SocketAddr { ip: Ipv4Addr(127, 0, 0, 1), port: port };
-    let mut acceptor = TcpListener::bind(addr).listen();
+    let mut acceptor = TcpListener::bind("127.0.0.1", port).listen();
     println!("Server listening on port {}", port as uint);
 
     let mut workercount = 0;

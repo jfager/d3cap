@@ -128,7 +128,7 @@ pub fn writeFrame<W:Writer>(data: &[u8], frameType: FrameType, w: &mut W) -> IoR
 }
 
 fn frameTypeFrom(i: u8) -> FrameType {
-    unsafe { std::cast::transmute(i) }
+    unsafe { std::mem::transmute(i) }
 }
 
 pub fn parseInputFrame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<Vec<u8>>, FrameType) {

@@ -68,13 +68,13 @@ impl<T: Ord+Hash+TotalEq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
 
 fn route_msg<T:ToStr>(typ: &str, rt: &RouteStats<T>) -> ~str {
     let mut m = box TreeMap::new();
-    m.insert("type".to_owned(), typ.to_str().to_json());
-    m.insert("a".to_owned(), rt.a.addr.to_str().to_json());
-    m.insert("from_a_count".to_owned(), rt.a.sent_count.to_json());
-    m.insert("from_a_size".to_owned(), rt.a.sent_size.to_json());
-    m.insert("b".to_owned(), rt.b.addr.to_str().to_json());
-    m.insert("from_b_count".to_owned(), rt.b.sent_count.to_json());
-    m.insert("from_b_size".to_owned(), rt.b.sent_size.to_json());
+    m.insert("type".to_strbuf(), typ.to_strbuf().to_json());
+    m.insert("a".to_strbuf(), rt.a.addr.to_str().to_strbuf().to_json());
+    m.insert("from_a_count".to_strbuf(), rt.a.sent_count.to_json());
+    m.insert("from_a_size".to_strbuf(), rt.a.sent_size.to_json());
+    m.insert("b".to_strbuf(), rt.b.addr.to_str().to_strbuf().to_json());
+    m.insert("from_b_count".to_strbuf(), rt.b.sent_count.to_json());
+    m.insert("from_b_size".to_strbuf(), rt.b.sent_size.to_json());
     json::Object(m).to_str()
 }
 
@@ -255,7 +255,7 @@ pub fn run(conf: D3capConf) {
     TaskBuilder::new().named("packet_capture").spawn(proc() {
 
         let mut sessBuilder = match conf.interface {
-            Some(ref dev) => cap::PcapSessionBuilder::new_dev(*dev),
+            Some(ref dev) => cap::PcapSessionBuilder::new_dev(dev.as_slice()),
             None => cap::PcapSessionBuilder::new()
         };
 
@@ -293,7 +293,7 @@ pub fn run(conf: D3capConf) {
 
 pub struct D3capConf {
     pub port: u16,
-    pub interface: Option<~str>,
+    pub interface: Option<StrBuf>,
     pub promisc: bool,
     pub monitor: bool
 }

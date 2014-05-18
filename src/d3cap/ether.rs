@@ -7,7 +7,7 @@ fixed_vec!(MacAddr, u8, 6)
 impl Show for MacAddr {
     fn fmt(&self, fo: &mut Formatter) -> fmt::Result {
         let &MacAddr(a) = self;
-        write!(fo.buf, "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+        write!(fo, "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
                a[0], a[1], a[2], a[3], a[4], a[5])
     }
 }

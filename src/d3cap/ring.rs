@@ -110,16 +110,16 @@ impl<'s, T> Iterator<&'s T> for RingIterator<'s, T> {
 // the elements in the same order as they appear to users.
 impl<T: Show> Show for RingBuffer<T> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f.buf, "[");
+        write!(f, "[");
         let mut first = true;
         for e in self.iter() {
             if !first {
-                write!(f.buf, ",");
+                write!(f, ",");
             }
             first = false;
             e.fmt(f);
         }
-        write!(f.buf, "]")
+        write!(f, "]")
     }
 }
 

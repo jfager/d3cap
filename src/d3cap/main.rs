@@ -32,7 +32,9 @@ fn main() {
     let promisc_flag = "P";
     let monitor_flag = "M";
 
-    let args = os::args();
+    let args:Vec<StrBuf> = os::args().iter()
+                                     .map(|x| x.to_strbuf())
+                                     .collect();
     let opts = ~[
         go::optopt(port_opt, "port", "Websocket port", ""),
         go::optopt(interface_opt, "interface", "Network interface to listen on", ""),
@@ -45,8 +47,8 @@ fn main() {
         Err(f) => { fail!(f.to_err_msg()) }
     };
 
-    let port = matches.opt_str(port_opt).unwrap_or("7432".to_owned());
-    let port = from_str::<u16>(port).unwrap();
+    let port = matches.opt_str(port_opt).unwrap_or("7432".to_strbuf());
+    let port = from_str::<u16>(port.to_owned()).unwrap();
 
     let conf = D3capConf {
         port: port,

@@ -25,10 +25,10 @@ pub struct __mbstate_t {
 }
 impl __mbstate_t {
     pub fn __mbstate8(&mut self) -> *mut [c_schar, ..128u] {
-        unsafe { ::std::cast::transmute(self) }
+        unsafe { ::std::mem::transmute(self) }
     }
     pub fn _mbstateL(&mut self) -> *mut c_longlong {
-        unsafe { ::std::cast::transmute(self) }
+        unsafe { ::std::mem::transmute(self) }
     }
 }
 pub type __darwin_mbstate_t = __mbstate_t;
