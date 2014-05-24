@@ -8,7 +8,7 @@ use ws = rustwebsocket;
 
 use multicast::Multicast;
 
-fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Receiver<~str>) {
+fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Receiver<StrBuf>) {
     println!("websocketWorker");
     let handshake = ws::parseHandshake(tcps);
     match handshake {
@@ -67,7 +67,7 @@ fn websocketWorker<S: Stream>(tcps: &mut BufferedStream<S>, data_po: &Receiver<~
     println!("Done with worker");
 }
 
-pub fn uiServer(mc: Multicast<~str>, port: u16) {
+pub fn uiServer(mc: Multicast<StrBuf>, port: u16) {
     let mut acceptor = TcpListener::bind("127.0.0.1", port).listen();
     println!("Server listening on port {}", port as uint);
 

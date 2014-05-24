@@ -40,14 +40,14 @@ enum State {
 struct Handshake {
     //host: ~str,
     //origin: ~str,
-    key: ~str,
-    resource: ~str,
+    key: StrBuf,
+    resource: StrBuf,
     frameType: FrameType
 }
 
 impl Handshake {
-    pub fn getAnswer(&self) -> ~str {
-        let res = crypto_hash::hash(crypto_hash::SHA1, (self.key + SECRET).as_bytes());
+    pub fn getAnswer(&self) -> StrBuf {
+        let res = crypto_hash::hash(crypto_hash::SHA1, self.key.as_bytes());
         let responseKey = res.as_slice().to_base64(STANDARD);
         format!("HTTP/1.1 101 Switching Protocols\r\n\
                  {}: {}\r\n\
@@ -65,12 +65,12 @@ pub fn parseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake>
         _ => return None
     };
 
-    let prop: Vec<~str> = line.split_str(" ").map(|s|s.to_owned()).collect();
+    let prop: Vec<StrBuf> = line.as_slice().split_str(" ").map(|s|s.to_owned()).collect();
     let mut hs = Handshake {
         //host: ~"",
         //origin: ~"",
         key: "".to_owned(),
-        resource: prop.get(1).trim().to_owned(),
+        resource: prop.get(1).as_slice().trim().to_owned(),
         frameType: OpeningFrame
     };
 
@@ -81,12 +81,12 @@ pub fn parseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake>
             _ => return if hasHandshake { Some(hs) } else { None }
         };
 
-        let line = line.trim();
+        let line = line.as_slice().trim();
         if line.is_empty() {
             return if hasHandshake { Some(hs) } else { None };
         }
 
-        let prop: Vec<~str> = line.split_str(": ").map(|s|s.to_owned()).collect();
+        let prop: Vec<&str> = line.as_slice().split_str(": ").collect();
         if prop.len() != 2 {
             println!("Unexpected line: '{}'", line);
             return None;
@@ -97,7 +97,7 @@ pub fn parseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake>
         match key {
             //should be KEY_FIELD but https://github.com/mozilla/rust/issues/11940
             "Sec-WebSocket-Key" => {
-                hs.key = val.to_owned();
+                hs.key = val.to_owned().append(SECRET);
                 hasHandshake = true;
             }
             _ => () //do nothing

@@ -38,8 +38,8 @@ struct ProtocolHandler<T, C> {
     routes: HashMap<OrdAddrs<T>, Box<RouteStats<T>>>
 }
 
-impl<T: Ord+Hash+TotalEq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
-    fn new(typ: &'static str, tx: MulticastSender<~str>) -> ProtocolHandler<T,~str> {
+impl<T: Ord+Hash+TotalEq+Clone+Send+ToStr> ProtocolHandler<T,StrBuf> {
+    fn new(typ: &'static str, tx: MulticastSender<StrBuf>) -> ProtocolHandler<T,StrBuf> {
         //FIXME:  this is the map that's hitting https://github.com/mozilla/rust/issues/11102
         ProtocolHandler { typ: typ, count: 0, size: 0, tx: tx, routes: HashMap::new() }
     }
@@ -53,7 +53,7 @@ impl<T: Ord+Hash+TotalEq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
         stats.update(pkt);
         self.tx.send(route_msg(self.typ, *stats));
     }
-    fn spawn(typ: &'static str, mc_tx: &MulticastSender<~str>) -> Sender<PktMeta<T>> {
+    fn spawn(typ: &'static str, mc_tx: &MulticastSender<StrBuf>) -> Sender<PktMeta<T>> {
         let (tx, rx) = channel();
         let mc_tx = mc_tx.clone();
         TaskBuilder::new().named(format!("{}_handler", typ)).spawn(proc() {
@@ -66,7 +66,7 @@ impl<T: Ord+Hash+TotalEq+Clone+Send+ToStr> ProtocolHandler<T,~str> {
     }
 }
 
-fn route_msg<T:ToStr>(typ: &str, rt: &RouteStats<T>) -> ~str {
+fn route_msg<T:ToStr>(typ: &str, rt: &RouteStats<T>) -> StrBuf {
     let mut m = box TreeMap::new();
     m.insert("type".to_strbuf(), typ.to_strbuf().to_json());
     m.insert("a".to_strbuf(), rt.a.addr.to_str().to_strbuf().to_json());
