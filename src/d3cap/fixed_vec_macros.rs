@@ -11,7 +11,7 @@ macro_rules! fixed_vec(
             }
         }
 
-        impl Eq for $t {
+        impl PartialEq for $t {
             fn eq(&self, other: &$t) -> bool {
                 let &$t(a) = self;
                 let &$t(b) = other;
@@ -21,7 +21,7 @@ macro_rules! fixed_vec(
 
         impl TotalEq for $t {}
 
-        impl Ord for $t {
+        impl PartialOrd for $t {
             fn lt(&self, other: &$t) -> bool {
                 let &$t(a) = self;
                 let &$t(b) = other;

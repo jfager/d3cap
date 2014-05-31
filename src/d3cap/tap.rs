@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::mem::size_of;
 use util::trans_off;
 

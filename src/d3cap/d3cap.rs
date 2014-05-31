@@ -12,7 +12,7 @@ use time;
 
 use ring::RingBuffer;
 use multicast::{Multicast, MulticastSender};
-use uiserver::uiServer;
+use uiserver::UIServer;
 use util::{ntohs, trans_off};
 use ip::{IP4Addr, IP6Addr, IP4Header, IP6Header};
 use ether::{EthernetHeader, MacAddr,
@@ -22,9 +22,9 @@ use tap;
 
 type Addrs<T> = (T, T);
 
-#[deriving(Eq,TotalEq, Hash)]
+#[deriving(PartialEq,TotalEq,PartialOrd,Hash)]
 struct OrdAddrs<T>(Addrs<T>);
-impl<T: Ord+Hash> OrdAddrs<T> {
+impl<T: PartialOrd+Hash> OrdAddrs<T> {
     fn from(a: T, b: T) -> OrdAddrs<T> {
         if a <= b { OrdAddrs((a, b)) } else { OrdAddrs((b, a)) }
     }
@@ -38,8 +38,8 @@ struct ProtocolHandler<T, C> {
     routes: HashMap<OrdAddrs<T>, Box<RouteStats<T>>>
 }
 
-impl<T: Ord+Hash+TotalEq+Clone+Send+ToStr> ProtocolHandler<T,StrBuf> {
-    fn new(typ: &'static str, tx: MulticastSender<StrBuf>) -> ProtocolHandler<T,StrBuf> {
+impl<T: PartialOrd+Hash+TotalEq+Clone+Send+ToStr> ProtocolHandler<T,String> {
+    fn new(typ: &'static str, tx: MulticastSender<String>) -> ProtocolHandler<T,String> {
         //FIXME:  this is the map that's hitting https://github.com/mozilla/rust/issues/11102
         ProtocolHandler { typ: typ, count: 0, size: 0, tx: tx, routes: HashMap::new() }
     }
@@ -53,7 +53,7 @@ impl<T: Ord+Hash+TotalEq+Clone+Send+ToStr> ProtocolHandler<T,StrBuf> {
         stats.update(pkt);
         self.tx.send(route_msg(self.typ, *stats));
     }
-    fn spawn(typ: &'static str, mc_tx: &MulticastSender<StrBuf>) -> Sender<PktMeta<T>> {
+    fn spawn(typ: &'static str, mc_tx: &MulticastSender<String>) -> Sender<PktMeta<T>> {
         let (tx, rx) = channel();
         let mc_tx = mc_tx.clone();
         TaskBuilder::new().named(format!("{}_handler", typ)).spawn(proc() {
@@ -66,15 +66,15 @@ impl<T: Ord+Hash+TotalEq+Clone+Send+ToStr> ProtocolHandler<T,StrBuf> {
     }
 }
 
-fn route_msg<T:ToStr>(typ: &str, rt: &RouteStats<T>) -> StrBuf {
+fn route_msg<T:ToStr>(typ: &str, rt: &RouteStats<T>) -> String {
     let mut m = box TreeMap::new();
-    m.insert("type".to_strbuf(), typ.to_strbuf().to_json());
-    m.insert("a".to_strbuf(), rt.a.addr.to_str().to_strbuf().to_json());
-    m.insert("from_a_count".to_strbuf(), rt.a.sent_count.to_json());
-    m.insert("from_a_size".to_strbuf(), rt.a.sent_size.to_json());
-    m.insert("b".to_strbuf(), rt.b.addr.to_str().to_strbuf().to_json());
-    m.insert("from_b_count".to_strbuf(), rt.b.sent_count.to_json());
-    m.insert("from_b_size".to_strbuf(), rt.b.sent_size.to_json());
+    m.insert("type".to_string(), typ.to_string().to_json());
+    m.insert("a".to_string(), rt.a.addr.to_str().to_string().to_json());
+    m.insert("from_a_count".to_string(), rt.a.sent_count.to_json());
+    m.insert("from_a_size".to_string(), rt.a.sent_size.to_json());
+    m.insert("b".to_string(), rt.b.addr.to_str().to_string().to_json());
+    m.insert("from_b_count".to_string(), rt.b.sent_count.to_json());
+    m.insert("from_b_size".to_string(), rt.b.sent_size.to_json());
     json::Object(m).to_str()
 }
 
@@ -100,7 +100,7 @@ struct RouteStats<T> {
     last: RingBuffer<PktMeta<T>>
 }
 
-impl<T: Hash+Eq+Clone+Send+ToStr> RouteStats<T> {
+impl<T: Hash+TotalEq+Clone+Send+ToStr> RouteStats<T> {
     fn new(typ: &'static str, a: T, b: T) -> RouteStats<T> {
         RouteStats {
             typ: typ,
@@ -249,7 +249,7 @@ pub fn run(conf: D3capConf) {
 
     let port = conf.port;
     TaskBuilder::new().named("socket_listener").spawn(proc() {
-        uiServer(mc, port);
+        UIServer.run(mc, port);
     });
 
     TaskBuilder::new().named("packet_capture").spawn(proc() {
@@ -268,7 +268,7 @@ pub fn run(conf: D3capConf) {
 
         println!("Starting capture loop");
 
-        println!("Available datalink types: {:?}", sess.list_datalinks());
+        println!("Available datalink types: {}", sess.list_datalinks());
 
         match sess.datalink() {
             cap::DLT_ETHERNET => {
@@ -293,7 +293,7 @@ pub fn run(conf: D3capConf) {
 
 pub struct D3capConf {
     pub port: u16,
-    pub interface: Option<StrBuf>,
+    pub interface: Option<String>,
     pub promisc: bool,
     pub monitor: bool
 }

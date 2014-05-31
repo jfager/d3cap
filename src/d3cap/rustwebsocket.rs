@@ -38,15 +38,13 @@ enum State {
 }
 
 struct Handshake {
-    //host: ~str,
-    //origin: ~str,
-    key: StrBuf,
-    resource: StrBuf,
+    key: String,
+    resource: String,
     frameType: FrameType
 }
 
 impl Handshake {
-    pub fn getAnswer(&self) -> StrBuf {
+    pub fn get_answer(&self) -> String {
         let res = crypto_hash::hash(crypto_hash::SHA1, self.key.as_bytes());
         let responseKey = res.as_slice().to_base64(STANDARD);
         format!("HTTP/1.1 101 Switching Protocols\r\n\
@@ -59,18 +57,18 @@ impl Handshake {
     }
 }
 
-pub fn parseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake> {
+pub fn parse_handshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake> {
     let line = match s.read_line() {
         Ok(ln) => ln,
         _ => return None
     };
 
-    let prop: Vec<StrBuf> = line.as_slice().split_str(" ").map(|s|s.to_owned()).collect();
+    let prop: Vec<&str> = line.as_slice().split_str(" ").collect();
     let mut hs = Handshake {
         //host: ~"",
         //origin: ~"",
-        key: "".to_owned(),
-        resource: prop.get(1).as_slice().trim().to_owned(),
+        key: "".to_string(),
+        resource: prop.get(1).as_slice().trim().to_string(),
         frameType: OpeningFrame
     };
 
@@ -97,7 +95,7 @@ pub fn parseHandshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake>
         match key {
             //should be KEY_FIELD but https://github.com/mozilla/rust/issues/11940
             "Sec-WebSocket-Key" => {
-                hs.key = val.to_owned().append(SECRET);
+                hs.key = val.to_string().append(SECRET);
                 hasHandshake = true;
             }
             _ => () //do nothing
@@ -111,7 +109,7 @@ static MED_FRAME: uint = 65535;
 static MED_FRAME_FLAG: u8 = 126;
 static LARGE_FRAME_FLAG: u8 = 127;
 
-pub fn writeFrame<W:Writer>(data: &[u8], frameType: FrameType, w: &mut W) -> IoResult<()> {
+pub fn write_frame<W:Writer>(data: &[u8], frameType: FrameType, w: &mut W) -> IoResult<()> {
     try!(w.write_u8((0x80 | frameType as int) as u8));
 
     if data.len() <= SMALL_FRAME {
@@ -127,11 +125,11 @@ pub fn writeFrame<W:Writer>(data: &[u8], frameType: FrameType, w: &mut W) -> IoR
     w.flush()
 }
 
-fn frameTypeFrom(i: u8) -> FrameType {
+fn frame_type_from(i: u8) -> FrameType {
     unsafe { std::mem::transmute(i) }
 }
 
-pub fn parseInputFrame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<Vec<u8>>, FrameType) {
+pub fn parse_input_frame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<Vec<u8>>, FrameType) {
     let hdr = match s.read_exact(2 as uint) {
         Ok(h) => if h.len() == 2 { h } else { return (None, ErrorFrame) },
         //Ok(h) if h.len() == 2 => h //Fails w/ cannot bind by-move into a pattern guard
@@ -151,7 +149,7 @@ pub fn parseInputFrame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<Vec<u8>>
     || opcode == ClosingFrame as u8
     || opcode == PingFrame as u8
     || opcode == PongFrame as u8 {
-        let frameType = frameTypeFrom(opcode);
+        let frameType = frame_type_from(opcode);
         let payloadLength = hdr.get(1) & 0x7F;
         if payloadLength < 0x7E { //Only handle short payloads right now.
             let toread = (payloadLength + 4) as uint; //+4 for mask
