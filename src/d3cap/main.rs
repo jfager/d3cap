@@ -35,16 +35,16 @@ fn main() {
     let args:Vec<String> = os::args().iter()
                                      .map(|x| x.to_str())
                                      .collect();
-    let opts = ~[
+    let opts = vec![
         go::optopt(port_opt, "port", "Websocket port", ""),
         go::optopt(interface_opt, "interface", "Network interface to listen on", ""),
         go::optflag(promisc_flag, "promisc", "Turn on promiscuous mode"),
         go::optflag(monitor_flag, "monitor", "Turn on monitor mode")
     ];
 
-    let matches = match go::getopts(args.tail(), opts) {
+    let matches = match go::getopts(args.tail(), opts.as_slice()) {
         Ok(m) => { m }
-        Err(f) => { fail!(f.to_err_msg()) }
+        Err(f) => { fail!("{}", f) }
     };
 
     let port = matches.opt_str(port_opt).unwrap_or("7432".to_string());

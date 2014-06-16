@@ -1,12 +1,11 @@
 use std;
 use std::task::{TaskBuilder};
 use std::hash::Hash;
+use std::collections::treemap::TreeMap;
+use std::collections::hashmap::HashMap;
 
 use serialize::{json};
 use serialize::json::ToJson;
-
-use collections::treemap::TreeMap;
-use collections::hashmap::HashMap;
 
 use time;
 
@@ -22,7 +21,7 @@ use tap;
 
 type Addrs<T> = (T, T);
 
-#[deriving(PartialEq,TotalEq,PartialOrd,Hash)]
+#[deriving(PartialEq,Eq,PartialOrd,Hash)]
 struct OrdAddrs<T>(Addrs<T>);
 impl<T: PartialOrd+Hash> OrdAddrs<T> {
     fn from(a: T, b: T) -> OrdAddrs<T> {
@@ -38,7 +37,7 @@ struct ProtocolHandler<T, C> {
     routes: HashMap<OrdAddrs<T>, Box<RouteStats<T>>>
 }
 
-impl<T: PartialOrd+Hash+TotalEq+Clone+Send+ToStr> ProtocolHandler<T,String> {
+impl<T: PartialOrd+Hash+Eq+Clone+Send+ToStr> ProtocolHandler<T,String> {
     fn new(typ: &'static str, tx: MulticastSender<String>) -> ProtocolHandler<T,String> {
         //FIXME:  this is the map that's hitting https://github.com/mozilla/rust/issues/11102
         ProtocolHandler { typ: typ, count: 0, size: 0, tx: tx, routes: HashMap::new() }
@@ -100,7 +99,7 @@ struct RouteStats<T> {
     last: RingBuffer<PktMeta<T>>
 }
 
-impl<T: Hash+TotalEq+Clone+Send+ToStr> RouteStats<T> {
+impl<T: Hash+Eq+Clone+Send+ToStr> RouteStats<T> {
     fn new(typ: &'static str, a: T, b: T) -> RouteStats<T> {
         RouteStats {
             typ: typ,

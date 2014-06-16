@@ -4,7 +4,7 @@ macro_rules! fixed_vec(
     ($t:ident, $arrt: ty, $len:expr) => (
         pub struct $t([$arrt,..$len]);
 
-        impl<S: Writer> Hash<S> for $t {
+        impl<S: ::std::hash::Writer> Hash<S> for $t {
             fn hash(&self, state: &mut S) {
                 let &$t(a) = self;
                 a.hash(state)
@@ -19,7 +19,7 @@ macro_rules! fixed_vec(
             }
         }
 
-        impl TotalEq for $t {}
+        impl Eq for $t {}
 
         impl PartialOrd for $t {
             fn lt(&self, other: &$t) -> bool {

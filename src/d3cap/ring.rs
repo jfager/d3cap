@@ -216,14 +216,14 @@ fn test_functional() {
     }
     assert!(max == 5);
 
-    let odd: ~[bool] = buffer.iter().map(|e| {*e & 1 == 1}).collect();
-    assert!(odd == ~[true, true, true, false]);
+    let odd: Vec<bool> = buffer.iter().map(|e| {*e & 1 == 1}).collect();
+    assert!(odd == vec![true, true, true, false]);
 
     // filter returns elements for which the closure returns true
-    let odd: ~[int] = buffer.iter().filter_map(|&e| {
+    let odd: Vec<int> = buffer.iter().filter_map(|&e| {
         if e & 1 == 1 { Some(e) } else { None }
     }).collect();
-    assert!(odd == ~[1, 3, 5]);
+    assert!(odd == vec![1, 3, 5]);
 
     // fold uses the closure to combine elements together (possibly into a different type)
     // either forwards (foldl) or in reverse (foldr)
