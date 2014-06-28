@@ -74,7 +74,7 @@ impl UIServer {
         let mut acceptor = TcpListener::bind("127.0.0.1", port).listen();
         println!("Server listening on port {}", port as uint);
 
-        let mut workercount = 0;
+        let mut workercount = 0u;
         for tcp_stream in acceptor.incoming() {
             let (conn_tx, conn_rx) = channel();
             mc.add_dest_chan(conn_tx);

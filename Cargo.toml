@@ -1,0 +1,21 @@
+[package]
+
+name = "d3cap"
+version = "0.0.1"
+authors = [ "jfager@gmail.com" ]
+
+
+[[bin]]
+
+name = "d3cap"
+path = "src/d3cap/main.rs"
+
+[[lib]]
+
+name = "pcap"
+path = "src/pcap/lib.rs"
+
+
+[dependencies.openssl]
+
+git = "https://github.com/sfackler/rust-openssl.git"

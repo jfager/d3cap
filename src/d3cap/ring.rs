@@ -114,7 +114,7 @@ impl<T: Show> Show for RingBuffer<T> {
         let mut first = true;
         for e in self.iter() {
             if !first {
-                try!(write!(f, ","));
+                try!(write!(f, ", "));
             }
             first = false;
             try!(e.fmt(f));
@@ -126,14 +126,14 @@ impl<T: Show> Show for RingBuffer<T> {
 #[test]
 fn test_basics() {
     // size 0
-    let buffer: RingBuffer<int> = RingBuffer(0);    // rust type inference works very well, but not in this case
+    let buffer: RingBuffer<int> = RingBuffer::new(0);    // rust type inference works very well, but not in this case
     assert!(buffer.len() == 0);
 
     // size 1
-    let mut buffer = RingBuffer(1);
+    let mut buffer = RingBuffer::new(1);
     assert!(buffer.len() == 0);
 
-    buffer.push(2);
+    buffer.push(2i);
     assert!(buffer.len() == 1);
     assert!(*buffer.get(0) == 2);
 
@@ -142,10 +142,10 @@ fn test_basics() {
     assert!(*buffer.get(0) == 3);
 
     // size 4
-    let mut buffer = RingBuffer(4);
+    let mut buffer = RingBuffer::new(4);
     assert!(buffer.len() == 0);
 
-    buffer.push(1);
+    buffer.push(1i);
     assert!(buffer.len() == 1);
     assert!(*buffer.get(0) == 1);
 
@@ -178,7 +178,7 @@ fn test_basics() {
     assert!(*buffer.get(1) == 3);
     assert!(*buffer.get(2) == 4);
     assert!(*buffer.get(3) == 5);
-    assert!(buffer.to_str() == "[2, 3, 4, 5]");
+    assert!(buffer.to_str() == "[2, 3, 4, 5]".to_str());
 
     // clear
     buffer.clear();
@@ -201,7 +201,7 @@ fn test_basics() {
 // each, map, filter, and fold.
 #[test]
 fn test_functional() {
-    let mut buffer: RingBuffer<int> = RingBuffer(4);
+    let mut buffer: RingBuffer<int> = RingBuffer::new(4);
     buffer.push(1);
     buffer.push(3);
     buffer.push(5);
@@ -211,7 +211,7 @@ fn test_functional() {
     // it is more functional than an explicit loop, but requires side effects in order to
     // do anything useful (because the closures user's give to each don't return values)
     let mut max = 0;
-    for element in buffer {
+    for element in buffer.iter() {
         if *element > max {max = *element}    // dereference because each returns elements by reference
     }
     assert!(max == 5);

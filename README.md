@@ -8,19 +8,15 @@ A [libpcap]-based network activity visualizer / playground for learning [d3] and
 
 Includes half-assed rust bindings for libpcap and a quarter-assed rust websocket server implementation.
 
-To run, you need libpcap installed and a recent rust compiler (I try to track rust master).  Due to crypto code being pulled out of core rust, you'll also need the openssl bindings provided by the [rustcrypto] project (d3cap's Makefile assumes that this is checked out and built in a sibling directory).
+To try it out, you'll need libpcap installed and a recent rust compiler.  Once these are set up, clone the project and use [cargo] to build, like so:
 
-[rustcrypto]: https://github.com/kballard/rustcrypto
-
-Once your deps are set up, to build
+[cargo]: http://crates.io
 
     $ git clone https://github.com/jfager/d3cap.git
     $ cd d3cap
-    $ make run
+    $ cargo build
 
-I'm going to try to convert to rustpkg at some point soon, which should make all this much easier.
-
-Open d3cap/client.html in a browser and hit the Connect button to attach to this running backend and you should start seeing network activity pop up, like so:
+The resulting binary ends up in target/d3cap.  Run this and open src/client/client.html in a browser and hit the Connect button, and you should start seeing network activity pop up:
 
 ![](https://raw.github.com/jfager/d3cap/master/d3cap.png "d3cap")
 

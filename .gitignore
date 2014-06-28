@@ -1,4 +1,3 @@
 *~
 *.dSYM
-build/
-
+target/
