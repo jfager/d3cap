@@ -28,7 +28,7 @@ impl WebSocketWorker {
         }
 
         loop {
-            let mut counter = 0;
+            let mut counter = 0u;
             loop {
                 match data_po.try_recv() {
                     Ok(msg) => {

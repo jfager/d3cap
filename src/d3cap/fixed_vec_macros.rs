@@ -22,10 +22,10 @@ macro_rules! fixed_vec(
         impl Eq for $t {}
 
         impl PartialOrd for $t {
-            fn lt(&self, other: &$t) -> bool {
+            fn partial_cmp(&self, other: &$t) -> Option<Ordering> {
                 let &$t(a) = self;
                 let &$t(b) = other;
-                a.as_slice().lt(&b.as_slice())
+                a.as_slice().partial_cmp(&b.as_slice())
             }
         }
 

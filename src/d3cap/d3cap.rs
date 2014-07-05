@@ -66,7 +66,7 @@ impl<T: PartialOrd+Hash+Eq+Clone+Send+ToStr> ProtocolHandler<T,String> {
 }
 
 fn route_msg<T:ToStr>(typ: &str, rt: &RouteStats<T>) -> String {
-    let mut m = box TreeMap::new();
+    let mut m = TreeMap::new();
     m.insert("type".to_string(), typ.to_string().to_json());
     m.insert("a".to_string(), rt.a.addr.to_str().to_string().to_json());
     m.insert("from_a_count".to_string(), rt.a.sent_count.to_json());

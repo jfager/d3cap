@@ -29,11 +29,11 @@ impl PcapSessionBuilder {
         if dev.is_null() {
             fail!("No device available");
         }
-        println!("Using dev {}", unsafe { str::raw::from_c_str(dev as *c_char) });
-        PcapSessionBuilder::do_new(dev as *c_char, errbuf.as_mut_slice())
+        println!("Using dev {}", unsafe { str::raw::from_c_str(dev as *const c_char) });
+        PcapSessionBuilder::do_new(dev as *const c_char, errbuf.as_mut_slice())
     }
 
-    fn do_new(dev: *c_char, errbuf: &mut [c_char]) -> PcapSessionBuilder {
+    fn do_new(dev: *const c_char, errbuf: &mut [c_char]) -> PcapSessionBuilder {
         let p = unsafe { pcap_create(dev, errbuf.as_mut_ptr()) };
         if p.is_null() { fail!("Could not initialize device"); }
         PcapSessionBuilder { p: p, activated: false }
@@ -84,7 +84,7 @@ impl PcapSession {
         unsafe {
             let mut dlt_buf = ptr::mut_null();
             let sz = pcap_list_datalinks(self.p, &mut dlt_buf);
-            let out = vec::raw::from_buf(dlt_buf as *c_int, sz as uint);
+            let out = vec::raw::from_buf(dlt_buf as *const c_int, sz as uint);
             pcap_free_datalinks(dlt_buf);
             out
         }
@@ -98,7 +98,7 @@ impl PcapSession {
         match res {
             0 => return, //timed out
             1 => {
-                let (t, sz) = unsafe { (&*(data_ptr as *T), (*head_ptr).len) };
+                let (t, sz) = unsafe { (&*(data_ptr as *const T), (*head_ptr).len) };
                 f(t, sz);
             }
             _ => {
