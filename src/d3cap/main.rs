@@ -1,5 +1,3 @@
-#![crate_id="d3cap#0.0.1"]
-
 #![feature(macro_rules, default_type_params)]
 
 extern crate std;
@@ -33,7 +31,7 @@ fn main() {
     let monitor_flag = "M";
 
     let args:Vec<String> = os::args().iter()
-                                     .map(|x| x.to_str())
+                                     .map(|x| x.to_string())
                                      .collect();
     let opts = vec![
         go::optopt(port_opt, "port", "Websocket port", ""),

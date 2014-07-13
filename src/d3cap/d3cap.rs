@@ -37,7 +37,7 @@ struct ProtocolHandler<T, C> {
     routes: HashMap<OrdAddrs<T>, Box<RouteStats<T>>>
 }
 
-impl<T: PartialOrd+Hash+Eq+Clone+Send+ToStr> ProtocolHandler<T,String> {
+impl<T: PartialOrd+Hash+Eq+Clone+Send+ToString> ProtocolHandler<T,String> {
     fn new(typ: &'static str, tx: MulticastSender<String>) -> ProtocolHandler<T,String> {
         //FIXME:  this is the map that's hitting https://github.com/mozilla/rust/issues/11102
         ProtocolHandler { typ: typ, count: 0, size: 0, tx: tx, routes: HashMap::new() }
@@ -65,16 +65,16 @@ impl<T: PartialOrd+Hash+Eq+Clone+Send+ToStr> ProtocolHandler<T,String> {
     }
 }
 
-fn route_msg<T:ToStr>(typ: &str, rt: &RouteStats<T>) -> String {
+fn route_msg<T:ToString>(typ: &str, rt: &RouteStats<T>) -> String {
     let mut m = TreeMap::new();
     m.insert("type".to_string(), typ.to_string().to_json());
-    m.insert("a".to_string(), rt.a.addr.to_str().to_string().to_json());
+    m.insert("a".to_string(), rt.a.addr.to_string().to_string().to_json());
     m.insert("from_a_count".to_string(), rt.a.sent_count.to_json());
     m.insert("from_a_size".to_string(), rt.a.sent_size.to_json());
-    m.insert("b".to_string(), rt.b.addr.to_str().to_string().to_json());
+    m.insert("b".to_string(), rt.b.addr.to_string().to_string().to_json());
     m.insert("from_b_count".to_string(), rt.b.sent_count.to_json());
     m.insert("from_b_size".to_string(), rt.b.sent_size.to_json());
-    json::Object(m).to_str()
+    json::Object(m).to_string()
 }
 
 struct AddrStats<T> {
@@ -99,7 +99,7 @@ struct RouteStats<T> {
     last: RingBuffer<PktMeta<T>>
 }
 
-impl<T: Hash+Eq+Clone+Send+ToStr> RouteStats<T> {
+impl<T: Hash+Eq+Clone+Send+ToString> RouteStats<T> {
     fn new(typ: &'static str, a: T, b: T) -> RouteStats<T> {
         RouteStats {
             typ: typ,
@@ -182,7 +182,7 @@ impl RadiotapCtx {
         println!("fromDS: {}", fc.has_flag(dot11::FromDS));
         println!("protected: {}", fc.has_flag(dot11::ProtectedFrame));
 
-        println!("Mac1: {}", wifiHeader.addr1.to_str());
+        println!("Mac1: {}", wifiHeader.addr1.to_string());
 
         match pkt.it_present {
             a if a == tap::COMMON_A => {
