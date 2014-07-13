@@ -253,17 +253,21 @@ pub fn run(conf: D3capConf) {
 
     TaskBuilder::new().named("packet_capture").spawn(proc() {
 
-        let mut sessBuilder = match conf.interface {
-            Some(ref dev) => cap::PcapSessionBuilder::new_dev(dev.as_slice()),
-            None => cap::PcapSessionBuilder::new()
-        };
+        let sess = match conf.file {
+            Some(ref f) => cap::PcapSession::from_file(f.as_slice()),
+            None => {
+                let mut sessBuilder = match conf.interface {
+                    Some(ref dev) => cap::PcapSessionBuilder::new_dev(dev.as_slice()),
+                    None => cap::PcapSessionBuilder::new()
+                };
 
-        let sess = sessBuilder
-            .buffer_size(65535)
-            .timeout(1000)
-            .promisc(conf.promisc)
-            .rfmon(conf.monitor)
-            .activate();
+                sessBuilder.buffer_size(65535)
+                           .timeout(1000)
+                           .promisc(conf.promisc)
+                           .rfmon(conf.monitor)
+                           .activate()
+            }
+        };
 
         println!("Starting capture loop");
 
@@ -293,6 +297,7 @@ pub fn run(conf: D3capConf) {
 pub struct D3capConf {
     pub port: u16,
     pub interface: Option<String>,
+    pub file: Option<String>,
     pub promisc: bool,
     pub monitor: bool
 }

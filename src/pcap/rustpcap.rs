@@ -76,6 +76,15 @@ pub struct PcapSession {
 }
 
 impl PcapSession {
+    pub fn from_file(f: &str) -> PcapSession {
+        let mut errbuf = Vec::with_capacity(256u);
+        unsafe {
+            let p = pcap_open_offline(f.to_c_str().unwrap(),
+                                      errbuf.as_mut_slice().as_mut_ptr());
+            PcapSession { p: p }
+        }
+    }
+
     pub fn datalink(&self) -> DataLinkType {
         unsafe { pcap_datalink(self.p) }
     }

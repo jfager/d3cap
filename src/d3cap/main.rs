@@ -27,8 +27,11 @@ fn main() {
 
     let port_opt = "p";
     let interface_opt = "i";
+    let file_opt = "f";
+
     let promisc_flag = "P";
     let monitor_flag = "M";
+
 
     let args:Vec<String> = os::args().iter()
                                      .map(|x| x.to_string())
@@ -36,6 +39,7 @@ fn main() {
     let opts = vec![
         go::optopt(port_opt, "port", "Websocket port", ""),
         go::optopt(interface_opt, "interface", "Network interface to listen on", ""),
+        go::optopt(file_opt, "file", "File to load from", ""),
         go::optflag(promisc_flag, "promisc", "Turn on promiscuous mode"),
         go::optflag(monitor_flag, "monitor", "Turn on monitor mode")
     ];
@@ -51,6 +55,7 @@ fn main() {
     let conf = D3capConf {
         port: port,
         interface: matches.opt_str(interface_opt),
+        file: matches.opt_str(file_opt),
         promisc: matches.opt_present(promisc_flag),
         monitor: matches.opt_present(monitor_flag)
     };
