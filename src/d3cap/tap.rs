@@ -1,11 +1,14 @@
 #![allow(dead_code)]
 
 use std::mem::size_of;
-use util::trans_off;
+use std::fmt;
+
+use util::skip_transmute;
 
 //For possible reference:
 //https://github.com/simsong/tcpflow/blob/master/src/wifipcap/ieee802_11_radio.h
 
+#[deriving(Show)]
 #[packed]
 pub struct RadiotapHeader {
     pub it_version: u8, // 8 -> 1
@@ -56,6 +59,13 @@ bitflags!(flags ItPresent: u32 {
                              | MCS.bits
 })
 
+impl fmt::Show for ItPresent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:08x}", self.bits)
+    }
+}
+
+#[packed]
 pub struct Tsft {
     pub timer_micros: u64
 }
@@ -71,6 +81,7 @@ bitflags!(flags Flags: u8 {
     static ShortGuard    = 0x80
 })
 
+#[packed]
 pub struct Rate {
     pub in_500kbps: u8
 }
@@ -86,23 +97,28 @@ bitflags!(flags ChannelFlags: u16 {
     static GFSK        = 0x0800
 })
 
+#[packed]
 pub struct Channel {
     pub mhz: u16,
     pub flags: ChannelFlags
 }
 
+#[packed]
 pub struct AntennaSignal {
     pub dBm: i8
 }
 
+#[packed]
 pub struct AntennaNoise {
     pub dBm: i8
 }
 
+#[packed]
 pub struct Antenna {
     pub idx: u8
 }
 
+#[packed]
 pub struct Mcs {
     pub known: u8,
     pub flags: u8,
@@ -127,7 +143,7 @@ impl CommonA {
         let sz = size_of::<RadiotapHeader>() + size_of::<CommonA>();
         if hdr.it_present == COMMON_A
         && hdr.it_len as uint >= sz {
-            let out: &CommonA = unsafe { trans_off(hdr, size_of::<CommonA>() as int) };
+            let out: &CommonA = unsafe { skip_transmute(hdr) };
             Some(out)
         } else {
             None
@@ -151,7 +167,7 @@ impl CommonB {
         let sz = size_of::<RadiotapHeader>() + size_of::<CommonB>();
         if hdr.it_present == COMMON_B
         && hdr.it_len as uint >= sz {
-            let out: &CommonB = unsafe { trans_off(hdr, size_of::<CommonB>() as int) };
+            let out: &CommonB = unsafe { skip_transmute(hdr) };
             Some(out)
         } else {
             None

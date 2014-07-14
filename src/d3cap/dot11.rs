@@ -6,12 +6,6 @@ use ether::{MacAddr};
 // https://github.com/simsong/tcpflow/blob/master/src/wifipcap/wifipcap.h
 // For definitive reference:
 // http://standards.ieee.org/getieee802/download/802.11-2012.pdf
-#[packed]
-pub struct Dot11MacBaseHeader {
-    pub fr_ctrl: FrameControl,
-    pub dur_id: u16,
-    pub addr1: MacAddr,
-}
 
 bitflags!(flags FrameControlFlags: u8 {
     static ToDS           = 1 << 0,
@@ -38,8 +32,13 @@ impl FrameControl {
     pub fn protocol_version(&self) -> u8 {
         self.ty & 0b00000011
     }
-    pub fn frame_type(&self) -> u8 {
-        (self.ty & 0b00001100) >> 2
+    pub fn frame_type(&self) -> FrameType {
+        match (self.ty & 0b00001100) >> 2 {
+            0 => Management,
+            1 => Control,
+            2 => Data,
+            _ => Unknown
+        }
     }
     pub fn frame_subtype(&self) -> u8 {
         (self.ty & 0b11110000) >> 4
@@ -49,13 +48,133 @@ impl FrameControl {
     }
 }
 
+#[deriving(Show)]
+pub enum FrameType {
+    Management,
+    Control,
+    Data,
+    Unknown
+}
+
+//8.2.4.2 Duration/ID field
 #[packed]
-pub struct Dot11MacFullHeader {
-    base: Dot11MacBaseHeader,
-    addr2: MacAddr,
-    addr3: MacAddr,
-    seq_ctrl: u16,
-    addr4: MacAddr,
-    qos_ctrl: u16,
-    ht_ctrl: u32
+pub struct DurationID {
+    dur_id: u16
+}
+
+#[packed]
+pub struct Dot11BaseHeader {
+    pub fr_ctrl: FrameControl,
+    pub dur_id: DurationID,
+}
+
+
+type FCS = [u8, ..4];
+
+// Frame types
+
+// 8.3.1 Control Frames
+
+// 8.3.1.2 RTS
+#[packed]
+pub struct RTS {
+    pub base: Dot11BaseHeader,
+    pub ra: MacAddr,
+    pub ta: MacAddr,
+    pub fcs: FCS
+}
+
+// 8.3.1.3 CTS
+#[packed]
+pub struct CTS {
+    pub base: Dot11BaseHeader,
+    pub ra: MacAddr,
+    pub fcs: FCS
+}
+
+// 8.3.1.4 ACK
+#[packed]
+pub struct ACK {
+    pub base: Dot11BaseHeader,
+    pub ra: MacAddr,
+    pub fcs: FCS
+}
+
+// 8.3.1.5 PS-Poll
+#[packed]
+pub struct PS_Poll {
+    pub base: Dot11BaseHeader,
+    pub bssid: MacAddr, //ra
+    pub ta: MacAddr,
+    pub fcs: FCS
+}
+
+// 8.3.1.6 CF-End
+#[packed]
+pub struct CF_End {
+    pub base: Dot11BaseHeader,
+    pub ra: MacAddr,
+    pub bssid: MacAddr, //ta
+    pub fcs: FCS
+}
+
+// 8.3.1.7 CF-End+CF-Ack
+#[packed]
+pub struct CF_End_CF_Ack {
+    pub base: Dot11BaseHeader,
+    pub ra: MacAddr,
+    pub bssid: MacAddr, //ta
+    pub fcs: FCS
+}
+
+// 8.3.1.8 BlockAckReq
+#[packed]
+pub struct BlockAckReq {
+    pub base: Dot11BaseHeader,
+    pub ra: MacAddr,
+    pub ta: MacAddr,
+    pub bar_ctl: [u8, ..2]
+}
+
+// 8.3.1.9 BlockAck
+#[packed]
+pub struct BlockAck {
+    pub base: Dot11BaseHeader,
+    pub ra: MacAddr,
+    pub ta: MacAddr,
+    pub ba_ctl: [u8, ..2]
+}
+
+// 8.3.1.10 Control Wrapper
+#[packed]
+pub struct ControlWrapper {
+    pub base: Dot11BaseHeader,
+    pub ra: MacAddr,
+    pub cf_ctl: [u8, ..2],
+    pub ht_ctl: [u8, ..4]
+}
+
+// 8.3.2 Data Frames
+
+// 8.3.2.1 Data Frame Header
+#[packed]
+pub struct DataFrameHeader {
+    pub base: Dot11BaseHeader,
+    pub addr1: MacAddr,
+    pub addr2: MacAddr,
+    pub addr3: MacAddr,
+    pub seq_ctl: [u8, ..2]
+}
+
+// 8.3.3 Management Frames
+
+// 8.3.3.1 Management Frame Format
+#[packed]
+pub struct ManagementFrameHeader {
+    pub base: Dot11BaseHeader,
+    pub addr1: MacAddr,
+    pub addr2: MacAddr,
+    pub addr3: MacAddr,
+    pub seq_ctl: [u8, ..2],
+    pub ht_ctl: [u8, ..4]
 }

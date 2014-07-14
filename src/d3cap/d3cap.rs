@@ -12,7 +12,7 @@ use time;
 use ring::RingBuffer;
 use multicast::{Multicast, MulticastSender};
 use uiserver::UIServer;
-use util::{ntohs, trans_off};
+use util::{ntohs, skip_bytes_transmute, skip_transmute};
 use ip::{IP4Addr, IP6Addr, IP4Header, IP6Header};
 use ether::{EthernetHeader, MacAddr,
             ETHERTYPE_ARP, ETHERTYPE_IP4, ETHERTYPE_IP6, ETHERTYPE_802_1X};
@@ -147,11 +147,11 @@ impl EthernetCtx {
                 //io::println("ARP!");
             },
             ETHERTYPE_IP4 => {
-                let ipp: &IP4Header = unsafe { trans_off(pkt, 1) };
+                let ipp: &IP4Header = unsafe { skip_transmute(pkt) };
                 self.ip4.send(PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32));
             },
             ETHERTYPE_IP6 => {
-                let ipp: &IP6Header = unsafe { trans_off(pkt, 1) };
+                let ipp: &IP6Header = unsafe { skip_transmute(pkt) };
                 self.ip6.send(PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32));
             },
             ETHERTYPE_802_1X => {
@@ -167,22 +167,40 @@ impl EthernetCtx {
 struct RadiotapCtx;
 impl RadiotapCtx {
     fn parse(&mut self, pkt: &tap::RadiotapHeader) {
-        let wifiHeader: &dot11::Dot11MacBaseHeader = unsafe { trans_off(pkt, pkt.it_len as int) };
-        let fc = wifiHeader.fr_ctrl;
-        let proto_version = fc.protocol_version();
-        if proto_version != 0 {
-            //println!("Bogus packet (proto_version: {})", proto_version);
+        fn trans<U>(pkt: &tap::RadiotapHeader) -> &U {
+            unsafe { skip_bytes_transmute(pkt, pkt.it_len as int) }
+        }
+
+        let base: &dot11::Dot11BaseHeader = trans(pkt);
+        let fc = base.fr_ctrl;
+        if fc.protocol_version() != 0 {
+            // bogus packet, bail
             return;
         }
 
-        println!("frame_type: {:x}", fc.frame_type());
+        println!("frame_type: {}", fc.frame_type());
         println!("frame_subtype: {:x}", fc.frame_subtype());
 
         println!("toDS: {}", fc.has_flag(dot11::ToDS));
         println!("fromDS: {}", fc.has_flag(dot11::FromDS));
         println!("protected: {}", fc.has_flag(dot11::ProtectedFrame));
 
-        println!("Mac1: {}", wifiHeader.addr1.to_string());
+        match fc.frame_type() {
+            dot11::Management => {
+                println!("Management frame");
+                let mgt: &dot11::ManagementFrameHeader = trans(pkt);
+            }
+            dot11::Control => {
+                println!("Control frame");
+            }
+            dot11::Data => {
+                println!("Data frame");
+                let data: &dot11::DataFrameHeader = trans(pkt);
+            }
+            dot11::Unknown => {
+                println!("Unknown frame type");
+            }
+        }
 
         match pkt.it_present {
             a if a == tap::COMMON_A => {
@@ -214,26 +232,26 @@ impl RadiotapCtx {
                 }
             },
             _ => {
-                // println!("Unknown header!");
-                // println!("has tsft? {}", pkt.has_field(tap::TSFT));
-                // println!("has flags? {}", pkt.has_field(tap::FLAGS));
-                // println!("has rate? {}", pkt.has_field(tap::RATE));
-                // println!("has channel? {}", pkt.has_field(tap::CHANNEL));
-                // println!("has fhss? {}", pkt.has_field(tap::FHSS));
-                // println!("has antenna_signal? {}", pkt.has_field(tap::ANTENNA_SIGNAL));
-                // println!("has antenna_noise? {}", pkt.has_field(tap::ANTENNA_NOISE));
-                // println!("has lock_quality? {}", pkt.has_field(tap::LOCK_QUALITY));
-                // println!("has tx_attenuation? {}", pkt.has_field(tap::TX_ATTENUATION));
-                // println!("has db_tx_attenuation? {}", pkt.has_field(tap::DB_TX_ATTENUATION));
-                // println!("has dbm_tx_power? {}", pkt.has_field(tap::DBM_TX_POWER));
-                // println!("has antenna? {}", pkt.has_field(tap::ANTENNA));
-                // println!("has db_antenna_signal? {}", pkt.has_field(tap::DB_ANTENNA_SIGNAL));
-                // println!("has db_antenna_noise? {}", pkt.has_field(tap::DB_ANTENNA_NOISE));
-                // println!("has rx_flags? {}", pkt.has_field(tap::RX_FLAGS));
-                // println!("has mcs? {}", pkt.has_field(tap::MCS));
-                // println!("has a_mpdu_status? {}", pkt.has_field(tap::A_MPDU_STATUS));
-                // println!("has vht? {}", pkt.has_field(tap::VHT));
-                // println!("has more_it_present? {}", pkt.has_field(tap::MORE_IT_PRESENT));
+                println!("Unknown header!");
+                println!("has tsft? {}", pkt.has_field(tap::TSFT));
+                println!("has flags? {}", pkt.has_field(tap::FLAGS));
+                println!("has rate? {}", pkt.has_field(tap::RATE));
+                println!("has channel? {}", pkt.has_field(tap::CHANNEL));
+                println!("has fhss? {}", pkt.has_field(tap::FHSS));
+                println!("has antenna_signal? {}", pkt.has_field(tap::ANTENNA_SIGNAL));
+                println!("has antenna_noise? {}", pkt.has_field(tap::ANTENNA_NOISE));
+                println!("has lock_quality? {}", pkt.has_field(tap::LOCK_QUALITY));
+                println!("has tx_attenuation? {}", pkt.has_field(tap::TX_ATTENUATION));
+                println!("has db_tx_attenuation? {}", pkt.has_field(tap::DB_TX_ATTENUATION));
+                println!("has dbm_tx_power? {}", pkt.has_field(tap::DBM_TX_POWER));
+                println!("has antenna? {}", pkt.has_field(tap::ANTENNA));
+                println!("has db_antenna_signal? {}", pkt.has_field(tap::DB_ANTENNA_SIGNAL));
+                println!("has db_antenna_noise? {}", pkt.has_field(tap::DB_ANTENNA_NOISE));
+                println!("has rx_flags? {}", pkt.has_field(tap::RX_FLAGS));
+                println!("has mcs? {}", pkt.has_field(tap::MCS));
+                println!("has a_mpdu_status? {}", pkt.has_field(tap::A_MPDU_STATUS));
+                println!("has vht? {}", pkt.has_field(tap::VHT));
+                println!("has more_it_present? {}", pkt.has_field(tap::MORE_IT_PRESENT));
             }
         }
         println!("");
@@ -252,7 +270,6 @@ pub fn run(conf: D3capConf) {
     });
 
     TaskBuilder::new().named("packet_capture").spawn(proc() {
-
         let sess = match conf.file {
             Some(ref f) => cap::PcapSession::from_file(f.as_slice()),
             None => {
@@ -287,10 +304,13 @@ pub fn run(conf: D3capConf) {
             },
             cap::DLT_IEEE802_11_RADIO => {
                 let mut ctx = RadiotapCtx;
-                loop { sess.next(|t,_| ctx.parse(t)); }
+                loop {
+                    sess.next(|t,_| ctx.parse(t));
+                }
             },
             x => fail!("unsupported datalink type: {}", x)
         }
+        //unsafe { std::intrinsics::abort(); }
     });
 }
 
