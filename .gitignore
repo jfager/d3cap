@@ -2,3 +2,6 @@
 *.dSYM
 target/
 sampledump.pcap
+conf.toml
+TAGS
+
