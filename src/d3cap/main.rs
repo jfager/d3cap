@@ -1,24 +1,26 @@
 #![feature(macro_rules, default_type_params)]
 
 extern crate std;
-extern crate openssl;
 extern crate getopts;
 extern crate serialize;
 extern crate collections;
 extern crate time;
+extern crate toml;
+
 extern crate pcap;
+extern crate multicast;
+extern crate json_serve;
 
 mod ring;
-mod rustwebsocket;
-mod multicast;
 mod fixed_vec_macros;
-mod uiserver;
 mod util;
 mod ip;
 mod ether;
 mod dot11;
 mod tap;
+mod pkt_graph;
 mod d3cap;
+
 
 fn main() {
     use go = getopts;
@@ -28,6 +30,7 @@ fn main() {
     let port_opt = "p";
     let interface_opt = "i";
     let file_opt = "f";
+    let conf_opt = "c";
 
     let promisc_flag = "P";
     let monitor_flag = "M";
@@ -40,6 +43,7 @@ fn main() {
         go::optopt(port_opt, "port", "Websocket port", ""),
         go::optopt(interface_opt, "interface", "Network interface to listen on", ""),
         go::optopt(file_opt, "file", "File to load from", ""),
+        go::optopt(conf_opt, "conf", "Configuration file", ""),
         go::optflag(promisc_flag, "promisc", "Turn on promiscuous mode"),
         go::optflag(monitor_flag, "monitor", "Turn on monitor mode")
     ];
@@ -56,6 +60,7 @@ fn main() {
         port: port,
         interface: matches.opt_str(interface_opt),
         file: matches.opt_str(file_opt),
+        conf: matches.opt_str(conf_opt),
         promisc: matches.opt_present(promisc_flag),
         monitor: matches.opt_present(monitor_flag)
     };

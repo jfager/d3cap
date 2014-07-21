@@ -1,138 +1,73 @@
 use std;
 use std::task::{TaskBuilder};
 use std::hash::Hash;
-use std::collections::treemap::TreeMap;
 use std::collections::hashmap::HashMap;
+use std::io::File;
+use std::sync::Arc;
 
-use serialize::{json};
-use serialize::json::ToJson;
-
-use time;
+use multicast::{Multicast, MulticastMsg, MulticastMsgDest};
+use json_serve::uiserver::UIServer;
 
 use ring::RingBuffer;
-use multicast::{Multicast, MulticastSender};
-use uiserver::UIServer;
-use util::{ntohs, skip_bytes_transmute, skip_transmute};
+use util::{ntohs, skip_bytes_cast, skip_cast};
 use ip::{IP4Addr, IP6Addr, IP4Header, IP6Header};
 use ether::{EthernetHeader, MacAddr,
             ETHERTYPE_ARP, ETHERTYPE_IP4, ETHERTYPE_IP6, ETHERTYPE_802_1X};
 use dot11;
 use tap;
+use pkt_graph::{PktMeta, ProtocolStats, RouteStats};
 
-type Addrs<T> = (T, T);
+use toml;
 
-#[deriving(PartialEq,Eq,PartialOrd,Hash)]
-struct OrdAddrs<T>(Addrs<T>);
-impl<T: PartialOrd+Hash> OrdAddrs<T> {
-    fn from(a: T, b: T) -> OrdAddrs<T> {
-        if a <= b { OrdAddrs((a, b)) } else { OrdAddrs((b, a)) }
-    }
-}
-
-struct ProtocolHandler<T, C> {
+#[deriving(Encodable)]
+struct RouteStatsMsg<T> {
     typ: &'static str,
-    count: u64,
-    size: u64,
-    tx: MulticastSender<C>,
-    routes: HashMap<OrdAddrs<T>, Box<RouteStats<T>>>
+    route: RouteStats<T>
 }
 
-impl<T: PartialOrd+Hash+Eq+Clone+Send+ToString> ProtocolHandler<T,String> {
-    fn new(typ: &'static str, tx: MulticastSender<String>) -> ProtocolHandler<T,String> {
-        //FIXME:  this is the map that's hitting https://github.com/mozilla/rust/issues/11102
-        ProtocolHandler { typ: typ, count: 0, size: 0, tx: tx, routes: HashMap::new() }
-    }
-    fn update(&mut self, pkt: &PktMeta<T>) {
-        let key = OrdAddrs::from(pkt.src.clone(), pkt.dst.clone());
-        let typ = self.typ;
-        let stats = self.routes.find_or_insert_with(key, |k| {
-            let &OrdAddrs((ref v0, ref v1)) = k;
-            box RouteStats::new(typ, v0.clone(), v1.clone())
-        });
-        stats.update(pkt);
-        self.tx.send(route_msg(self.typ, *stats));
-    }
-    fn spawn(typ: &'static str, mc_tx: &MulticastSender<String>) -> Sender<PktMeta<T>> {
+struct ProtocolHandler<T> {
+    typ: &'static str,
+    tx: Sender<PktMeta<T>>,
+    route_stats_listeners: Multicast<RouteStatsMsg<T>>
+}
+impl <T: PartialOrd+Hash+Eq+Clone+Copy+Send+ToString+Share> ProtocolHandler<T> {
+    fn spawn(typ: &'static str) -> ProtocolHandler<T> {
         let (tx, rx) = channel();
-        let mc_tx = mc_tx.clone();
+        let handler = ProtocolHandler {
+            typ: typ,
+            tx: tx,
+            route_stats_listeners: Multicast::spawn()
+        };
+
+        let mc_sender = handler.route_stats_listeners.clone_sender();
         TaskBuilder::new().named(format!("{}_handler", typ)).spawn(proc() {
-            let mut handler = ProtocolHandler::new(typ, mc_tx);
+            let mut stats = ProtocolStats::new();
             loop {
-                handler.update(&rx.recv());
+                let route_stats = stats.update(&rx.recv());
+                let route_stats_msg = Arc::new(RouteStatsMsg {
+                    typ: typ,
+                    route: route_stats
+                });
+                mc_sender.send(MulticastMsg(route_stats_msg));
             }
         });
-        tx
-    }
-}
 
-fn route_msg<T:ToString>(typ: &str, rt: &RouteStats<T>) -> String {
-    let mut m = TreeMap::new();
-    m.insert("type".to_string(), typ.to_string().to_json());
-    m.insert("a".to_string(), rt.a.addr.to_string().to_string().to_json());
-    m.insert("from_a_count".to_string(), rt.a.sent_count.to_json());
-    m.insert("from_a_size".to_string(), rt.a.sent_size.to_json());
-    m.insert("b".to_string(), rt.b.addr.to_string().to_string().to_json());
-    m.insert("from_b_count".to_string(), rt.b.sent_count.to_json());
-    m.insert("from_b_size".to_string(), rt.b.sent_size.to_json());
-    json::Object(m).to_string()
-}
-
-struct AddrStats<T> {
-    addr: T,
-    sent_count: u64,
-    sent_size: u64,
-}
-impl<T> AddrStats<T> {
-    fn new(addr:T) -> AddrStats<T> {
-        AddrStats { addr: addr, sent_count: 0, sent_size: 0 }
+        handler
     }
-    fn update(&mut self, size: u32) {
-        self.sent_count += 1;
-        self.sent_size += size as u64;
-    }
-}
 
-struct RouteStats<T> {
-    typ: &'static str,
-    a: AddrStats<T>,
-    b: AddrStats<T>,
-    last: RingBuffer<PktMeta<T>>
-}
-
-impl<T: Hash+Eq+Clone+Send+ToString> RouteStats<T> {
-    fn new(typ: &'static str, a: T, b: T) -> RouteStats<T> {
-        RouteStats {
-            typ: typ,
-            a: AddrStats::new(a),
-            b: AddrStats::new(b),
-            last: RingBuffer::new(5),
-        }
+    fn send(&self, pkt: PktMeta<T>) {
+        self.tx.send(pkt);
     }
-    fn update(&mut self, pkt: &PktMeta<T>) {
-        if pkt.src == self.a.addr {
-            self.a.update(pkt.size);
-        } else {
-            self.b.update(pkt.size);
-        }
-    }
-}
 
-struct PktMeta<T> {
-    pub src: T,
-    pub dst: T,
-    pub size: u32,
-    pub tm: time::Timespec
-}
-impl<T> PktMeta<T> {
-    fn new(src: T, dst: T, size: u32) -> PktMeta<T> {
-        PktMeta { src: src, dst: dst, size: size, tm: time::get_time() }
+    fn register_route_stats_listener(&self, tx: Sender<Arc<RouteStatsMsg<T>>>) {
+        self.route_stats_listeners.send(MulticastMsgDest(tx));
     }
 }
 
 struct EthernetCtx {
-    mac: Sender<PktMeta<MacAddr>>,
-    ip4: Sender<PktMeta<IP4Addr>>,
-    ip6: Sender<PktMeta<IP6Addr>>
+    mac: ProtocolHandler<MacAddr>,
+    ip4: ProtocolHandler<IP4Addr>,
+    ip6: ProtocolHandler<IP6Addr>
 }
 
 impl EthernetCtx {
@@ -147,11 +82,11 @@ impl EthernetCtx {
                 //io::println("ARP!");
             },
             ETHERTYPE_IP4 => {
-                let ipp: &IP4Header = unsafe { skip_transmute(pkt) };
+                let ipp: &IP4Header = unsafe { skip_cast(pkt) };
                 self.ip4.send(PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32));
             },
             ETHERTYPE_IP6 => {
-                let ipp: &IP6Header = unsafe { skip_transmute(pkt) };
+                let ipp: &IP6Header = unsafe { skip_cast(pkt) };
                 self.ip6.send(PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32));
             },
             ETHERTYPE_802_1X => {
@@ -164,14 +99,17 @@ impl EthernetCtx {
     }
 }
 
-struct RadiotapCtx;
+struct RadiotapCtx {
+    mac: ProtocolHandler<MacAddr>
+}
+
 impl RadiotapCtx {
     fn parse(&mut self, pkt: &tap::RadiotapHeader) {
-        fn trans<U>(pkt: &tap::RadiotapHeader) -> &U {
-            unsafe { skip_bytes_transmute(pkt, pkt.it_len as int) }
+        fn magic<U>(pkt: &tap::RadiotapHeader) -> &U {
+            unsafe { skip_bytes_cast(pkt, pkt.it_len as int) }
         }
 
-        let base: &dot11::Dot11BaseHeader = trans(pkt);
+        let base: &dot11::Dot11BaseHeader = magic(pkt);
         let fc = base.fr_ctrl;
         if fc.protocol_version() != 0 {
             // bogus packet, bail
@@ -188,14 +126,15 @@ impl RadiotapCtx {
         match fc.frame_type() {
             dot11::Management => {
                 println!("Management frame");
-                let mgt: &dot11::ManagementFrameHeader = trans(pkt);
+                let mgt: &dot11::ManagementFrameHeader = magic(pkt);
             }
             dot11::Control => {
                 println!("Control frame");
             }
             dot11::Data => {
                 println!("Data frame");
-                let data: &dot11::DataFrameHeader = trans(pkt);
+                let data: &dot11::DataFrameHeader = magic(pkt);
+                self.mac.send(PktMeta::new(data.addr1, data.addr2, 1)); //TODO: get length
             }
             dot11::Unknown => {
                 println!("Unknown frame type");
@@ -261,13 +200,25 @@ impl RadiotapCtx {
 pub fn run(conf: D3capConf) {
     use cap = pcap::rustpcap;
 
-    let mc = Multicast::new();
-    let data_tx = mc.get_sender();
+    let mut mac_addr_map: HashMap<MacAddr, String> = HashMap::new();
 
-    let port = conf.port;
-    TaskBuilder::new().named("socket_listener").spawn(proc() {
-        UIServer.run(mc, port);
-    });
+    match conf.conf {
+        Some(ref x) => {
+            let s = File::open(&Path::new(x.to_string())).read_to_string().unwrap();
+            let t = toml::Parser::new(s.as_slice()).parse().unwrap();
+            let known_macs = t.find(&"known-macs".to_string()).unwrap().as_table().unwrap();
+            for (k, v) in known_macs.iter() {
+                let addr = MacAddr::from_string(k.as_slice());
+                let alias = v.as_str();
+                if addr.is_some() && alias.is_some() {
+                    mac_addr_map.insert(addr.unwrap(), alias.unwrap().to_string());
+                }
+            }
+        }
+        _ => ()
+    }
+
+    let ui = UIServer::spawn(conf.port, &mac_addr_map);
 
     TaskBuilder::new().named("packet_capture").spawn(proc() {
         let sess = match conf.file {
@@ -287,23 +238,31 @@ pub fn run(conf: D3capConf) {
         };
 
         println!("Starting capture loop");
-
         println!("Available datalink types: {}", sess.list_datalinks());
 
         match sess.datalink() {
             cap::DLT_ETHERNET => {
                 let mut ctx = EthernetCtx {
-                    mac: ProtocolHandler::spawn("mac", &data_tx),
-                    ip4: ProtocolHandler::spawn("ip4", &data_tx),
-                    ip6: ProtocolHandler::spawn("ip6", &data_tx)
+                    mac: ProtocolHandler::spawn("mac"),
+                    ip4: ProtocolHandler::spawn("ip4"),
+                    ip6: ProtocolHandler::spawn("ip6")
                 };
+
+                ctx.mac.register_route_stats_listener(ui.create_sender());
+                ctx.ip4.register_route_stats_listener(ui.create_sender());
+                ctx.ip6.register_route_stats_listener(ui.create_sender());
 
                 //FIXME: lame workaround for https://github.com/mozilla/rust/issues/11102
                 std::io::timer::sleep(1000);
                 loop { sess.next(|t,sz| ctx.parse(t, sz)); }
             },
             cap::DLT_IEEE802_11_RADIO => {
-                let mut ctx = RadiotapCtx;
+                let mut ctx = RadiotapCtx {
+                    mac: ProtocolHandler::spawn("mac"),
+                };
+                ctx.mac.register_route_stats_listener(ui.create_sender());
+
+                std::io::timer::sleep(1000);
                 loop {
                     sess.next(|t,_| ctx.parse(t));
                 }
@@ -318,6 +277,7 @@ pub struct D3capConf {
     pub port: u16,
     pub interface: Option<String>,
     pub file: Option<String>,
+    pub conf: Option<String>,
     pub promisc: bool,
     pub monitor: bool
 }

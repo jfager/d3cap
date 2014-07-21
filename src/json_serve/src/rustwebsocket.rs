@@ -68,7 +68,7 @@ pub fn parse_handshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake
         //host: ~"",
         //origin: ~"",
         key: "".to_string(),
-        resource: prop.get(1).as_slice().trim().to_string(),
+        resource: prop[1].as_slice().trim().to_string(),
         frameType: OpeningFrame
     };
 
@@ -89,12 +89,11 @@ pub fn parse_handshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake
             println!("Unexpected line: '{}'", line);
             return None;
         }
-        let key = prop.get(0).trim();
-        let val = prop.get(1).trim();
+        let key = prop[0].trim();
+        let val = prop[1].trim();
 
         match key {
-            //should be KEY_FIELD but https://github.com/mozilla/rust/issues/11940
-            "Sec-WebSocket-Key" => {
+            KEY_FIELD => {
                 hs.key = val.to_string().append(SECRET);
                 hasHandshake = true;
             }
@@ -137,20 +136,20 @@ pub fn parse_input_frame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<Vec<u8
         _ => return (None, ErrorFrame)
     };
 
-    if hdr.get(0) & 0x70 != 0x0    //extensions must be off
-    || hdr.get(0) & 0x80 != 0x80   //no continuation frames
-    || hdr.get(1) & 0x80 != 0x80 { //masking bit must be set
+    if hdr[0] & 0x70 != 0x0    //extensions must be off
+    || hdr[0] & 0x80 != 0x80   //no continuation frames
+    || hdr[1] & 0x80 != 0x80 { //masking bit must be set
         return (None, ErrorFrame);
     }
 
-    let opcode = (hdr.get(0) & 0x0F) as u8;
+    let opcode = (hdr[0] & 0x0F) as u8;
     if opcode == TextFrame as u8
     || opcode == BinaryFrame as u8
     || opcode == ClosingFrame as u8
     || opcode == PingFrame as u8
     || opcode == PongFrame as u8 {
         let frameType = frame_type_from(opcode);
-        let payloadLength = hdr.get(1) & 0x7F;
+        let payloadLength = hdr[1] & 0x7F;
         if payloadLength < 0x7E { //Only handle short payloads right now.
             let toread = (payloadLength + 4) as uint; //+4 for mask
             let masked_payload = match s.read_exact(toread) {
@@ -159,7 +158,7 @@ pub fn parse_input_frame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<Vec<u8
             };
             let payload = masked_payload.tailn(4).iter()
                 .enumerate()
-                .map(|(i, t)| { t ^ *masked_payload.get(i%4) })
+                .map(|(i, t)| { t ^ masked_payload[i%4] })
                 .collect();
             return (Some(payload), frameType);
         }

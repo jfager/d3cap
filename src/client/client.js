@@ -1,6 +1,7 @@
 $(document).ready(function() {
 
     var ws;
+    var macAddrMap;
 
     function mkForce(nodes, links, width, height) {
         return d3.layout.force()
@@ -113,13 +114,6 @@ $(document).ready(function() {
             .attr("class", "node")
             .call(c.force.drag);
 
-        newNodes.append("svg:text")
-            .attr("class", "nodetext")
-            .attr("dx", 12)
-            .attr("dy", ".35em")
-            .text(function(d) { return d.addr; });
-
-
         //update size for all nodes, not just new ones.
         var arcs = nodes.selectAll(".slice")
             .data(function(d) { return pie([{r:d.displaySize, sz: d.sizeFrom},
@@ -135,32 +129,79 @@ $(document).ready(function() {
                 .innerRadius(d.data.r * 0.4)
                 .outerRadius(d.data.r)(d);
         });
+
+        newNodes.append("svg:text")
+            .attr("class", function(d) {
+                var alias = macAddrMap[d.addr];
+                return "nodetext" + (alias ? " knownaddr" : "");
+            })
+            .attr("dx", 12)
+            .attr("dy", ".35em")
+            .text(function(d) {
+                var alias = macAddrMap[d.addr];
+                return alias ? alias : d.addr;
+            });
+
     };
 
-
-
-    function updateNode(c, addr, countFrom, sizeFrom, countTo, sizeTo) {
+    function updateNode(c, from, to) {
         var updateLinks = false;
-        var index = c.nodeMap[addr];
+        var index = c.nodeMap[from.addr];
         if(index === undefined) {
             index = c.nodes.length;
-            c.nodes.push({addr: addr,
-                          countFrom: countFrom,
-                          sizeFrom: sizeFrom,
-                          countTo: countTo,
-                          sizeTo: sizeTo,
-                          displaySize: displaySize(sizeFrom+sizeTo)});
-            c.nodeMap[addr] = index;
+            c.nodes.push({addr: from.addr,
+                          countFrom: from.sent.count,
+                          sizeFrom: from.sent.size,
+                          countTo: to.sent.count,
+                          sizeTo: to.sent.size,
+                          displaySize: displaySize(from.sent.size+to.sent.size)});
+            c.nodeMap[from.addr] = index;
             updateLinks = true;
         } else {
             var node = c.nodes[index];
-            node.countFrom += countFrom;
-            node.sizeFrom += sizeFrom;
-            node.countTo += countTo;
-            node.sizeTo += sizeTo;
+            node.countFrom += from.sent.count;
+            node.sizeFrom += from.sent.size;
+            node.countTo += to.sent.count;
+            node.sizeTo += to.sent.size;
             node.displaySize = displaySize(node.sizeFrom+node.sizeTo);
         }
         return updateLinks;
+    }
+
+    function loadUpdate(msg) {
+        var c = types[msg.typ];
+        if(!c) {
+            return;
+        }
+
+        var route = msg.route;
+
+        var linkKey = route.a.addr+"_"+route.b.addr;
+        var oldLinkNode = c.linkNodes[linkKey];
+        if(oldLinkNode) {
+            var oldA = c.nodes[c.nodeMap[oldLinkNode.a.addr]];
+            oldA.countFrom -= oldLinkNode.a.sent.count;
+            oldA.sizeFrom -= oldLinkNode.a.sent.size;
+            oldA.countTo -= oldLinkNode.b.sent.count;
+            oldA.sizeTo -= oldLinkNode.b.sent.size;
+
+            var oldB = c.nodes[c.nodeMap[oldLinkNode.b.addr]];
+            oldB.countFrom -= oldLinkNode.b.sent.count;
+            oldB.sizeFrom -= oldLinkNode.b.sent.size;
+            oldB.countTo -= oldLinkNode.a.sent.count;
+            oldB.sizeTo -= oldLinkNode.a.sent.size;
+        }
+        c.linkNodes[linkKey] = route;
+
+        //bitwise-or to avoid short-circuit
+        var updateLinks = updateNode(c, route.a, route.b) | updateNode(c, route.b, route.a);
+
+        if(updateLinks) {
+            c.links.push({source: c.nodeMap[route.a.addr],
+                          target: c.nodeMap[route.b.addr]});
+        }
+
+        update(c);
     }
 
     $('#connectForm').on('submit', function() {
@@ -181,38 +222,12 @@ $(document).ready(function() {
 
         ws.onmessage = function(event) {
             var msg = JSON.parse(event.data);
-            var c = types[msg.type];
-            if(!c) {
-                return;
+            //console.log(msg);
+            if(msg.typ === undefined) {
+                macAddrMap = msg;
+            } else {
+                loadUpdate(msg);
             }
-
-            var linkKey = msg.a+"_"+msg.b;
-            var oldLinkNode = c.linkNodes[linkKey];
-            if(oldLinkNode) {
-                var oldA = c.nodes[c.nodeMap[oldLinkNode.a]];
-                oldA.countFrom -= oldLinkNode.from_a_count;
-                oldA.sizeFrom -= oldLinkNode.from_a_size;
-                oldA.countTo -= oldLinkNode.from_b_count;
-                oldA.sizeTo -= oldLinkNode.from_b_size;
-
-                var oldB = c.nodes[c.nodeMap[oldLinkNode.b]];
-                oldB.countFrom -= oldLinkNode.from_b_count;
-                oldB.sizeFrom -= oldLinkNode.from_b_size;
-                oldB.countTo -= oldLinkNode.from_a_count;
-                oldB.sizeTo -= oldLinkNode.from_a_size;
-            }
-            c.linkNodes[linkKey] = msg;
-
-            //bitwise-or to avoid short-circuit
-            var updateLinks = updateNode(c, msg.a, msg.from_a_count, msg.from_a_size, msg.from_b_count, msg.from_b_size)
-                            | updateNode(c, msg.b, msg.from_b_count, msg.from_b_size, msg.from_a_count, msg.from_a_size);
-
-            if(updateLinks) {
-                c.links.push({source: c.nodeMap[msg.a],
-                              target: c.nodeMap[msg.b]});
-            }
-
-            update(c);
         };
 
         ws.onclose = function() {

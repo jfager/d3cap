@@ -1,0 +1,10 @@
+[package]
+
+name = "json_serve"
+version = "0.0.1"
+authors = [ "jfager@gmail.com" ]
+
+
+[dependencies.openssl]
+
+git = "https://github.com/sfackler/rust-openssl.git"

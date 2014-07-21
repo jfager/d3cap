@@ -17,6 +17,10 @@
   display: none;
 }
 
+.node:not(:hover) .knownaddr {
+  display: initial;
+}
+
 td {
     padding: 10px;
 }

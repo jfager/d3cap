@@ -1,25 +1,28 @@
+extern crate std;
+
 use std::comm::{channel, Sender, Receiver};
 use std::task::{TaskBuilder};
+use std::sync::Arc;
 
-enum MulticastMsg<T> {
-    Msg(T),
-    MsgDest(Sender<T>)
+pub enum MulticastMsg<T> {
+    MulticastMsg(Arc<T>),
+    MulticastMsgDest(Sender<Arc<T>>)
 }
 
 pub struct Multicast<T> {
     tx: Sender<MulticastMsg<T>>
 }
 
-impl<T:Send+Clone> Multicast<T> {
-    pub fn new() -> Multicast<T> {
+impl<T:Send+Share> Multicast<T> {
+    pub fn spawn() -> Multicast<T> {
         let (tx, rx): (Sender<MulticastMsg<T>>, Receiver<MulticastMsg<T>>) = channel();
         TaskBuilder::new().named("multicast").spawn(proc() {
             let mut mc_txs = Vec::new();
             let mut to_remove = Vec::new();
             loop {
                 match rx.recv_opt() {
-                    Ok(MsgDest(c)) => mc_txs.push(c),
-                    Ok(Msg(msg)) => {
+                    Ok(MulticastMsgDest(c)) => mc_txs.push(c),
+                    Ok(MulticastMsg(msg)) => {
                         to_remove.truncate(0);
                         for (i, mc_tx) in mc_txs.iter().enumerate() {
                             if mc_tx.send_opt(msg.clone()).is_err() {
@@ -41,27 +44,11 @@ impl<T:Send+Clone> Multicast<T> {
         Multicast { tx: tx }
     }
 
-    pub fn get_sender(&self) -> MulticastSender<T> {
-        MulticastSender { tx: self.tx.clone() }
+    pub fn send(&self, msg: MulticastMsg<T>) {
+        self.tx.send(msg)
     }
 
-    pub fn add_dest_chan(&self, tx: Sender<T>) {
-        self.tx.send(MsgDest(tx));
-    }
-}
-
-pub struct MulticastSender<T> {
-    tx: Sender<MulticastMsg<T>>
-}
-
-impl<T:Send> Clone for MulticastSender<T> {
-    fn clone(&self) -> MulticastSender<T> {
-        MulticastSender { tx: self.tx.clone() }
-    }
-}
-
-impl<T:Send> MulticastSender<T> {
-    pub fn send(&self, msg: T) {
-        self.tx.send(Msg(msg));
+    pub fn clone_sender(&self) -> Sender<MulticastMsg<T>> {
+        self.tx.clone()
     }
 }

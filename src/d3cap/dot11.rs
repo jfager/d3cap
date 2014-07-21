@@ -71,6 +71,30 @@ pub struct Dot11BaseHeader {
 
 type FCS = [u8, ..4];
 
+// 8.2.4.3.5 DA field
+// The DA field contains an IEEE MAC individual or group address that
+// identifies the MAC entity or entities intended as the final
+// recipient(s) of the MSDU (or fragment thereof) or A-MSDU, as
+// defined in 8.3.2.1, contained in the frame body field.
+
+// 8.2.4.3.6 SA field
+// The SA field contains an IEEE MAC individual address that
+// identifies the MAC entity from which the transfer of the MSDU
+// (or fragment thereof) or A-MSDU, as defined in 8.3.2.1, contained
+// in the frame body field was initiated. The individual/group bit
+// is always transmitted as a 0 in the source address.
+
+// 8.2.4.3.7 RA field
+// The RA field contains an IEEE MAC individual or group address that
+// identifies the intended immediate recipient STA(s), on the WM, for
+// the information contained in the frame body field.
+
+// 8.2.4.3.8 TA field
+// The TA field contains an IEEE MAC individual address that
+// identifies the STA that has transmitted, onto the WM, the MPDU
+// contained in the frame body field. The Individual/Group bit is
+// always transmitted as a 0 in the transmitter address.
+
 // Frame types
 
 // 8.3.1 Control Frames
@@ -164,6 +188,33 @@ pub struct DataFrameHeader {
     pub addr2: MacAddr,
     pub addr3: MacAddr,
     pub seq_ctl: [u8, ..2]
+}
+
+// | To DS | From DS | Address 1  | Address 2  | Address 3      | Address 4     |
+// |       |         |            |            | MSDU  | A-MSDU | MSDU | A-MSDU |
+// | 0     | 0       | RA = DA    | TA = SA    | BSSID | BSSID  | N/A  | N/A    |
+// | 0     | 1       | RA = DA    | TA = BSSID | SA    | BSSID  | N/A  | N/A    |
+// | 1     | 0       | RA = BSSID | TA = SA    | DA    | BSSID  | N/A  | N/A    |
+// | 1     | 1       | RA         | TA         | DA    | BSSID  | SA   | BSSID  |
+
+impl DataFrameHeader {
+    fn get_src(&self) -> MacAddr {
+        match (self.base.fr_ctrl.has_flag(ToDS), self.base.fr_ctrl.has_flag(FromDS)) {
+            (false, false) => self.addr2,
+            (false, true)  => self.addr3,
+            (true,  false) => self.addr2,
+            (true,  true)  => fail!("can't handle this yet")
+        }
+    }
+
+    fn get_dest(&self) -> MacAddr {
+        match (self.base.fr_ctrl.has_flag(ToDS), self.base.fr_ctrl.has_flag(FromDS)) {
+            (false, false) => self.addr1,
+            (false, true)  => self.addr1,
+            (true,  false) => self.addr3,
+            (true,  true)  => self.addr3
+        }
+    }
 }
 
 // 8.3.3 Management Frames

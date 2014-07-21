@@ -10,12 +10,22 @@ authors = [ "jfager@gmail.com" ]
 name = "d3cap"
 path = "src/d3cap/main.rs"
 
-[[lib]]
 
-name = "pcap"
-path = "src/pcap/lib.rs"
+[dependencies.pcap]
+
+path = "src/pcap"
 
 
-[dependencies.openssl]
+[dependencies.multicast]
 
-git = "https://github.com/sfackler/rust-openssl.git"
+path = "src/multicast"
+
+
+[dependencies.json_serve]
+
+path = "src/json_serve"
+
+
+[dependencies.toml]
+
+git = "https://github.com/alexcrichton/toml-rs.git"

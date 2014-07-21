@@ -2,12 +2,20 @@ use std::hash::Hash;
 use std::fmt;
 use std::fmt::{Show,Formatter};
 
+use serialize::{Encodable, Encoder};
+
 fixed_vec!(IP4Addr, u8, 4)
 
 impl Show for IP4Addr {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let &IP4Addr(a) = self;
         write!(f, "{}.{}.{}.{}", a[0] as uint, a[1] as uint, a[2] as uint, a[3] as uint)
+    }
+}
+
+impl<E,S: Encoder<E>> Encodable<S, E> for IP4Addr {
+    fn encode(&self, s: &mut S) -> Result<(), E> {
+        s.emit_str(self.to_string().as_slice())
     }
 }
 
@@ -49,6 +57,12 @@ impl Show for IP6Addr {
                        a, b, c, d, e, f_, g, h)
             }
         }
+    }
+}
+
+impl<E,S: Encoder<E>> Encodable<S, E> for IP6Addr {
+    fn encode(&self, s: &mut S) -> Result<(), E> {
+        s.emit_str(self.to_string().as_slice())
     }
 }
 

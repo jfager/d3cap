@@ -3,7 +3,7 @@
 use std::mem::size_of;
 use std::fmt;
 
-use util::skip_transmute;
+use util::skip_cast;
 
 //For possible reference:
 //https://github.com/simsong/tcpflow/blob/master/src/wifipcap/ieee802_11_radio.h
@@ -143,7 +143,7 @@ impl CommonA {
         let sz = size_of::<RadiotapHeader>() + size_of::<CommonA>();
         if hdr.it_present == COMMON_A
         && hdr.it_len as uint >= sz {
-            let out: &CommonA = unsafe { skip_transmute(hdr) };
+            let out: &CommonA = unsafe { skip_cast(hdr) };
             Some(out)
         } else {
             None
@@ -167,7 +167,7 @@ impl CommonB {
         let sz = size_of::<RadiotapHeader>() + size_of::<CommonB>();
         if hdr.it_present == COMMON_B
         && hdr.it_len as uint >= sz {
-            let out: &CommonB = unsafe { skip_transmute(hdr) };
+            let out: &CommonB = unsafe { skip_cast(hdr) };
             Some(out)
         } else {
             None
