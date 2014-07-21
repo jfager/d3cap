@@ -139,7 +139,7 @@ pub struct CommonA {
 }
 
 impl CommonA {
-    pub fn parse<'a>(hdr: &'a RadiotapHeader) -> Option<&'a CommonA> {
+    pub fn parse(hdr: &RadiotapHeader) -> Option<&CommonA> {
         let sz = size_of::<RadiotapHeader>() + size_of::<CommonA>();
         if hdr.it_present == COMMON_A
         && hdr.it_len as uint >= sz {
@@ -163,7 +163,7 @@ pub struct CommonB {
 }
 
 impl CommonB {
-    pub fn parse<'a>(hdr: &'a RadiotapHeader) -> Option<&'a CommonB> {
+    pub fn parse(hdr: &RadiotapHeader) -> Option<&CommonB> {
         let sz = size_of::<RadiotapHeader>() + size_of::<CommonB>();
         if hdr.it_present == COMMON_B
         && hdr.it_len as uint >= sz {

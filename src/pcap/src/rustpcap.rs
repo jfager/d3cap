@@ -39,25 +39,25 @@ impl PcapSessionBuilder {
         PcapSessionBuilder { p: p, activated: false }
     }
 
-    pub fn buffer_size<'a>(&'a mut self, sz: i32) -> &'a mut PcapSessionBuilder {
+    pub fn buffer_size(&mut self, sz: i32) -> &mut PcapSessionBuilder {
         if self.activated { fail!("Session already activated") }
         unsafe { pcap_set_buffer_size(self.p, sz); }
         self
     }
 
-    pub fn timeout<'a>(&'a mut self, to: i32) -> &'a mut PcapSessionBuilder {
+    pub fn timeout(&mut self, to: i32) -> &mut PcapSessionBuilder {
         if self.activated { fail!("Session already activated") }
         unsafe { pcap_set_timeout(self.p, to); }
         self
     }
 
-    pub fn promisc<'a>(&'a mut self, promisc: bool) -> &'a mut PcapSessionBuilder {
+    pub fn promisc(&mut self, promisc: bool) -> &mut PcapSessionBuilder {
         if self.activated { fail!("Session already activated") }
         unsafe { pcap_set_promisc(self.p, promisc as c_int); }
         self
     }
 
-    pub fn rfmon<'a>(&'a mut self, rfmon: bool) -> &'a mut PcapSessionBuilder {
+    pub fn rfmon(&mut self, rfmon: bool) -> &mut PcapSessionBuilder {
         if self.activated { fail!("Session already activated") }
         unsafe { pcap_set_rfmon(self.p, rfmon as c_int); }
         self

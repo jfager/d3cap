@@ -126,7 +126,7 @@ pub struct ACK {
 
 // 8.3.1.5 PS-Poll
 #[packed]
-pub struct PS_Poll {
+pub struct PSPoll {
     pub base: Dot11BaseHeader,
     pub bssid: MacAddr, //ra
     pub ta: MacAddr,
@@ -135,7 +135,7 @@ pub struct PS_Poll {
 
 // 8.3.1.6 CF-End
 #[packed]
-pub struct CF_End {
+pub struct CFEnd {
     pub base: Dot11BaseHeader,
     pub ra: MacAddr,
     pub bssid: MacAddr, //ta
@@ -144,7 +144,7 @@ pub struct CF_End {
 
 // 8.3.1.7 CF-End+CF-Ack
 #[packed]
-pub struct CF_End_CF_Ack {
+pub struct CFEndCFAck {
     pub base: Dot11BaseHeader,
     pub ra: MacAddr,
     pub bssid: MacAddr, //ta

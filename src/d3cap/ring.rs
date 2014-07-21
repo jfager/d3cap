@@ -41,7 +41,7 @@ impl<T> RingBuffer<T> {
         self.next = 0;
     }
 
-    pub fn iter<'a>(&'a self) -> RingIterator<'a, T> {
+    pub fn iter(&self) -> RingIterator<T> {
         RingIterator { rb: self, i: 0 }
     }
 
@@ -70,7 +70,7 @@ impl<E,S: Encoder<E>,T: Encodable<S, E>> Encodable<S, E> for RingBuffer<T> {
 }
 
 impl<T> std::ops::Index<uint, T> for RingBuffer<T> {
-    fn index<'a>(&'a self, index: &uint) -> &'a T {
+    fn index(&self, index: &uint) -> &T {
         assert!(*index < self.size);
 
         if self.size < self.capacity {
