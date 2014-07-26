@@ -106,7 +106,7 @@ pub struct ProtocolStats<T> {
     routes: HashMap<T, AddrStats<T>>,
 }
 
-impl<'a, T: PartialOrd+Hash+Eq+Clone+Copy+Send+ToString> ProtocolStats<T> {
+impl<'a, T: Hash+Eq+Copy> ProtocolStats<T> {
     pub fn new() -> ProtocolStats<T> {
         //FIXME:  this is the map that's hitting https://github.com/mozilla/rust/issues/11102
         ProtocolStats { stats: PktStats::new(), routes: HashMap::new() }

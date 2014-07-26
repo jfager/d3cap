@@ -29,7 +29,7 @@ struct ProtocolHandler<T> {
     tx: Sender<PktMeta<T>>,
     route_stats_mcast: Multicast<RouteStatsMsg<T>>
 }
-impl <T: PartialOrd+Hash+Eq+Clone+Copy+Send+ToString+Share> ProtocolHandler<T> {
+impl <T: Hash+Eq+Copy+Send+Share> ProtocolHandler<T> {
     fn spawn(typ: &'static str) -> ProtocolHandler<T> {
         let (tx, rx) = channel();
         let handler = ProtocolHandler {
