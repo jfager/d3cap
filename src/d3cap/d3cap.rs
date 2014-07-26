@@ -5,7 +5,7 @@ use std::collections::hashmap::HashMap;
 use std::io::File;
 use std::sync::Arc;
 
-use multicast::{Multicast, MulticastMsg, MulticastMsgDest};
+use multicast::Multicast;
 use json_serve::uiserver::UIServer;
 
 use ring::RingBuffer;
@@ -27,17 +27,17 @@ struct RouteStatsMsg<T> {
 
 struct ProtocolHandler<T> {
     tx: Sender<PktMeta<T>>,
-    route_stats_listeners: Multicast<RouteStatsMsg<T>>
+    route_stats_mcast: Multicast<RouteStatsMsg<T>>
 }
 impl <T: PartialOrd+Hash+Eq+Clone+Copy+Send+ToString+Share> ProtocolHandler<T> {
     fn spawn(typ: &'static str) -> ProtocolHandler<T> {
         let (tx, rx) = channel();
         let handler = ProtocolHandler {
             tx: tx,
-            route_stats_listeners: Multicast::spawn()
+            route_stats_mcast: Multicast::spawn()
         };
 
-        let mc_sender = handler.route_stats_listeners.clone_sender();
+        let mc_sender = handler.route_stats_mcast.clone();
         TaskBuilder::new().named(format!("{}_handler", typ)).spawn(proc() {
             let mut stats = ProtocolStats::new();
             loop {
@@ -46,7 +46,7 @@ impl <T: PartialOrd+Hash+Eq+Clone+Copy+Send+ToString+Share> ProtocolHandler<T> {
                     typ: typ,
                     route: route_stats
                 });
-                mc_sender.send(MulticastMsg(route_stats_msg));
+                mc_sender.send(route_stats_msg);
             }
         });
 
@@ -58,7 +58,7 @@ impl <T: PartialOrd+Hash+Eq+Clone+Copy+Send+ToString+Share> ProtocolHandler<T> {
     }
 
     fn register_route_stats_listener(&self, tx: Sender<Arc<RouteStatsMsg<T>>>) {
-        self.route_stats_listeners.send(MulticastMsgDest(tx));
+        self.route_stats_mcast.register(tx);
     }
 }
 

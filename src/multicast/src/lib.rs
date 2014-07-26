@@ -44,11 +44,17 @@ impl<T:Send+Share> Multicast<T> {
         Multicast { tx: tx }
     }
 
-    pub fn send(&self, msg: MulticastMsg<T>) {
-        self.tx.send(msg)
+    pub fn send(&self, msg: Arc<T>) {
+        self.tx.send(MulticastMsg(msg))
     }
 
-    pub fn clone_sender(&self) -> Sender<MulticastMsg<T>> {
-        self.tx.clone()
+    pub fn register(&self, dest: Sender<Arc<T>>) {
+        self.tx.send(MulticastMsgDest(dest))
+    }
+}
+
+impl<T:Send> Clone for Multicast<T> {
+    fn clone(&self) -> Multicast<T> {
+        Multicast { tx: self.tx.clone() }
     }
 }

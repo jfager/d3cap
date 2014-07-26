@@ -73,15 +73,15 @@ impl WebSocketWorker {
 }
 
 pub struct UIServer {
-    json_broadcaster: Multicast<String>, //UIServer -> Workers (json msgs)
+    json_multicast: Multicast<String>, //UIServer -> Workers (json msgs)
 }
 
 impl UIServer {
     pub fn spawn<'a, T:Encodable<json::Encoder<'a>,IoError>>(port: u16, welcome: &T) -> UIServer {
         let welcome_msg = Arc::new(json::encode(welcome));
 
-        let server = UIServer { json_broadcaster: Multicast::spawn() };
-        let json_dest_sender = server.json_broadcaster.clone_sender();
+        let mc = Multicast::spawn();
+        let json_dest_sender = mc.clone();
 
         TaskBuilder::new().named("ui_server").spawn(proc() {
             let mut acceptor = TcpListener::bind("127.0.0.1", port).listen();
@@ -91,7 +91,7 @@ impl UIServer {
             for tcp_stream in acceptor.incoming() {
                 let (conn_tx, conn_rx) = channel();
                 conn_tx.send(welcome_msg.clone());
-                json_dest_sender.send(MulticastMsgDest(conn_tx));
+                json_dest_sender.register(conn_tx);
                 TaskBuilder::new().named(format!("websocketWorker_{}", workercount)).spawn(proc() {
                     match tcp_stream {
                         Ok(tcps) => {
@@ -104,16 +104,16 @@ impl UIServer {
             }
         });
 
-        server
+        UIServer { json_multicast: mc }
     }
 
     pub fn create_sender<'a, T:Encodable<json::Encoder<'a>,IoError>+Send+Share>(&self) -> Sender<Arc<T>> {
         let (tx, rx) = channel();
-        let jb = self.json_broadcaster.clone_sender();
+        let jb = self.json_multicast.clone();
         TaskBuilder::new().named(format!("routes_ui")).spawn(proc() {
             loop {
                 let t: Arc<T> = rx.recv();
-                jb.send(MulticastMsg(Arc::new(json::encode(&*t))));
+                jb.send(Arc::new(json::encode(&*t)));
             }
         });
         tx
