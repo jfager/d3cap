@@ -101,15 +101,15 @@ pub struct RouteStats<T> {
 
 //TODO: derive manually
 //#[deriving(Encodable)]
-pub struct ProtocolStats<T> {
+pub struct ProtocolGraph<T> {
     stats: PktStats,
     routes: HashMap<T, AddrStats<T>>,
 }
 
-impl<'a, T: Hash+Eq+Copy> ProtocolStats<T> {
-    pub fn new() -> ProtocolStats<T> {
+impl<'a, T: Hash+Eq+Copy> ProtocolGraph<T> {
+    pub fn new() -> ProtocolGraph<T> {
         //FIXME:  this is the map that's hitting https://github.com/mozilla/rust/issues/11102
-        ProtocolStats { stats: PktStats::new(), routes: HashMap::new() }
+        ProtocolGraph { stats: PktStats::new(), routes: HashMap::new() }
     }
     pub fn update(&mut self, pkt: &PktMeta<T>) -> RouteStats<T> {
         self.stats.update(pkt.size);
@@ -132,5 +132,21 @@ impl<'a, T: Hash+Eq+Copy> ProtocolStats<T> {
             a: SentStats { addr: pkt.src, sent: a_to_b },
             b: SentStats { addr: pkt.dst, sent: b_to_a }
         }
+    }
+
+    pub fn get_route_stats(&self, a: &T, b: &T) -> Option<RouteStats<T>> {
+        let a_opt = self.routes.find(a);
+        let b_opt = self.routes.find(b);
+        match (a_opt, b_opt) {
+            (Some(a_), Some(b_)) => Some(RouteStats {
+                a: SentStats { addr: *a, sent: a_.get_sent_to(b) },
+                b: SentStats { addr: *b, sent: b_.get_sent_to(a) }
+            }),
+            _ => None
+        }
+    }
+
+    pub fn get_addr_stats(&self, addr: &T) -> Option<&AddrStats<T>> {
+        self.routes.find(addr)
     }
 }

@@ -15,7 +15,7 @@ use ether::{EthernetHeader, MacAddr,
             ETHERTYPE_ARP, ETHERTYPE_IP4, ETHERTYPE_IP6, ETHERTYPE_802_1X};
 use dot11;
 use tap;
-use pkt_graph::{PktMeta, ProtocolStats, RouteStats};
+use pkt_graph::{PktMeta, ProtocolGraph, RouteStats};
 
 use toml;
 
@@ -39,7 +39,7 @@ impl <T: Hash+Eq+Copy+Send+Share> ProtocolHandler<T> {
 
         let mc_sender = handler.route_stats_mcast.clone();
         TaskBuilder::new().named(format!("{}_handler", typ)).spawn(proc() {
-            let mut stats = ProtocolStats::new();
+            let mut stats = ProtocolGraph::new();
             loop {
                 let route_stats = stats.update(&rx.recv());
                 let route_stats_msg = Arc::new(RouteStatsMsg {
