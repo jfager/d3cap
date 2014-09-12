@@ -1,6 +1,5 @@
 #![crate_type="lib"]
 
-extern crate std;
 extern crate serialize;
 extern crate openssl;
 

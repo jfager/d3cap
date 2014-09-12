@@ -29,7 +29,7 @@ struct ProtocolHandler<T> {
     tx: Sender<PktMeta<T>>,
     route_stats_mcast: Multicast<RouteStatsMsg<T>>
 }
-impl <T: Hash+Eq+Copy+Send+Share> ProtocolHandler<T> {
+impl <T: Hash+Eq+Copy+Send+Sync> ProtocolHandler<T> {
     fn spawn(typ: &'static str) -> ProtocolHandler<T> {
         let (tx, rx) = channel();
         let handler = ProtocolHandler {
@@ -196,7 +196,7 @@ impl RadiotapCtx {
 }
 
 pub fn run(conf: D3capConf) {
-    use cap = pcap::rustpcap;
+    use pcap::rustpcap as cap;
 
     let mut mac_addr_map: HashMap<MacAddr, String> = HashMap::new();
 
@@ -250,8 +250,6 @@ pub fn run(conf: D3capConf) {
                 ctx.ip4.register_route_stats_listener(ui.create_sender());
                 ctx.ip6.register_route_stats_listener(ui.create_sender());
 
-                //FIXME: lame workaround for https://github.com/mozilla/rust/issues/11102
-                std::io::timer::sleep(1000);
                 loop { sess.next(|t,sz| ctx.parse(t, sz)); }
             },
             cap::DLT_IEEE802_11_RADIO => {
@@ -260,7 +258,6 @@ pub fn run(conf: D3capConf) {
                 };
                 ctx.mac.register_route_stats_listener(ui.create_sender());
 
-                std::io::timer::sleep(1000);
                 loop {
                     sess.next(|t,_| ctx.parse(t));
                 }

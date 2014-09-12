@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use serialize::{json, Encodable, Encoder};
 
-use ws = rustwebsocket;
+use rustwebsocket as ws;
 
 use multicast::{Multicast,MulticastMsg,MulticastMsgDest};
 
@@ -107,7 +107,7 @@ impl UIServer {
         UIServer { json_multicast: mc }
     }
 
-    pub fn create_sender<'a, T:Encodable<json::Encoder<'a>,IoError>+Send+Share>(&self) -> Sender<Arc<T>> {
+    pub fn create_sender<'a, T:Encodable<json::Encoder<'a>,IoError>+Send+Sync>(&self) -> Sender<Arc<T>> {
         let (tx, rx) = channel();
         let jb = self.json_multicast.clone();
         TaskBuilder::new().named(format!("routes_ui")).spawn(proc() {

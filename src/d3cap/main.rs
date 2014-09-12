@@ -1,6 +1,5 @@
 #![feature(macro_rules, default_type_params)]
 
-extern crate std;
 extern crate getopts;
 extern crate serialize;
 extern crate collections;
@@ -23,7 +22,7 @@ mod d3cap;
 
 
 fn main() {
-    use go = getopts;
+    use getopts as go;
     use std::{os};
     use d3cap::{D3capConf};
 

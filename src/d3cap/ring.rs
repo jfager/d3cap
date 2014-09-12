@@ -81,7 +81,7 @@ impl<T> std::ops::Index<uint, T> for RingBuffer<T> {
     }
 }
 
-pub struct RingIterator<'s, T> {
+pub struct RingIterator<'s, T:'s> {
     rb: &'s RingBuffer<T>,
     i: uint
 }

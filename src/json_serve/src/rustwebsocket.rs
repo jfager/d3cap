@@ -1,10 +1,9 @@
-extern crate std;
-
+use std;
 use std::io::{Stream,BufferedStream,IoResult};
 
 use serialize::base64::{ToBase64, STANDARD};
 
-use crypto_hash = openssl::crypto::hash;
+use openssl::crypto::hash as crypto_hash;
 
 static CONNECTION_FIELD: &'static str = "Connection";
 static UPGRADE: &'static str = "upgrade";
