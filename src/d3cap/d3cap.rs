@@ -4,10 +4,13 @@ use std::hash::Hash;
 use std::collections::hashmap::HashMap;
 use std::io::File;
 use std::sync::Arc;
+use std::time::duration::Duration;
+
+use toml;
 
 use multicast::Multicast;
 use json_serve::uiserver::UIServer;
-
+use readline::readline;
 use ring::RingBuffer;
 use util::{ntohs, skip_bytes_cast, skip_cast};
 use ip::{IP4Addr, IP6Addr, IP4Header, IP6Header};
@@ -17,7 +20,6 @@ use dot11;
 use tap;
 use pkt_graph::{PktMeta, ProtocolGraph, RouteStats};
 
-use toml;
 
 #[deriving(Encodable)]
 struct RouteStatsMsg<T> {
@@ -29,7 +31,8 @@ struct ProtocolHandler<T> {
     tx: Sender<PktMeta<T>>,
     route_stats_mcast: Multicast<RouteStatsMsg<T>>
 }
-impl <T: Hash+Eq+Copy+Send+Share> ProtocolHandler<T> {
+
+impl <T: Hash+Eq+Copy+Send+Sync> ProtocolHandler<T> {
     fn spawn(typ: &'static str) -> ProtocolHandler<T> {
         let (tx, rx) = channel();
         let handler = ProtocolHandler {
@@ -62,6 +65,15 @@ impl <T: Hash+Eq+Copy+Send+Share> ProtocolHandler<T> {
     }
 }
 
+impl <T:Send> Clone for ProtocolHandler<T> {
+    fn clone(&self) -> ProtocolHandler<T> {
+        ProtocolHandler {
+            tx: self.tx.clone(),
+            route_stats_mcast: self.route_stats_mcast.clone()
+        }
+    }
+}
+
 struct EthernetCtx {
     mac: ProtocolHandler<MacAddr>,
     ip4: ProtocolHandler<IP4Addr>,
@@ -69,12 +81,8 @@ struct EthernetCtx {
 }
 
 impl EthernetCtx {
-    fn parse(&mut self, pkt: &EthernetHeader, size: u32) {
+    pub fn parse(&mut self, pkt: &EthernetHeader, size: u32) {
         self.mac.send(PktMeta::new(pkt.src, pkt.dst, size));
-        self.dispatch(pkt);
-    }
-
-    fn dispatch(&mut self, pkt: &EthernetHeader) {
         match pkt.typ {
             ETHERTYPE_ARP => {
                 //io::println("ARP!");
@@ -102,7 +110,7 @@ struct RadiotapCtx {
 }
 
 impl RadiotapCtx {
-    fn parse(&mut self, pkt: &tap::RadiotapHeader) {
+    fn parse(&mut self, pkt: &tap::RadiotapHeader, size: u32) {
         fn magic<U>(pkt: &tap::RadiotapHeader) -> &U {
             unsafe { skip_bytes_cast(pkt, pkt.it_len as int) }
         }
@@ -195,28 +203,9 @@ impl RadiotapCtx {
     }
 }
 
-pub fn run(conf: D3capConf) {
-    use cap = pcap::rustpcap;
 
-    let mut mac_addr_map: HashMap<MacAddr, String> = HashMap::new();
-
-    match conf.conf {
-        Some(ref x) => {
-            let s = File::open(&Path::new(x.to_string())).read_to_string().unwrap();
-            let t = toml::Parser::new(s.as_slice()).parse().unwrap();
-            let known_macs = t.find(&"known-macs".to_string()).unwrap().as_table().unwrap();
-            for (k, v) in known_macs.iter() {
-                let addr = MacAddr::from_string(k.as_slice());
-                let alias = v.as_str();
-                if addr.is_some() && alias.is_some() {
-                    mac_addr_map.insert(addr.unwrap(), alias.unwrap().to_string());
-                }
-            }
-        }
-        _ => ()
-    }
-
-    let ui = UIServer::spawn(conf.port, &mac_addr_map);
+pub fn start_capture(ui_opt: Option<UIServer>, conf: D3capConf) {
+    use pcap::rustpcap as cap;
 
     TaskBuilder::new().named("packet_capture").spawn(proc() {
         let sess = match conf.file {
@@ -235,9 +224,6 @@ pub fn run(conf: D3capConf) {
             }
         };
 
-        println!("Starting capture loop");
-        println!("Available datalink types: {}", sess.list_datalinks());
-
         match sess.datalink() {
             cap::DLT_ETHERNET => {
                 let mut ctx = EthernetCtx {
@@ -246,33 +232,76 @@ pub fn run(conf: D3capConf) {
                     ip6: ProtocolHandler::spawn("ip6")
                 };
 
-                ctx.mac.register_route_stats_listener(ui.create_sender());
-                ctx.ip4.register_route_stats_listener(ui.create_sender());
-                ctx.ip6.register_route_stats_listener(ui.create_sender());
+                ui_opt.map(|ui| {
+                    ctx.mac.register_route_stats_listener(ui.create_sender());
+                    ctx.ip4.register_route_stats_listener(ui.create_sender());
+                    ctx.ip6.register_route_stats_listener(ui.create_sender());
+                });
 
                 //FIXME: lame workaround for https://github.com/mozilla/rust/issues/11102
-                std::io::timer::sleep(1000);
+                std::io::timer::sleep(Duration::seconds(1));
                 loop { sess.next(|t,sz| ctx.parse(t, sz)); }
             },
             cap::DLT_IEEE802_11_RADIO => {
                 let mut ctx = RadiotapCtx {
                     mac: ProtocolHandler::spawn("mac"),
                 };
-                ctx.mac.register_route_stats_listener(ui.create_sender());
 
-                std::io::timer::sleep(1000);
-                loop {
-                    sess.next(|t,_| ctx.parse(t));
-                }
+                ui_opt.map(|ui| {
+                    ctx.mac.register_route_stats_listener(ui.create_sender());
+                });
+
+                //FIXME: lame workaround for https://github.com/mozilla/rust/issues/11102
+                std::io::timer::sleep(Duration::seconds(1));
+                loop { sess.next(|t,sz| ctx.parse(t, sz)); }
             },
             x => fail!("unsupported datalink type: {}", x)
-        }
-        //unsafe { std::intrinsics::abort(); }
+        };
     });
 }
 
+fn start_cli() {
+    TaskBuilder::new().named("cli").spawn(proc() {
+        let mut cmds: HashMap<String, ||->()> = HashMap::new();
+        cmds.insert("datalinks".to_string(), || println!("called foo"));
+
+        loop {
+            readline("> ").map(|val| match cmds.find_mut(&val) {
+                Some(f) => (*f)(),
+                None => println!("unknown command")
+            });
+        }
+    });
+}
+
+
+pub fn run(conf: D3capConf) {
+
+    let mut mac_addr_map: HashMap<MacAddr, String> = HashMap::new();
+
+    conf.conf.as_ref().map(|x| {
+        let s = File::open(&Path::new(x.to_string())).read_to_string().unwrap();
+        let t = toml::Parser::new(s.as_slice()).parse().unwrap();
+        let known_macs = t.find(&"known-macs".to_string()).unwrap().as_table().unwrap();
+        for (k, v) in known_macs.iter() {
+            let addr = MacAddr::from_string(k.as_slice());
+            let alias = v.as_str();
+            if addr.is_some() && alias.is_some() {
+                mac_addr_map.insert(addr.unwrap(), alias.unwrap().to_string());
+            }
+        }
+    });
+
+    let ui_opt = conf.websocket.map(|port| UIServer::spawn(port, &mac_addr_map));
+
+    start_capture(ui_opt, conf);
+
+    start_cli();
+
+}
+
 pub struct D3capConf {
-    pub port: u16,
+    pub websocket: Option<u16>,
     pub interface: Option<String>,
     pub file: Option<String>,
     pub conf: Option<String>,

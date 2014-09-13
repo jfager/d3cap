@@ -1,5 +1,3 @@
-extern crate std;
-
 use std::comm::{channel, Sender, Receiver};
 use std::task::{TaskBuilder};
 use std::sync::Arc;
@@ -13,7 +11,7 @@ pub struct Multicast<T> {
     tx: Sender<MulticastMsg<T>>
 }
 
-impl<T:Send+Share> Multicast<T> {
+impl<T:Send+Sync> Multicast<T> {
     pub fn spawn() -> Multicast<T> {
         let (tx, rx): (Sender<MulticastMsg<T>>, Receiver<MulticastMsg<T>>) = channel();
         TaskBuilder::new().named("multicast").spawn(proc() {

@@ -4,7 +4,7 @@ use std::io::{Stream,BufferedStream,IoResult};
 
 use serialize::base64::{ToBase64, STANDARD};
 
-use crypto_hash = openssl::crypto::hash;
+use openssl::crypto::hash as crypto_hash;
 
 static CONNECTION_FIELD: &'static str = "Connection";
 static UPGRADE: &'static str = "upgrade";
@@ -19,6 +19,7 @@ static VERSION: &'static str = "13";
 static ACCEPT_FIELD: &'static str = "Sec-WebSocket-Accept";
 static SECRET: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
+#[deriving(FromPrimitive)]
 pub enum FrameType {
     EmptyFrame = 0xF0,
     ErrorFrame = 0xF1,
@@ -125,7 +126,7 @@ pub fn write_frame<W:Writer>(data: &[u8], frameType: FrameType, w: &mut W) -> Io
 }
 
 fn frame_type_from(i: u8) -> FrameType {
-    unsafe { std::mem::transmute(i) }
+    FromPrimitive::from_u8(i).unwrap()
 }
 
 pub fn parse_input_frame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<Vec<u8>>, FrameType) {

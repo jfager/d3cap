@@ -29,7 +29,6 @@ impl PcapSessionBuilder {
         if dev.is_null() {
             fail!("No device available");
         }
-        println!("Using dev {}", unsafe { str::raw::from_c_str(dev as *const c_char) });
         PcapSessionBuilder::do_new(dev as *const c_char, errbuf.as_mut_slice())
     }
 
