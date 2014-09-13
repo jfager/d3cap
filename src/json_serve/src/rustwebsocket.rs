@@ -1,5 +1,4 @@
-extern crate std;
-
+use std;
 use std::io::{Stream,BufferedStream,IoResult};
 
 use serialize::base64::{ToBase64, STANDARD};

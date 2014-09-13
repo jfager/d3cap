@@ -203,7 +203,6 @@ impl RadiotapCtx {
     }
 }
 
-
 pub fn start_capture(ui_opt: Option<UIServer>, conf: D3capConf) {
     use pcap::rustpcap as cap;
 
@@ -238,8 +237,6 @@ pub fn start_capture(ui_opt: Option<UIServer>, conf: D3capConf) {
                     ctx.ip6.register_route_stats_listener(ui.create_sender());
                 });
 
-                //FIXME: lame workaround for https://github.com/mozilla/rust/issues/11102
-                std::io::timer::sleep(Duration::seconds(1));
                 loop { sess.next(|t,sz| ctx.parse(t, sz)); }
             },
             cap::DLT_IEEE802_11_RADIO => {
@@ -251,8 +248,6 @@ pub fn start_capture(ui_opt: Option<UIServer>, conf: D3capConf) {
                     ctx.mac.register_route_stats_listener(ui.create_sender());
                 });
 
-                //FIXME: lame workaround for https://github.com/mozilla/rust/issues/11102
-                std::io::timer::sleep(Duration::seconds(1));
                 loop { sess.next(|t,sz| ctx.parse(t, sz)); }
             },
             x => fail!("unsupported datalink type: {}", x)
