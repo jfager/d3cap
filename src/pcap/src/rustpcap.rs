@@ -1,8 +1,10 @@
-#![link(name="rustpcap", vers="0.0.1")]
+//#![link(name="rustpcap", vers="0.0.1")]
 
 use libc::{c_char,c_int};
 use std::{ptr,str,vec};
 use pcap::*;
+
+bindgen!(["pcap.h"])
 
 //TODO: http://www.tcpdump.org/linktypes.html
 pub type DataLinkType = c_int;
