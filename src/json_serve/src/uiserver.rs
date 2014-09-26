@@ -2,14 +2,13 @@ use std::comm;
 use std::io::{Acceptor,Listener,Stream,BufferedStream,IoResult,IoError};
 use std::io::net::tcp::{TcpListener};
 use std::task::{TaskBuilder};
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use serialize::{json, Encodable, Encoder};
 
 use rustwebsocket as ws;
 
-use multicast::{Multicast,MulticastMsg,MulticastMsgDest};
+use multicast::{Multicast};
 
 pub struct WebSocketWorker;
 impl WebSocketWorker {
@@ -54,8 +53,8 @@ impl WebSocketWorker {
                     }
                 }
             }
-            let (_, frameType) = ws::parse_input_frame(tcps);
-            match frameType {
+            let (_, frame_type) = ws::parse_input_frame(tcps);
+            match frame_type {
                 ws::ClosingFrame |
                 ws::ErrorFrame   => {
                     let res = ws::write_frame([], ws::ClosingFrame, tcps);
@@ -95,7 +94,7 @@ impl UIServer {
                 TaskBuilder::new().named(format!("websocketWorker_{}", workercount)).spawn(proc() {
                     match tcp_stream {
                         Ok(tcps) => {
-                            WebSocketWorker.run(&mut BufferedStream::new(tcps), &conn_rx);
+                            WebSocketWorker.run(&mut BufferedStream::new(tcps), &conn_rx).unwrap();
                         }
                         _ => fail!("Could not start websocket worker")
                     }

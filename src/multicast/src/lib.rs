@@ -3,8 +3,8 @@ use std::task::{TaskBuilder};
 use std::sync::Arc;
 
 pub enum MulticastMsg<T> {
-    MulticastMsg(Arc<T>),
-    MulticastMsgDest(Sender<Arc<T>>)
+    McMsg(Arc<T>),
+    McMsgDest(Sender<Arc<T>>)
 }
 
 pub struct Multicast<T> {
@@ -19,8 +19,8 @@ impl<T:Send+Sync> Multicast<T> {
             let mut to_remove = Vec::new();
             loop {
                 match rx.recv_opt() {
-                    Ok(MulticastMsgDest(c)) => mc_txs.push(c),
-                    Ok(MulticastMsg(msg)) => {
+                    Ok(McMsgDest(c)) => mc_txs.push(c),
+                    Ok(McMsg(msg)) => {
                         to_remove.truncate(0);
                         for (i, mc_tx) in mc_txs.iter().enumerate() {
                             if mc_tx.send_opt(msg.clone()).is_err() {
@@ -43,11 +43,11 @@ impl<T:Send+Sync> Multicast<T> {
     }
 
     pub fn send(&self, msg: Arc<T>) {
-        self.tx.send(MulticastMsg(msg))
+        self.tx.send(McMsg(msg))
     }
 
     pub fn register(&self, dest: Sender<Arc<T>>) {
-        self.tx.send(MulticastMsgDest(dest))
+        self.tx.send(McMsgDest(dest))
     }
 }
 

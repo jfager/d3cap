@@ -39,20 +39,20 @@ enum State {
 struct Handshake {
     key: String,
     resource: String,
-    frameType: FrameType
+    frame_type: FrameType
 }
 
 impl Handshake {
     pub fn get_answer(&self) -> String {
         let res = crypto_hash::hash(crypto_hash::SHA1, self.key.as_bytes());
-        let responseKey = res.as_slice().to_base64(STANDARD);
+        let response_key = res.as_slice().to_base64(STANDARD);
         format!("HTTP/1.1 101 Switching Protocols\r\n\
                  {}: {}\r\n\
                  {}: {}\r\n\
                  {}: {}\r\n\r\n",
                 UPGRADE_FIELD, WEBSOCKET,
                 CONNECTION_FIELD, UPGRADE_FIELD,
-                ACCEPT_FIELD, responseKey)
+                ACCEPT_FIELD, response_key)
     }
 }
 
@@ -68,19 +68,19 @@ pub fn parse_handshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake
         //origin: ~"",
         key: "".to_string(),
         resource: prop[1].as_slice().trim().to_string(),
-        frameType: OpeningFrame
+        frame_type: OpeningFrame
     };
 
-    let mut hasHandshake = false;
+    let mut has_handshake = false;
     loop {
         let line = match s.read_line() {
             Ok(ln) => ln,
-            _ => return if hasHandshake { Some(hs) } else { None }
+            _ => return if has_handshake { Some(hs) } else { None }
         };
 
         let line = line.as_slice().trim();
         if line.is_empty() {
-            return if hasHandshake { Some(hs) } else { None };
+            return if has_handshake { Some(hs) } else { None };
         }
 
         let prop: Vec<&str> = line.as_slice().split_str(": ").collect();
@@ -93,8 +93,9 @@ pub fn parse_handshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake
 
         match key {
             KEY_FIELD => {
-                hs.key = val.to_string().append(SECRET);
-                hasHandshake = true;
+                hs.key = val.to_string();
+                hs.key.push_str(SECRET);
+                has_handshake = true;
             }
             _ => () //do nothing
         }
@@ -107,8 +108,8 @@ static MED_FRAME: uint = 65535;
 static MED_FRAME_FLAG: u8 = 126;
 static LARGE_FRAME_FLAG: u8 = 127;
 
-pub fn write_frame<W:Writer>(data: &[u8], frameType: FrameType, w: &mut W) -> IoResult<()> {
-    try!(w.write_u8((0x80 | frameType as int) as u8));
+pub fn write_frame<W:Writer>(data: &[u8], frame_type: FrameType, w: &mut W) -> IoResult<()> {
+    try!(w.write_u8((0x80 | frame_type as int) as u8));
 
     if data.len() <= SMALL_FRAME {
         try!(w.write_u8(data.len() as u8));
@@ -147,22 +148,22 @@ pub fn parse_input_frame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<Vec<u8
     || opcode == ClosingFrame as u8
     || opcode == PingFrame as u8
     || opcode == PongFrame as u8 {
-        let frameType = frame_type_from(opcode);
-        let payloadLength = hdr[1] & 0x7F;
-        if payloadLength < 0x7E { //Only handle short payloads right now.
-            let toread = (payloadLength + 4) as uint; //+4 for mask
+        let frame_type = frame_type_from(opcode);
+        let payload_len = hdr[1] & 0x7F;
+        if payload_len < 0x7E { //Only handle short payloads right now.
+            let toread = (payload_len + 4) as uint; //+4 for mask
             let masked_payload = match s.read_exact(toread) {
                 Ok(mp) => mp,
                 _ => return (None, ErrorFrame)
             };
-            let payload = masked_payload.tailn(4).iter()
+            let payload = masked_payload.slice_from(4).iter()
                 .enumerate()
                 .map(|(i, t)| { t ^ masked_payload[i%4] })
                 .collect();
-            return (Some(payload), frameType);
+            return (Some(payload), frame_type);
         }
 
-        return (None, frameType);
+        return (None, frame_type);
     }
 
     return (None, ErrorFrame);

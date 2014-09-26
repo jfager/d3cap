@@ -1,4 +1,4 @@
-use std::collections::hashmap::HashMap;
+use std::collections::hashmap::{Occupied, Vacant, HashMap};
 use std::hash::Hash;
 
 use time;
@@ -81,7 +81,10 @@ impl <T:Hash+Eq> AddrStats<T> {
     }
 
     fn update(m: &mut HashMap<T, PktStats>, addr: T, size: u32) -> PktStats {
-        let stats = m.find_or_insert_with(addr, |_| PktStats::new());
+        let stats = match m.entry(addr) {
+            Vacant(entry) => entry.set(PktStats::new()),
+            Occupied(entry) => entry.into_mut()
+        };
         stats.update(size);
         *stats
     }
@@ -117,13 +120,19 @@ impl<'a, T: Hash+Eq+Copy> ProtocolGraph<T> {
         // TODO: can we do something to avoid all these clones?
         let a_to_b;
         {
-            let a = self.routes.find_or_insert_with(pkt.src, |_| AddrStats::new());
+            let a = match self.routes.entry(pkt.src) {
+                Vacant(entry) => entry.set(AddrStats::new()),
+                Occupied(entry) => entry.into_mut()
+            };
             a_to_b = a.update_sent_to(pkt.dst, pkt.size);
         }
 
         let b_to_a;
         {
-            let b = self.routes.find_or_insert_with(pkt.dst, |_| AddrStats::new());
+            let b = match self.routes.entry(pkt.dst) {
+                Vacant(entry) => entry.set(AddrStats::new()),
+                Occupied(entry) => entry.into_mut()
+            };
             b.update_received_from(pkt.src, pkt.size);
             b_to_a = b.get_sent_to(&pkt.src);
         }
