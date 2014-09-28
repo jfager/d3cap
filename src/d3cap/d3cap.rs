@@ -43,12 +43,21 @@ impl <T: Hash+Eq+Copy+Send+Sync> ProtocolHandler<T> {
         TaskBuilder::new().named(format!("{}_handler", typ)).spawn(proc() {
             let mut stats = ProtocolGraph::new();
             loop {
-                let route_stats = stats.update(&rx.recv());
-                let route_stats_msg = Arc::new(RouteStatsMsg {
-                    typ: typ,
-                    route: route_stats
-                });
-                mc_sender.send(route_stats_msg);
+                select!(
+                    update = cap_rx.recv() => {
+                        let route_stats = stats.update(update);
+                        let route_stats_msg = Arc::new(RouteStatsMsg {
+                            typ: typ,
+                            route: route_stats
+                        });
+                        mc_sender.send(route_stats_msg);
+                    }
+                    request = req_rx.recv() => {
+                        match request {
+                            _ => println!("Got a request!")
+                        }
+                    }
+                )
             }
         });
 
@@ -255,15 +264,35 @@ pub fn start_capture(ui_opt: Option<UIServer>, conf: D3capConf) {
     });
 }
 
-fn start_cli() {
+enum ProtoGraphReq {
+    Datalinks
+};
+
+enum ProtoGraphRsp {
+};
+
+fn start_cli(tx: Sender<Foo>, rx: Receiver<Foo>) {
     TaskBuilder::new().named("cli").spawn(proc() {
-        let mut cmds: HashMap<String, ||->()> = HashMap::new();
-        cmds.insert("datalinks".to_string(), || println!("called foo"));
+        let mut cmds: HashMap<String, (&str, ||->())> = HashMap::new();
+        cmds.insert("datalinks".to_string(), ("Print available datalinks", || {
+            println!("called datalinks");
+        }));
+
+        let maxlen = cmds.keys().map(|x| x.len()).max().unwrap();
 
         loop {
-            readline("> ").map(|val| match cmds.find_mut(&val) {
-                Some(f) => (*f)(),
-                None => println!("unknown command")
+            readline("> ").map(|val| match val.as_slice() {
+                "help" => {
+                    println!("\nAvailable commands are:");
+                    for (cmd, &(desc, _)) in cmds.iter() {
+                        println!("    {:2$}\t{}", cmd, desc, maxlen);
+                    }
+                    println!("");
+                },
+                _ => match cmds.find_mut(&val) {
+                    Some(&(_, ref mut f)) => (*f)(),
+                    None => println!("unknown command")
+                }
             });
         }
     });

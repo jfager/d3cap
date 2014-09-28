@@ -15,6 +15,10 @@ pub struct PcapSessionBuilder {
     activated: bool
 }
 
+pub fn list_devices() {
+    println!("list_devices")
+}
+
 impl PcapSessionBuilder {
 
     pub fn new_dev(dev: &str) -> PcapSessionBuilder {
