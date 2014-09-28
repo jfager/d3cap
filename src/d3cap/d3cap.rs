@@ -1,4 +1,3 @@
-use std;
 use std::task::{TaskBuilder};
 use std::hash::Hash;
 use std::collections::hashmap::HashMap;
@@ -210,16 +209,17 @@ pub fn start_capture(ui_opt: Option<UIServer>, conf: D3capConf) {
         let sess = match conf.file {
             Some(ref f) => cap::PcapSession::from_file(f.as_slice()),
             None => {
-                let mut sessBuilder = match conf.interface {
+                let mut sess_builder = match conf.interface {
                     Some(ref dev) => cap::PcapSessionBuilder::new_dev(dev.as_slice()),
                     None => cap::PcapSessionBuilder::new()
                 };
 
-                sessBuilder.buffer_size(65535)
-                           .timeout(1000)
-                           .promisc(conf.promisc)
-                           .rfmon(conf.monitor)
-                           .activate()
+                sess_builder
+                    .buffer_size(65535)
+                    .timeout(1000)
+                    .promisc(conf.promisc)
+                    .rfmon(conf.monitor)
+                    .activate()
             }
         };
 

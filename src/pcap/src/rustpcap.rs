@@ -90,7 +90,7 @@ impl PcapSession {
 
     pub fn list_datalinks(&self) -> Vec<i32> {
         unsafe {
-            let mut dlt_buf = ptr::mut_null();
+            let mut dlt_buf = ptr::null_mut();
             let sz = pcap_list_datalinks(self.p, &mut dlt_buf);
             let out = vec::raw::from_buf(dlt_buf as *const c_int, sz as uint);
             pcap_free_datalinks(dlt_buf);
@@ -100,7 +100,7 @@ impl PcapSession {
 
     //TODO: add a return value for success/failure
     pub fn next<T>(&self, f: |&T, u32|) {
-        let mut head_ptr = ptr::mut_null();
+        let mut head_ptr = ptr::null_mut();
         let mut data_ptr = ptr::null();
         let res = unsafe { pcap_next_ex(self.p, &mut head_ptr, &mut data_ptr) };
         match res {
