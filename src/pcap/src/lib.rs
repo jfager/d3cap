@@ -1,8 +1,10 @@
 #![crate_type="lib"]
 
-#![feature(globs)]
+#![feature(phase)]
+
+#[phase(plugin)]
+extern crate bindgen;
 
 extern crate libc;
 
-pub mod pcap;
 pub mod rustpcap;
