@@ -1,4 +1,5 @@
-use std::collections::hashmap::{Occupied, Vacant, HashMap};
+use std::collections::hash_map::{HashMap};
+use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::hash::Hash;
 
 use time;
@@ -15,7 +16,7 @@ impl<T> PktMeta<T> {
     }
 }
 
-#[deriving(Encodable)]
+#[deriving(RustcEncodable, Copy, Clone)]
 pub struct PktStats {
     count: u64,
     size: u64
@@ -74,7 +75,7 @@ impl <T:Hash+Eq> AddrStats<T> {
 
 
     fn get(m: &HashMap<T, PktStats>, addr: &T) -> PktStats {
-        match m.find(addr) {
+        match m.get(addr) {
             Some(s) => *s,
             None => PktStats::new()
         }
@@ -90,13 +91,13 @@ impl <T:Hash+Eq> AddrStats<T> {
     }
 }
 
-#[deriving(Encodable)]
+#[deriving(RustcEncodable, Clone)]
 pub struct SentStats<T> {
     addr: T,
     sent: PktStats
 }
 
-#[deriving(Encodable)]
+#[deriving(RustcEncodable, Clone)]
 pub struct RouteStats<T> {
     a: SentStats<T>,
     b: SentStats<T>
@@ -111,7 +112,6 @@ pub struct ProtocolGraph<T> {
 
 impl<'a, T: Hash+Eq+Copy> ProtocolGraph<T> {
     pub fn new() -> ProtocolGraph<T> {
-        //FIXME:  this is the map that's hitting https://github.com/mozilla/rust/issues/11102
         ProtocolGraph { stats: PktStats::new(), routes: HashMap::new() }
     }
     pub fn update(&mut self, pkt: &PktMeta<T>) -> RouteStats<T> {
@@ -144,8 +144,8 @@ impl<'a, T: Hash+Eq+Copy> ProtocolGraph<T> {
     }
 
     pub fn get_route_stats(&self, a: &T, b: &T) -> Option<RouteStats<T>> {
-        let a_opt = self.routes.find(a);
-        let b_opt = self.routes.find(b);
+        let a_opt = self.routes.get(a);
+        let b_opt = self.routes.get(b);
         match (a_opt, b_opt) {
             (Some(a_), Some(b_)) => Some(RouteStats {
                 a: SentStats { addr: *a, sent: a_.get_sent_to(b) },
@@ -156,6 +156,6 @@ impl<'a, T: Hash+Eq+Copy> ProtocolGraph<T> {
     }
 
     pub fn get_addr_stats(&self, addr: &T) -> Option<&AddrStats<T>> {
-        self.routes.find(addr)
+        self.routes.get(addr)
     }
 }

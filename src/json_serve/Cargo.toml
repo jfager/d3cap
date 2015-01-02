@@ -8,3 +8,7 @@ authors = [ "jfager@gmail.com" ]
 [dependencies.openssl]
 
 git = "https://github.com/sfackler/rust-openssl.git"
+
+
+[dependencies]
+rustc-serialize = "0.1.0"

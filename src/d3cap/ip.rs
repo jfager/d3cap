@@ -2,9 +2,9 @@ use std::hash::Hash;
 use std::fmt;
 use std::fmt::{Show,Formatter};
 
-use serialize::{Encodable, Encoder};
+use rustc_serialize::{Encodable, Encoder};
 
-fixed_vec!(IP4Addr, u8, 4)
+fixed_vec!(IP4Addr, u8, 4);
 
 impl Show for IP4Addr {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
@@ -34,7 +34,7 @@ pub struct IP4Header {
 }
 
 
-fixed_vec!(IP6Addr, u16, 8)
+fixed_vec!(IP6Addr, u16, 8);
 
 impl Show for IP6Addr {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {

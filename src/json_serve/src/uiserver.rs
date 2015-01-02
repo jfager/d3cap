@@ -1,10 +1,10 @@
 use std::comm;
 use std::io::{Acceptor,Listener,Stream,BufferedStream,IoResult,IoError};
 use std::io::net::tcp::{TcpListener};
-use std::task::{TaskBuilder};
+use std::thread;
 use std::sync::Arc;
 
-use serialize::{json, Encodable, Encoder};
+use rustc_serialize::{json, Encodable, Encoder};
 
 use rustwebsocket as ws;
 
@@ -34,7 +34,7 @@ impl WebSocketWorker {
             loop {
                 match data_po.try_recv() {
                     Ok(msg) => {
-                        let res = ws::write_frame(msg.as_bytes(), ws::TextFrame, tcps);
+                        let res = ws::write_frame(msg.as_bytes(), ws::FrameType::Text, tcps);
                         if res.is_err() {
                             println!("Error writing msg frame: {}", res);
                             break
@@ -49,15 +49,15 @@ impl WebSocketWorker {
                         break
                     },
                     Err(comm::Disconnected) => {
-                        fail!("Disconnected from client")
+                        panic!("Disconnected from client")
                     }
                 }
             }
             let (_, frame_type) = ws::parse_input_frame(tcps);
             match frame_type {
-                ws::ClosingFrame |
-                ws::ErrorFrame   => {
-                    let res = ws::write_frame([], ws::ClosingFrame, tcps);
+                ws::FrameType::Closing |
+                ws::FrameType::Error   => {
+                    let res = ws::write_frame(&[], ws::FrameType::Closing, tcps);
                     if res.is_err() {
                         println!("Error writing closing frame: {}", res);
                     }
@@ -82,26 +82,26 @@ impl UIServer {
         let mc = Multicast::spawn();
         let json_dest_sender = mc.clone();
 
-        TaskBuilder::new().named("ui_server").spawn(proc() {
-            let mut acceptor = TcpListener::bind("127.0.0.1", port).listen();
+        thread::Builder::new().name("ui_server".to_string()).spawn(move || {
+            let mut acceptor = TcpListener::bind(("127.0.0.1", port)).listen();
             println!("Server listening on port {}", port as uint);
 
-            let mut workercount = 0u;
+            let mut wrkr_cnt = 0u;
             for tcp_stream in acceptor.incoming() {
                 let (conn_tx, conn_rx) = channel();
                 conn_tx.send(welcome_msg.clone());
                 json_dest_sender.register(conn_tx);
-                TaskBuilder::new().named(format!("websocketWorker_{}", workercount)).spawn(proc() {
+                thread::Builder::new().name(format!("websocketWorker_{}", wrkr_cnt)).spawn(move || {
                     match tcp_stream {
                         Ok(tcps) => {
                             WebSocketWorker.run(&mut BufferedStream::new(tcps), &conn_rx).unwrap();
                         }
-                        _ => fail!("Could not start websocket worker")
+                        _ => panic!("Could not start websocket worker")
                     }
-                });
-                workercount += 1;
+                }).detach();
+                wrkr_cnt += 1;
             }
-        });
+        }).detach();
 
         UIServer { json_multicast: mc }
     }
@@ -109,11 +109,13 @@ impl UIServer {
     pub fn create_sender<'a, T:Encodable<json::Encoder<'a>,IoError>+Send+Sync>(&self) -> Sender<Arc<T>> {
         let (tx, rx) = channel();
         let jb = self.json_multicast.clone();
-        TaskBuilder::new().named(format!("routes_ui")).spawn(proc() {
+        thread::Builder::new().name("routes_ui".to_string()).spawn(move || {
             loop {
                 let t: Arc<T> = rx.recv();
-                jb.send(Arc::new(json::encode(&*t)));
+                let j: String = json::encode(&*t);
+                jb.send(Arc::new(j));
             }
+            ()
         });
         tx
     }

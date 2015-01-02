@@ -2,6 +2,7 @@
 
 macro_rules! fixed_vec(
     ($t:ident, $arrt: ty, $len:expr) => (
+        #[deriving(Copy)]
         pub struct $t([$arrt,..$len]);
 
         impl<S: ::std::hash::Writer> Hash<S> for $t {
@@ -15,7 +16,7 @@ macro_rules! fixed_vec(
             fn eq(&self, other: &$t) -> bool {
                 let &$t(a) = self;
                 let &$t(b) = other;
-                a.as_slice().eq(&b.as_slice())
+                a[].eq(b[])
             }
         }
 
@@ -25,7 +26,7 @@ macro_rules! fixed_vec(
             fn partial_cmp(&self, other: &$t) -> Option<Ordering> {
                 let &$t(a) = self;
                 let &$t(b) = other;
-                a.as_slice().partial_cmp(&b.as_slice())
+                a[].partial_cmp(b[])
             }
         }
 
@@ -33,7 +34,7 @@ macro_rules! fixed_vec(
             fn clone(&self) -> $t {
                 let mut new_vec: [$arrt, ..$len] = [0, .. $len];
                 let &$t(a) = self;
-                for (x,y) in new_vec.mut_iter().zip(a.iter()) {
+                for (x,y) in new_vec.iter_mut().zip(a.iter()) {
                     *x = y.clone();
                 }
                 $t(new_vec)
@@ -41,4 +42,4 @@ macro_rules! fixed_vec(
         }
 
     );
-)
+);

@@ -8,15 +8,15 @@ use ether::{MacAddr};
 // http://standards.ieee.org/getieee802/download/802.11-2012.pdf
 
 bitflags!(flags FrameControlFlags: u8 {
-    static ToDS           = 1 << 0,
-    static FromDS         = 1 << 1,
-    static MoreFrags      = 1 << 2,
-    static Retry          = 1 << 3,
-    static PowerMgmt      = 1 << 4,
-    static MoreData       = 1 << 5,
-    static ProtectedFrame = 1 << 6,
-    static Order          = 1 << 7
-})
+    const TO_DS           = 1 << 0,
+    const FROM_DS         = 1 << 1,
+    const MORE_FRAGS      = 1 << 2,
+    const RETRY           = 1 << 3,
+    const POWER_MGMT      = 1 << 4,
+    const MORE_DATA       = 1 << 5,
+    const PROTECTED_FRAME = 1 << 6,
+    const ORDER           = 1 << 7
+});
 
 #[packed]
 pub struct FrameControl {
@@ -34,10 +34,10 @@ impl FrameControl {
     }
     pub fn frame_type(&self) -> FrameType {
         match (self.ty & 0b00001100) >> 2 {
-            0 => Management,
-            1 => Control,
-            2 => Data,
-            _ => Unknown
+            0 => FrameType::Management,
+            1 => FrameType::Control,
+            2 => FrameType::Data,
+            _ => FrameType::Unknown
         }
     }
     pub fn frame_subtype(&self) -> u8 {
@@ -199,16 +199,16 @@ pub struct DataFrameHeader {
 
 impl DataFrameHeader {
     fn get_src(&self) -> MacAddr {
-        match (self.base.fr_ctrl.has_flag(ToDS), self.base.fr_ctrl.has_flag(FromDS)) {
+        match (self.base.fr_ctrl.has_flag(TO_DS), self.base.fr_ctrl.has_flag(FROM_DS)) {
             (false, false) => self.addr2,
             (false, true)  => self.addr3,
             (true,  false) => self.addr2,
-            (true,  true)  => fail!("can't handle this yet")
+            (true,  true)  => panic!("can't handle this yet")
         }
     }
 
     fn get_dest(&self) -> MacAddr {
-        match (self.base.fr_ctrl.has_flag(ToDS), self.base.fr_ctrl.has_flag(FromDS)) {
+        match (self.base.fr_ctrl.has_flag(TO_DS), self.base.fr_ctrl.has_flag(FROM_DS)) {
             (false, false) => self.addr1,
             (false, true)  => self.addr1,
             (true,  false) => self.addr3,

@@ -29,3 +29,8 @@ path = "src/json_serve"
 [dependencies.toml]
 
 git = "https://github.com/alexcrichton/toml-rs.git"
+
+
+# [dependencies.rustc-serialize]
+
+# git = "https://github.com/rust-lang/rustc-serialize.git"

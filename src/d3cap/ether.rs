@@ -2,10 +2,10 @@ use std::hash::Hash;
 use std::fmt;
 use std::fmt::{Show,Formatter};
 
-use serialize::hex::FromHex;
-use serialize::{Encoder,Encodable};
+use rustc_serialize::hex::FromHex;
+use rustc_serialize::{Encoder,Encodable};
 
-fixed_vec!(MacAddr, u8, 6)
+fixed_vec!(MacAddr, u8, 6);
 
 impl Show for MacAddr {
     fn fmt(&self, fo: &mut Formatter) -> fmt::Result {
@@ -47,7 +47,7 @@ pub struct EthernetHeader {
 }
 
 //in big-endian order to match packet
-pub static ETHERTYPE_ARP: u16 = 0x0608;
-pub static ETHERTYPE_IP4: u16 = 0x0008;
-pub static ETHERTYPE_IP6: u16 = 0xDD86;
-pub static ETHERTYPE_802_1X: u16 = 0x8E88;
+pub const ETHERTYPE_ARP: u16 = 0x0608;
+pub const ETHERTYPE_IP4: u16 = 0x0008;
+pub const ETHERTYPE_IP6: u16 = 0xDD86;
+pub const ETHERTYPE_802_1X: u16 = 0x8E88;
