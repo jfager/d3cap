@@ -59,16 +59,16 @@ impl <T:Send+Sync+Copy+Eq+Hash> ProtocolHandler<T> {
     }
 }
 
-struct Foo {
+struct ProtoGraphController {
     cap_tx: Sender<Pkt>,
     req_tx: Sender<ProtoGraphReq>,
 }
 
-impl Foo {
-    fn spawn() -> Foo {
+impl ProtoGraphController {
+    fn spawn() -> ProtoGraphController {
         let (cap_tx, cap_rx) = channel();
         let (req_tx, req_rx) = channel();
-        let foo = Foo {
+        let foo = ProtoGraphController {
             cap_tx: cap_tx,
             req_tx: req_tx,
         };
@@ -275,7 +275,7 @@ pub fn start_capture(conf: D3capConf) -> Sender<ProtoGraphReq> {
             loop { sess.next(|t,sz| ctx.parse(t, sz)); }
         }
 
-        let foo = Foo::spawn();
+        let foo = ProtoGraphController::spawn();
         tx.send(foo.req_sender().clone());
 
         match sess.datalink() {
