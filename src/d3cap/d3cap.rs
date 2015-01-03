@@ -24,44 +24,75 @@ use pkt_graph::{PktMeta, ProtocolGraph, RouteStats};
 #[deriving(RustcEncodable, Clone)]
 struct RouteStatsMsg<T> {
     typ: &'static str,
-    route: RouteStats<T>
+    route: RouteStats<T>,
+}
+
+#[deriving(Show)]
+enum Pkt {
+    Mac(PktMeta<MacAddr>),
+    IP4(PktMeta<IP4Addr>),
+    IP6(PktMeta<IP6Addr>),
 }
 
 struct ProtocolHandler<T:Send+Sync> {
-    cap_tx: Sender<PktMeta<T>>,
-    req_tx: Sender<ProtoGraphReq>,
-    route_stats_mcast: Multicast<RouteStatsMsg<T>>
+    typ: &'static str,
+    graph: ProtocolGraph<T>,
+    stats_mcast: Multicast<RouteStatsMsg<T>>,
 }
 
-impl <T: Hash+Eq+Copy+Send+Sync> ProtocolHandler<T> {
-    fn spawn(typ: &'static str) -> ProtocolHandler<T> {
+impl <T:Send+Sync+Copy+Eq+Hash> ProtocolHandler<T> {
+    fn new(typ: &'static str) -> ProtocolHandler<T> {
+        ProtocolHandler {
+            typ: typ,
+            graph: ProtocolGraph::new(),
+            stats_mcast: Multicast::spawn()
+        }
+    }
+
+    fn update(&mut self, pkt: &PktMeta<T>) {
+        let route_stats = self.graph.update(pkt);
+        let route_stats_msg = Arc::new(RouteStatsMsg {
+            typ: self.typ,
+            route: route_stats
+        });
+        self.stats_mcast.send(route_stats_msg);
+    }
+}
+
+struct Foo {
+    cap_tx: Sender<Pkt>,
+    req_tx: Sender<ProtoGraphReq>,
+}
+
+impl Foo {
+    fn spawn() -> Foo {
         let (cap_tx, cap_rx) = channel();
         let (req_tx, req_rx) = channel();
-        let handler = ProtocolHandler {
+        let foo = Foo {
             cap_tx: cap_tx,
             req_tx: req_tx,
-            route_stats_mcast: Multicast::spawn()
         };
 
-        let mc_sender = handler.route_stats_mcast.clone();
-        thread::Builder::new().name(format!("{}_handler", typ)).spawn(move || {
-            let mut stats = ProtocolGraph::new();
+        thread::Builder::new().name("protocol_handler".to_string()).spawn(move || {
+            let mut mac = ProtocolHandler::new("mac");
+            let mut ip4 = ProtocolHandler::new("ip4");
+            let mut ip6 = ProtocolHandler::new("ip6");
+
             loop {
                 select!(
-                    update = cap_rx.recv() => {
-                        let route_stats = stats.update(&update);
-                        let route_stats_msg = Arc::new(RouteStatsMsg {
-                            typ: typ,
-                            route: route_stats
-                        });
-                        mc_sender.send(route_stats_msg);
+                    pkt = cap_rx.recv() => {
+                        match pkt {
+                            Pkt::Mac(ref p) => mac.update(p),
+                            Pkt::IP4(ref p) => ip4.update(p),
+                            Pkt::IP6(ref p) => ip6.update(p),
+                        }
                     },
                     request = req_rx.recv() => {
                         match request {
                             ProtoGraphReq::Ping(x) => x.send(ProtoGraphRsp::Pong),
-                            //ProtoGraphReq::RegRouteStatsListenerMac(s) => {},
-                            //ProtoGraphReq::RegRouteStatsListenerIP4(s) => {},
-                            //ProtoGraphReq::RegRouteStatsListenerIP6(s) => {},
+                            ProtoGraphReq::MacStatListener(s) => mac.stats_mcast.register(s),
+                            ProtoGraphReq::IP4StatListener(s) => ip4.stats_mcast.register(s),
+                            ProtoGraphReq::IP6StatListener(s) => ip6.stats_mcast.register(s),
                         }
                     }
                 )
@@ -69,58 +100,41 @@ impl <T: Hash+Eq+Copy+Send+Sync> ProtocolHandler<T> {
             ()
         }).detach();
 
-        handler
+        foo
     }
 
-    fn pkt_sender(&self) -> &Sender<PktMeta<T>> {
+    fn pkt_sender(&self) -> &Sender<Pkt> {
         &self.cap_tx
     }
 
     fn req_sender(&self) -> &Sender<ProtoGraphReq> {
         &self.req_tx
     }
-
-    fn register_route_stats_listener(&self, tx: Sender<Arc<RouteStatsMsg<T>>>) {
-        self.route_stats_mcast.register(tx);
-    }
-}
-
-impl <T:Send+Sync> Clone for ProtocolHandler<T> {
-    fn clone(&self) -> ProtocolHandler<T> {
-        ProtocolHandler {
-            cap_tx: self.cap_tx.clone(),
-            req_tx: self.req_tx.clone(),
-            route_stats_mcast: self.route_stats_mcast.clone()
-        }
-    }
 }
 
 trait CaptureCtx {
     fn parse(&mut self, pkt: *const u8, len: u32);
-    fn get_sender(&self) -> Sender<ProtoGraphReq>;
 }
 
-struct EthernetCtx {
-    mac: ProtocolHandler<MacAddr>,
-    ip4: ProtocolHandler<IP4Addr>,
-    ip6: ProtocolHandler<IP6Addr>
+struct EthernetCtx<'a> {
+    pkts: &'a Sender<Pkt>,
 }
 
-impl CaptureCtx for EthernetCtx {
+impl <'a> CaptureCtx for EthernetCtx<'a> {
     fn parse(&mut self, pkt_ptr: *const u8, size: u32) {
         let ether_hdr = unsafe { &*(pkt_ptr as *const EthernetHeader) };
-        self.mac.pkt_sender().send(PktMeta::new(ether_hdr.src, ether_hdr.dst, size));
+        self.pkts.send(Pkt::Mac(PktMeta::new(ether_hdr.src, ether_hdr.dst, size)));
         match ether_hdr.typ {
             ETHERTYPE_ARP => {
                 //io::println("ARP!");
             },
             ETHERTYPE_IP4 => {
                 let ipp: &IP4Header = unsafe { skip_cast(ether_hdr) };
-                self.ip4.pkt_sender().send(PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32));
+                self.pkts.send(Pkt::IP4(PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32)));
             },
             ETHERTYPE_IP6 => {
                 let ipp: &IP6Header = unsafe { skip_cast(ether_hdr) };
-                self.ip6.pkt_sender().send(PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32));
+                self.pkts.send(Pkt::IP6(PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32)));
             },
             ETHERTYPE_802_1X => {
                 //io::println("802.1X!");
@@ -130,32 +144,13 @@ impl CaptureCtx for EthernetCtx {
             }
         }
     }
-
-    fn get_sender(&self) -> Sender<ProtoGraphReq> {
-        let (tx, rx): (Sender<ProtoGraphReq>, Receiver<ProtoGraphReq>) = channel();
-        let mac_tx = self.mac.req_sender().clone();
-        let ip4_tx = self.ip4.req_sender().clone();
-        let ip6_tx = self.ip6.req_sender().clone();
-        thread::Builder::new().name("EthernetCtx".to_string()).spawn(move || {
-            loop {
-                match rx.recv() {
-                    //s @ ProtoGraphReq::RegRouteStatsListenerMac(_) => mac_tx.send(s),
-                    //s @ ProtoGraphReq::RegRouteStatsListenerIP4(_) => ip4_tx.send(s),
-                    //s @ ProtoGraphReq::RegRouteStatsListenerIP6(_) => ip6_tx.send(s),
-                    _ => {}
-                }
-            }
-            ()
-        }).detach();
-        tx
-    }
 }
 
-struct RadiotapCtx {
-    mac: ProtocolHandler<MacAddr>
+struct RadiotapCtx<'a> {
+    pkts: &'a Sender<Pkt>,
 }
 
-impl CaptureCtx for RadiotapCtx {
+impl <'a> CaptureCtx for RadiotapCtx<'a> {
     fn parse(&mut self, pkt_ptr: *const u8, size: u32) {
 
         let tap_hdr = unsafe { &*(pkt_ptr as *const tap::RadiotapHeader) };
@@ -190,7 +185,7 @@ impl CaptureCtx for RadiotapCtx {
                 println!("Data frame");
                 let data: &dot11::DataFrameHeader = magic(tap_hdr);
                 //TODO: get length
-                self.mac.pkt_sender().send(PktMeta::new(data.addr1, data.addr2, 1));
+                self.pkts.send(Pkt::Mac(PktMeta::new(data.addr1, data.addr2, 1)));
             }
             FrameType::Unknown => {
                 println!("Unknown frame type");
@@ -251,21 +246,6 @@ impl CaptureCtx for RadiotapCtx {
         }
         println!("");
     }
-
-    fn get_sender(&self) -> Sender<ProtoGraphReq> {
-        let (tx, rx): (Sender<ProtoGraphReq>, Receiver<ProtoGraphReq>) = channel();
-        let mac_tx = self.mac.req_sender().clone();
-        thread::Builder::new().name("RadiotapCtx".to_string()).spawn(move || {
-            loop {
-                match rx.recv() {
-                    //s @ ProtoGraphReq::RegRouteStatsListenerMac(_) => mac_tx.send(s),
-                    _ => {}// do nothing
-                }
-            }
-            ()
-        }).detach();
-        tx
-    }
 }
 
 pub fn start_capture(conf: D3capConf) -> Sender<ProtoGraphReq> {
@@ -291,19 +271,19 @@ pub fn start_capture(conf: D3capConf) -> Sender<ProtoGraphReq> {
             }
         };
 
-        fn go<T:CaptureCtx>(sess: &cap::PcapSession, tx: &Sender<Sender<ProtoGraphReq>>, ctx: &mut T) {
-            tx.send(ctx.get_sender());
+        fn go<T:CaptureCtx>(sess: &cap::PcapSession, ctx: &mut T) {
             loop { sess.next(|t,sz| ctx.parse(t, sz)); }
         }
 
+        let foo = Foo::spawn();
+        tx.send(foo.req_sender().clone());
+
         match sess.datalink() {
-            cap::DLT_ETHERNET => go(&sess, &tx, &mut EthernetCtx {
-                mac: ProtocolHandler::spawn("mac"),
-                ip4: ProtocolHandler::spawn("ip4"),
-                ip6: ProtocolHandler::spawn("ip6")
+            cap::DLT_ETHERNET => go(&sess, &mut EthernetCtx {
+                pkts: foo.pkt_sender()
             }),
-            cap::DLT_IEEE802_11_RADIO => go(&sess, &tx, &mut RadiotapCtx {
-                mac: ProtocolHandler::spawn("mac"),
+            cap::DLT_IEEE802_11_RADIO => go(&sess, &mut RadiotapCtx {
+                pkts: foo.pkt_sender()
             }),
             x => panic!("unsupported datalink type: {}", x)
         };
@@ -315,9 +295,9 @@ pub fn start_capture(conf: D3capConf) -> Sender<ProtoGraphReq> {
 
 enum ProtoGraphReq {
     Ping(Sender<ProtoGraphRsp>),
-    //RegRouteStatsListenerMac(|Arc<RouteStatsMsg<MacAddr>>|:'a, ()>),
-    //RegRouteStatsListenerIP4(|Arc<RouteStatsMsg<IP4Addr>>|:'a, ()>),
-    //RegRouteStatsListenerIP6(|Arc<RouteStatsMsg<IP6Addr>>|:'a, ()>),
+    MacStatListener(Sender<Arc<RouteStatsMsg<MacAddr>>>),
+    IP4StatListener(Sender<Arc<RouteStatsMsg<IP4Addr>>>),
+    IP6StatListener(Sender<Arc<RouteStatsMsg<IP6Addr>>>),
 }
 
 #[deriving(Show)]
@@ -337,12 +317,10 @@ fn start_cli(tx: Sender<CtrlReq>) -> JoinGuard<()> {
             }
         }));
 
-
-
         let maxlen = cmds.keys().map(|x| x.len()).max().unwrap();
 
-        loop {
-            readline("> ").map(|val| match val.as_slice() {
+        while let Some(val) = readline("> ") {
+            match val.as_slice() {
                 "help" => {
                     println!("\nAvailable commands are:");
                     for (cmd, &(desc, _)) in cmds.iter() {
@@ -350,11 +328,12 @@ fn start_cli(tx: Sender<CtrlReq>) -> JoinGuard<()> {
                     }
                     println!("");
                 },
+                "" => {}
                 _ => match cmds.get_mut(&val) {
                     Some(&(_, ref mut f)) => (*f)(),
                     None => println!("unknown command")
                 }
-            });
+            }
         }
         ()
     })
@@ -387,9 +366,9 @@ fn load_mac_addrs(file: String) -> HashMap<MacAddr, String> {
 
 fn start_web_socket(port: u16, mac_addr_map: &MacMap, caps: &Sender<ProtoGraphReq>) {
     let ui = UIServer::spawn(port, mac_addr_map);
-    //caps.send(ProtoGraphReq::RegRouteStatsListenerMac(ui.create_sender()));
-    //caps.send(ProtoGraphReq::RegRouteStatsListenerIP4(ui.create_sender()));
-    //caps.send(ProtoGraphReq::RegRouteStatsListenerIP6(ui.create_sender()));
+    caps.send(ProtoGraphReq::MacStatListener(ui.create_sender()));
+    caps.send(ProtoGraphReq::IP4StatListener(ui.create_sender()));
+    caps.send(ProtoGraphReq::IP6StatListener(ui.create_sender()));
 }
 
 type MacMap = HashMap<MacAddr, String>;
@@ -410,7 +389,7 @@ impl D3capController {
         let cap_snd = start_capture(conf);
 
         thread::Builder::new().name("controller".to_string()).spawn(move || {
-            let caps = cap_snd;
+            let caps = cap_snd.clone();
             loop {
                 match rx.recv() {
                     CtrlReq::Ping(s) => s.send(CtrlRsp::Pong),
@@ -447,7 +426,8 @@ pub fn run(conf: D3capConf) {
     let mut ctrl = D3capController::spawn(conf);
 
     let mut sndr = ctrl.get_sender();
+
     sndr.send(CtrlReq::StartWebSocket(7432u16));
 
-    start_cli(ctrl.get_sender());
+    start_cli(sndr);
 }

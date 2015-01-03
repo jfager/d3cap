@@ -116,7 +116,7 @@ impl UIServer {
                 jb.send(Arc::new(j));
             }
             ()
-        });
+        }).detach();
         tx
     }
 }

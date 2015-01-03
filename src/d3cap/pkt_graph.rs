@@ -4,6 +4,7 @@ use std::hash::Hash;
 
 use time;
 
+#[deriving(Show)]
 pub struct PktMeta<T> {
     pub src: T,
     pub dst: T,

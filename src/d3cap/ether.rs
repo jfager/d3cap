@@ -40,6 +40,7 @@ impl MacAddr {
 }
 
 #[packed]
+#[deriving(Show)]
 pub struct EthernetHeader {
     pub dst: MacAddr,
     pub src: MacAddr,

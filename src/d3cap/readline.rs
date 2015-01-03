@@ -24,7 +24,7 @@ pub fn readline(prompt: &str) -> Option<String> {
                     raw::add_history(raw);
                     Some(a.to_string())
                 }
-                _ => None
+                _ => Some("".to_string())
             }
         } else {
             None
