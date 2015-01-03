@@ -2,8 +2,8 @@
 
 macro_rules! fixed_vec(
     ($t:ident, $arrt: ty, $len:expr) => (
-        #[deriving(Copy)]
-        pub struct $t([$arrt,..$len]);
+        #[derive(Copy)]
+        pub struct $t([$arrt; $len]);
 
         impl<S: ::std::hash::Writer> Hash<S> for $t {
             fn hash(&self, state: &mut S) {
@@ -23,7 +23,7 @@ macro_rules! fixed_vec(
         impl Eq for $t {}
 
         impl PartialOrd for $t {
-            fn partial_cmp(&self, other: &$t) -> Option<Ordering> {
+            fn partial_cmp(&self, other: &$t) -> Option<::std::cmp::Ordering> {
                 let &$t(a) = self;
                 let &$t(b) = other;
                 a[].partial_cmp(b[])
@@ -32,7 +32,7 @@ macro_rules! fixed_vec(
 
         impl Clone for $t {
             fn clone(&self) -> $t {
-                let mut new_vec: [$arrt, ..$len] = [0, .. $len];
+                let mut new_vec: [$arrt; $len] = [0; $len];
                 let &$t(a) = self;
                 for (x,y) in new_vec.iter_mut().zip(a.iter()) {
                     *x = y.clone();

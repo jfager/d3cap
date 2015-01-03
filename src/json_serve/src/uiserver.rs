@@ -1,4 +1,4 @@
-use std::comm;
+use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
 use std::io::{Acceptor,Listener,Stream,BufferedStream,IoResult,IoError};
 use std::io::net::tcp::{TcpListener};
 use std::thread;
@@ -45,10 +45,10 @@ impl WebSocketWorker {
                             break
                         }
                     },
-                    Err(comm::Empty) => {
+                    Err(TryRecvError::Empty) => {
                         break
                     },
-                    Err(comm::Disconnected) => {
+                    Err(TryRecvError::Disconnected) => {
                         panic!("Disconnected from client")
                     }
                 }
@@ -111,9 +111,14 @@ impl UIServer {
         let jb = self.json_multicast.clone();
         thread::Builder::new().name("routes_ui".to_string()).spawn(move || -> () {
             loop {
-                let t: Arc<T> = rx.recv();
-                let j: String = json::encode(&*t);
-                jb.send(Arc::new(j));
+                let t: Result<Arc<T>, _> = rx.recv();
+                match t {
+                    Ok(t) => {
+                        let j: String = json::encode(&*t);
+                        jb.send(Arc::new(j));
+                    }
+                    Err(_) => panic!("oh shit")
+                }
             }
         }).detach();
         tx

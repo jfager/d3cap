@@ -25,7 +25,7 @@ impl MacAddr {
     pub fn from_string(mac: &str) -> Option<MacAddr> {
         let v: Vec<&str> = mac.split(':').collect();
         if v.len() == 6 {
-            let mut out = [0, ..6];
+            let mut out = [0; 6];
             for (i, s) in v.iter().enumerate() {
                 match s.from_hex() {
                     Ok(ref hx) if hx.len() == 1 => out[i] = hx[0],
@@ -40,7 +40,7 @@ impl MacAddr {
 }
 
 #[packed]
-#[deriving(Show)]
+#[derive(Show)]
 pub struct EthernetHeader {
     pub dst: MacAddr,
     pub src: MacAddr,

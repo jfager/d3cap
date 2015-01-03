@@ -1,8 +1,9 @@
 use std::io::{Stream,BufferedStream,IoResult};
+use std::num::{FromPrimitive};
 
 use rustc_serialize::base64::{ToBase64, STANDARD};
 
-use openssl::crypto::hash::{mod, HashType};
+use openssl::crypto::hash::{self, HashType};
 
 const CONNECTION_FIELD: &'static str = "Connection";
 const UPGRADE: &'static str = "upgrade";
@@ -17,7 +18,7 @@ const VERSION: &'static str = "13";
 const ACCEPT_FIELD: &'static str = "Sec-WebSocket-Accept";
 const SECRET: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-#[deriving(FromPrimitive)]
+#[derive(FromPrimitive)]
 pub enum FrameType {
     Empty = 0xF0,
     Error = 0xF1,

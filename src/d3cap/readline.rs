@@ -1,4 +1,4 @@
-use std::c_str;
+use std::c_str::{self, ToCStr};
 use libc;
 
 mod raw {

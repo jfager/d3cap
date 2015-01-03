@@ -1,4 +1,5 @@
 use std::thread;
+use std::sync::mpsc::{channel, Sender, Receiver};
 use std::hash::Hash;
 use std::collections::HashMap;
 use std::io::File;
@@ -16,18 +17,18 @@ use util::{ntohs, skip_bytes_cast, skip_cast};
 use ip::{IP4Addr, IP6Addr, IP4Header, IP6Header};
 use ether::{EthernetHeader, MacAddr,
             ETHERTYPE_ARP, ETHERTYPE_IP4, ETHERTYPE_IP6, ETHERTYPE_802_1X};
-use dot11::{mod, FrameType};
+use dot11::{self, FrameType};
 use tap;
 use pkt_graph::{PktMeta, ProtocolGraph, RouteStats};
 
 
-#[deriving(RustcEncodable, Clone)]
+#[derive(RustcEncodable, Clone)]
 struct RouteStatsMsg<T> {
     typ: &'static str,
     route: RouteStats<T>,
 }
 
-#[deriving(Show)]
+#[derive(Show)]
 enum Pkt {
     Mac(PktMeta<MacAddr>),
     IP4(PktMeta<IP4Addr>),
@@ -81,15 +82,23 @@ impl ProtoGraphController {
             loop {
                 select!(
                     pkt = cap_rx.recv() => {
-                        match pkt {
+                        if pkt.is_err() {
+                            break
+                        }
+                        match pkt.unwrap() {
                             Pkt::Mac(ref p) => mac.update(p),
                             Pkt::IP4(ref p) => ip4.update(p),
                             Pkt::IP6(ref p) => ip6.update(p),
                         }
                     },
                     request = req_rx.recv() => {
-                        match request {
-                            ProtoGraphReq::Ping(x) => x.send(ProtoGraphRsp::Pong),
+                        if request.is_err() {
+                            break
+                        }
+                        match request.unwrap() {
+                            ProtoGraphReq::Ping(x) => {
+                                let _ = x.send(ProtoGraphRsp::Pong);
+                            }
                             ProtoGraphReq::MacStatListener(s) => mac.stats_mcast.register(s),
                             ProtoGraphReq::IP4StatListener(s) => ip4.stats_mcast.register(s),
                             ProtoGraphReq::IP6StatListener(s) => ip6.stats_mcast.register(s),
@@ -288,7 +297,7 @@ pub fn start_capture(conf: D3capConf) -> Sender<ProtoGraphReq> {
         };
     }).detach();
 
-    rx.recv()
+    rx.recv().unwrap()
 }
 
 enum ProtoGraphReq {
@@ -298,7 +307,7 @@ enum ProtoGraphReq {
     IP6StatListener(Sender<Arc<RouteStatsMsg<IP6Addr>>>),
 }
 
-#[deriving(Show)]
+#[derive(Show)]
 enum ProtoGraphRsp {
     Pong
 }
@@ -311,7 +320,7 @@ fn start_cli(tx: Sender<CtrlReq>) -> JoinGuard<()> {
 
         cmds.insert("ping".to_string(), ("ping", |_| {
             tx.send(CtrlReq::Ping(my_tx.clone()));
-            match my_rx.recv() {
+            match my_rx.recv().unwrap() {
                 CtrlRsp::Pong => println!("pong"),
             }
         }));
@@ -406,8 +415,10 @@ impl D3capController {
             let caps = cap_snd.clone();
             let mut server_started = false;
             loop {
-                match rx.recv() {
-                    CtrlReq::Ping(s) => s.send(CtrlRsp::Pong),
+                match rx.recv().unwrap() {
+                    CtrlReq::Ping(s) => {
+                        let _ = s.send(CtrlRsp::Pong);
+                    }
                     CtrlReq::StartWebSocket(port) => {
                         if server_started {
                             println!("server already started");
@@ -432,7 +443,7 @@ impl D3capController {
     }
 }
 
-#[deriving(Clone)]
+#[derive(Clone)]
 pub struct D3capConf {
     pub websocket: Option<u16>,
     pub interface: Option<String>,

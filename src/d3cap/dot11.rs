@@ -48,7 +48,7 @@ impl FrameControl {
     }
 }
 
-#[deriving(Show)]
+#[derive(Show)]
 pub enum FrameType {
     Management,
     Control,
@@ -69,7 +69,7 @@ pub struct Dot11BaseHeader {
 }
 
 
-type FCS = [u8, ..4];
+type FCS = [u8; 4];
 
 // 8.2.4.3.5 DA field
 // The DA field contains an IEEE MAC individual or group address that
@@ -157,7 +157,7 @@ pub struct BlockAckReq {
     pub base: Dot11BaseHeader,
     pub ra: MacAddr,
     pub ta: MacAddr,
-    pub bar_ctl: [u8, ..2]
+    pub bar_ctl: [u8; 2]
 }
 
 // 8.3.1.9 BlockAck
@@ -166,7 +166,7 @@ pub struct BlockAck {
     pub base: Dot11BaseHeader,
     pub ra: MacAddr,
     pub ta: MacAddr,
-    pub ba_ctl: [u8, ..2]
+    pub ba_ctl: [u8; 2]
 }
 
 // 8.3.1.10 Control Wrapper
@@ -174,8 +174,8 @@ pub struct BlockAck {
 pub struct ControlWrapper {
     pub base: Dot11BaseHeader,
     pub ra: MacAddr,
-    pub cf_ctl: [u8, ..2],
-    pub ht_ctl: [u8, ..4]
+    pub cf_ctl: [u8; 2],
+    pub ht_ctl: [u8; 4]
 }
 
 // 8.3.2 Data Frames
@@ -187,7 +187,7 @@ pub struct DataFrameHeader {
     pub addr1: MacAddr,
     pub addr2: MacAddr,
     pub addr3: MacAddr,
-    pub seq_ctl: [u8, ..2]
+    pub seq_ctl: [u8; 2]
 }
 
 // | To DS | From DS | Address 1  | Address 2  | Address 3      | Address 4     |
@@ -226,6 +226,6 @@ pub struct ManagementFrameHeader {
     pub addr1: MacAddr,
     pub addr2: MacAddr,
     pub addr3: MacAddr,
-    pub seq_ctl: [u8, ..2],
-    pub ht_ctl: [u8, ..4]
+    pub seq_ctl: [u8; 2],
+    pub ht_ctl: [u8; 4]
 }

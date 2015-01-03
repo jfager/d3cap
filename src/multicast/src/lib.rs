@@ -1,8 +1,8 @@
-use std::comm::{channel, Sender, Receiver};
+use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread;
 use std::sync::Arc;
 
-#[deriving(Clone)]
+#[derive(Clone)]
 pub enum Mc<T:Send+Sync> {
     Msg(Arc<T>),
     MsgDest(Sender<Arc<T>>)
@@ -19,12 +19,12 @@ impl<T:Send+Sync> Multicast<T> {
             let mut mc_txs = Vec::new();
             let mut to_remove = Vec::new();
             loop {
-                match rx.recv_opt() {
+                match rx.recv() {
                     Ok(Mc::MsgDest(c)) => mc_txs.push(c),
                     Ok(Mc::Msg(msg)) => {
                         to_remove.truncate(0);
                         for (i, mc_tx) in mc_txs.iter().enumerate() {
-                            if mc_tx.send_opt(msg.clone()).is_err() {
+                            if mc_tx.send(msg.clone()).is_err() {
                                 to_remove.push(i)
                             }
                         }
@@ -44,11 +44,11 @@ impl<T:Send+Sync> Multicast<T> {
     }
 
     pub fn send(&self, msg: Arc<T>) {
-        self.tx.send(Mc::Msg(msg))
+        self.tx.send(Mc::Msg(msg));
     }
 
     pub fn register(&self, dest: Sender<Arc<T>>) {
-        self.tx.send(Mc::MsgDest(dest))
+        self.tx.send(Mc::MsgDest(dest));
     }
 }
 

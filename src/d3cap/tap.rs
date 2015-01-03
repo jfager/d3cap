@@ -8,7 +8,7 @@ use util::skip_cast;
 //For possible reference:
 //https://github.com/simsong/tcpflow/blob/master/src/wifipcap/ieee802_11_radio.h
 
-#[deriving(Show)]
+#[derive(Show)]
 #[packed]
 pub struct RadiotapHeader {
     pub it_version: u8, // 8 -> 1

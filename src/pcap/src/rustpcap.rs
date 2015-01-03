@@ -1,5 +1,6 @@
 use libc::{c_char,c_int};
-use std::{ptr,vec};
+use std::ptr;
+use std::c_str::ToCStr;
 
 mod pcap {
     #![allow(dead_code)]
@@ -15,6 +16,7 @@ pub const DLT_NULL: DataLinkType = 0;
 pub const DLT_ETHERNET: DataLinkType = 1;
 pub const DLT_IEEE802_11_RADIO: DataLinkType = 127;
 
+#[derive(Copy)]
 pub struct PcapSessionBuilder {
     p: *mut pcap::pcap_t,
     activated: bool
@@ -28,7 +30,7 @@ impl PcapSessionBuilder {
 
     pub fn new_dev(dev: &str) -> Result<PcapSessionBuilder, &'static str> {
         let mut errbuf = Vec::with_capacity(256u);
-        let c_dev = unsafe { dev.to_c_str().unwrap() };
+        let c_dev = unsafe { dev.to_c_str().into_inner() };
         PcapSessionBuilder::do_new(c_dev, errbuf.as_mut_slice())
     }
 
@@ -83,6 +85,7 @@ impl PcapSessionBuilder {
     }
 }
 
+#[derive(Copy)]
 pub struct PcapSession {
     p: *mut pcap::pcap_t
 }
@@ -91,7 +94,7 @@ impl PcapSession {
     pub fn from_file(f: &str) -> PcapSession {
         let mut errbuf = Vec::with_capacity(256u);
         unsafe {
-            let p = pcap::pcap_open_offline(f.to_c_str().unwrap(),
+            let p = pcap::pcap_open_offline(f.to_c_str().into_inner(),
                                             errbuf.as_mut_slice().as_mut_ptr());
             PcapSession { p: p }
         }
@@ -105,7 +108,7 @@ impl PcapSession {
         unsafe {
             let mut dlt_buf = ptr::null_mut();
             let sz = pcap::pcap_list_datalinks(self.p, &mut dlt_buf);
-            let out = vec::raw::from_buf(dlt_buf as *const c_int, sz as uint);
+            let out = Vec::from_raw_buf(dlt_buf as *const c_int, sz as uint);
             pcap::pcap_free_datalinks(dlt_buf);
             out
         }
