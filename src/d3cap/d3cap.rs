@@ -309,18 +309,35 @@ fn start_cli(tx: Sender<CtrlReq>) -> JoinGuard<()> {
     let (my_tx, my_rx) = channel();
 
     thread::Builder::new().name("cli".to_string()).spawn(move || {
-        let mut cmds: HashMap<String, (&str, ||->())> = HashMap::new();
-        cmds.insert("ping".to_string(), ("ping", || {
+        let mut cmds: HashMap<String, (&str, |Vec<&str>|->())> = HashMap::new();
+
+        cmds.insert("ping".to_string(), ("ping", |_| {
             tx.send(CtrlReq::Ping(my_tx.clone()));
             match my_rx.recv() {
                 CtrlRsp::Pong => println!("pong"),
             }
         }));
 
+        cmds.insert("websocket".to_string(), ("websocket", |cmd| {
+            match cmd.as_slice() {
+                [_, port] => {
+                    if let Some(p) = port.parse() {
+                        tx.send(CtrlReq::StartWebSocket(p));
+                    }
+                },
+                [_] => {
+                    tx.send(CtrlReq::StartWebSocket(7432u16));
+                },
+                _ => println!("Illegal argument")
+            }
+        }));
+
+
         let maxlen = cmds.keys().map(|x| x.len()).max().unwrap();
 
         while let Some(val) = readline("> ") {
-            match val.as_slice() {
+            let full_cmd: Vec<&str> = val.split(' ').collect();
+            match full_cmd[0] {
                 "help" => {
                     println!("\nAvailable commands are:");
                     for (cmd, &(desc, _)) in cmds.iter() {
@@ -329,8 +346,8 @@ fn start_cli(tx: Sender<CtrlReq>) -> JoinGuard<()> {
                     println!("");
                 },
                 "" => {}
-                _ => match cmds.get_mut(&val) {
-                    Some(&(_, ref mut f)) => (*f)(),
+                cmd => match cmds.get_mut(cmd) {
+                    Some(&(_, ref mut f)) => (*f)(full_cmd),
                     None => println!("unknown command")
                 }
             }
@@ -390,10 +407,18 @@ impl D3capController {
 
         thread::Builder::new().name("controller".to_string()).spawn(move || {
             let caps = cap_snd.clone();
+            let mut server_started = false;
             loop {
                 match rx.recv() {
                     CtrlReq::Ping(s) => s.send(CtrlRsp::Pong),
-                    CtrlReq::StartWebSocket(port) => start_web_socket(port, &mac_map, &caps)
+                    CtrlReq::StartWebSocket(port) => {
+                        if server_started {
+                            println!("server already started");
+                        } else {
+                            start_web_socket(port, &mac_map, &caps);
+                            server_started = true;
+                        }
+                    }
                 }
             }
             ()
@@ -402,7 +427,7 @@ impl D3capController {
         out
     }
 
-    fn mac_addr_map(&self) -> &HashMap<MacAddr, String> {
+    fn mac_addr_map(&self) -> &MacMap {
         &self.mac_addr_map
     }
 
@@ -411,7 +436,7 @@ impl D3capController {
     }
 }
 
-
+#[deriving(Clone)]
 pub struct D3capConf {
     pub websocket: Option<u16>,
     pub interface: Option<String>,
@@ -423,11 +448,13 @@ pub struct D3capConf {
 
 pub fn run(conf: D3capConf) {
 
-    let mut ctrl = D3capController::spawn(conf);
-
+    let mut ctrl = D3capController::spawn(conf.clone());
     let mut sndr = ctrl.get_sender();
 
-    sndr.send(CtrlReq::StartWebSocket(7432u16));
+    // Only start the websocket server if the option is explicitly provided.
+    if let Some(port) = conf.websocket {
+        sndr.send(CtrlReq::StartWebSocket(port));
+    }
 
     start_cli(sndr);
 }
