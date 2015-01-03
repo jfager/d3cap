@@ -73,7 +73,7 @@ impl ProtoGraphController {
             req_tx: req_tx,
         };
 
-        thread::Builder::new().name("protocol_handler".to_string()).spawn(move || {
+        thread::Builder::new().name("protocol_handler".to_string()).spawn(move || -> () {
             let mut mac = ProtocolHandler::new("mac");
             let mut ip4 = ProtocolHandler::new("ip4");
             let mut ip6 = ProtocolHandler::new("ip6");
@@ -97,7 +97,6 @@ impl ProtoGraphController {
                     }
                 )
             }
-            ()
         }).detach();
 
         foo
@@ -287,7 +286,6 @@ pub fn start_capture(conf: D3capConf) -> Sender<ProtoGraphReq> {
             }),
             x => panic!("unsupported datalink type: {}", x)
         };
-        ()
     }).detach();
 
     rx.recv()
@@ -352,7 +350,6 @@ fn start_cli(tx: Sender<CtrlReq>) -> JoinGuard<()> {
                 }
             }
         }
-        ()
     })
 }
 
@@ -405,7 +402,7 @@ impl D3capController {
         let out = D3capController { mac_addr_map: mac_map.clone(), tx: tx };
         let cap_snd = start_capture(conf);
 
-        thread::Builder::new().name("controller".to_string()).spawn(move || {
+        thread::Builder::new().name("controller".to_string()).spawn(move || -> () {
             let caps = cap_snd.clone();
             let mut server_started = false;
             loop {
@@ -421,7 +418,6 @@ impl D3capController {
                     }
                 }
             }
-            ()
         }).detach();
 
         out

@@ -39,7 +39,6 @@ impl<T:Send+Sync> Multicast<T> {
                     Err(_) => break
                 }
             }
-            ()
         }).detach();
         Multicast { tx: tx }
     }
