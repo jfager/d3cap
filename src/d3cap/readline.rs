@@ -17,14 +17,14 @@ pub fn readline(prompt: &str) -> Option<String> {
     let in_buf = cprmt.as_mut_ptr();
     unsafe {
         let raw = raw::readline(in_buf);
-        if raw.is_not_null() {
+        if !raw.is_null() {
             let ret = c_str::CString::new(raw as *const libc::c_char, true);
             match ret.as_str().map(|ret| ret.trim()) {
                 Some(a) if !a.is_empty() => {
                     raw::add_history(raw);
                     Some(a.to_string())
                 }
-                _ => None
+                _ => Some("".to_string())
             }
         } else {
             None

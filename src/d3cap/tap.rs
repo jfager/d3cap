@@ -19,30 +19,30 @@ pub struct RadiotapHeader {
 //size_of should == 8
 
 bitflags!(flags ItPresent: u32 {
-    static TSFT              = 1 << 0,
-    static FLAGS             = 1 << 1,
-    static RATE              = 1 << 2,
-    static CHANNEL           = 1 << 3,
-    static FHSS              = 1 << 4,
-    static ANTENNA_SIGNAL    = 1 << 5,
-    static ANTENNA_NOISE     = 1 << 6,
-    static LOCK_QUALITY      = 1 << 7,
-    static TX_ATTENUATION    = 1 << 8,
-    static DB_TX_ATTENUATION = 1 << 9,
-    static DBM_TX_POWER      = 1 << 10,
-    static ANTENNA           = 1 << 11,
-    static DB_ANTENNA_SIGNAL = 1 << 12,
-    static DB_ANTENNA_NOISE  = 1 << 13,
-    static RX_FLAGS          = 1 << 14,
-    static TX_FLAGS          = 1 << 15,
-    static RTS_RETRIES       = 1 << 16,
-    static DATA_RETRIES      = 1 << 17,
-    static MCS               = 1 << 19,
-    static A_MPDU_STATUS     = 1 << 20,
-    static VHT               = 1 << 21,
-    static MORE_IT_PRESENT   = 1 << 31,
+    const TSFT              = 1 << 0,
+    const FLAGS             = 1 << 1,
+    const RATE              = 1 << 2,
+    const CHANNEL           = 1 << 3,
+    const FHSS              = 1 << 4,
+    const ANTENNA_SIGNAL    = 1 << 5,
+    const ANTENNA_NOISE     = 1 << 6,
+    const LOCK_QUALITY      = 1 << 7,
+    const TX_ATTENUATION    = 1 << 8,
+    const DB_TX_ATTENUATION = 1 << 9,
+    const DBM_TX_POWER      = 1 << 10,
+    const ANTENNA           = 1 << 11,
+    const DB_ANTENNA_SIGNAL = 1 << 12,
+    const DB_ANTENNA_NOISE  = 1 << 13,
+    const RX_FLAGS          = 1 << 14,
+    const TX_FLAGS          = 1 << 15,
+    const RTS_RETRIES       = 1 << 16,
+    const DATA_RETRIES      = 1 << 17,
+    const MCS               = 1 << 19,
+    const A_MPDU_STATUS     = 1 << 20,
+    const VHT               = 1 << 21,
+    const MORE_IT_PRESENT   = 1 << 31,
 
-    static COMMON_A          = TSFT.bits
+    const COMMON_A          = TSFT.bits
                              | FLAGS.bits
                              | RATE.bits
                              | CHANNEL.bits
@@ -50,14 +50,14 @@ bitflags!(flags ItPresent: u32 {
                              | ANTENNA_NOISE.bits
                              | ANTENNA.bits,
 
-    static COMMON_B          = TSFT.bits
+    const COMMON_B          = TSFT.bits
                              | FLAGS.bits
                              | CHANNEL.bits
                              | ANTENNA_SIGNAL.bits
                              | ANTENNA_NOISE.bits
                              | ANTENNA.bits
                              | MCS.bits
-})
+});
 
 impl fmt::Show for ItPresent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -71,15 +71,15 @@ pub struct Tsft {
 }
 
 bitflags!(flags Flags: u8 {
-    static DuringCFP     = 0x01,
-    static ShortPreamble = 0x02,
-    static EncryptWep    = 0x04,
-    static Fragmentation = 0x08,
-    static IncludesFCS   = 0x10,
-    static HasPadding    = 0x20,
-    static FailedFCSChk  = 0x40,
-    static ShortGuard    = 0x80
-})
+    const DURING_CFP     = 0x01,
+    const SHORT_PREAMBLE = 0x02,
+    const ENCRYPT_WEP    = 0x04,
+    const FRAGMENTATION  = 0x08,
+    const INCLUDES_FCS   = 0x10,
+    const HAS_PADDING    = 0x20,
+    const FAILED_FCS_CHK = 0x40,
+    const SHORT_GUARD    = 0x80
+});
 
 #[packed]
 pub struct Rate {
@@ -87,15 +87,15 @@ pub struct Rate {
 }
 
 bitflags!(flags ChannelFlags: u16 {
-    static Turbo       = 0x0010,
-    static CCK         = 0x0020,
-    static OFDM        = 0x0040,
-    static Ghz2        = 0x0080,
-    static Ghz5        = 0x0100,
-    static PsvScan     = 0x0200,
-    static DynCCK_OFDM = 0x0400,
-    static GFSK        = 0x0800
-})
+    const TURBO        = 0x0010,
+    const CCK          = 0x0020,
+    const OFDM         = 0x0040,
+    const GHZ_2        = 0x0080,
+    const GHZ_5        = 0x0100,
+    const PSV_SCAN     = 0x0200,
+    const DYN_CCK_OFDM = 0x0400,
+    const GFSK         = 0x0800
+});
 
 #[packed]
 pub struct Channel {
@@ -105,12 +105,12 @@ pub struct Channel {
 
 #[packed]
 pub struct AntennaSignal {
-    pub dBm: i8
+    pub dbm: i8
 }
 
 #[packed]
 pub struct AntennaNoise {
-    pub dBm: i8
+    pub dbm: i8
 }
 
 #[packed]

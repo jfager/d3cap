@@ -7,7 +7,7 @@ use std::iter::Iterator;
 use std::fmt;
 use std::fmt::{Show,Formatter};
 
-use serialize::{Encoder, Encodable};
+use rustc_serialize::{Encoder, Encodable};
 
 // This contains the data that represents our ring buffer. In general only one
 // allocation occurs: when the struct is first created and buffer is allocated.
@@ -52,7 +52,7 @@ impl<T> RingBuffer<T> {
             self.buffer.push(element);
             self.size += 1;
         } else {
-            *self.buffer.get_mut(self.next) = element;
+            self.buffer[self.next] = element;
         }
         self.next = (self.next + 1) % self.capacity;
     }

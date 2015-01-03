@@ -1,74 +1,82 @@
 use libc::{c_char,c_int};
-use std::{ptr,str,vec};
+use std::{ptr,vec};
 
 mod pcap {
     #![allow(dead_code)]
     #![allow(non_camel_case_types)]
     #![allow(non_snake_case)]
 
-    bindgen!("/usr/include/pcap.h", link="pcap")
+    bindgen!("/usr/include/pcap.h", link="pcap");
 }
 
 //TODO: http://www.tcpdump.org/linktypes.html
 pub type DataLinkType = c_int;
-pub static DLT_NULL: DataLinkType = 0;
-pub static DLT_ETHERNET: DataLinkType = 1;
-pub static DLT_IEEE802_11_RADIO: DataLinkType = 127;
+pub const DLT_NULL: DataLinkType = 0;
+pub const DLT_ETHERNET: DataLinkType = 1;
+pub const DLT_IEEE802_11_RADIO: DataLinkType = 127;
 
 pub struct PcapSessionBuilder {
     p: *mut pcap::pcap_t,
     activated: bool
 }
 
+pub fn list_devices() {
+    println!("list_devices")
+}
+
 impl PcapSessionBuilder {
 
-    pub fn new_dev(dev: &str) -> PcapSessionBuilder {
+    pub fn new_dev(dev: &str) -> Result<PcapSessionBuilder, &'static str> {
         let mut errbuf = Vec::with_capacity(256u);
         let c_dev = unsafe { dev.to_c_str().unwrap() };
         PcapSessionBuilder::do_new(c_dev, errbuf.as_mut_slice())
     }
 
-    pub fn new() -> PcapSessionBuilder {
+    pub fn new() -> Result<PcapSessionBuilder, &'static str> {
         let mut errbuf = Vec::with_capacity(256u);
         let dev = unsafe { pcap::pcap_lookupdev(errbuf.as_mut_slice().as_mut_ptr()) };
         if dev.is_null() {
-            fail!("No device available");
+            Err("No device available")
+        } else {
+            PcapSessionBuilder::do_new(dev as *const c_char, errbuf.as_mut_slice())
         }
-        PcapSessionBuilder::do_new(dev as *const c_char, errbuf.as_mut_slice())
     }
 
-    fn do_new(dev: *const c_char, errbuf: &mut [c_char]) -> PcapSessionBuilder {
+    fn do_new(dev: *const c_char, errbuf: &mut [c_char]) -> Result<PcapSessionBuilder, &'static str> {
         let p = unsafe { pcap::pcap_create(dev, errbuf.as_mut_ptr()) };
-        if p.is_null() { fail!("Could not initialize device"); }
-        PcapSessionBuilder { p: p, activated: false }
+        if p.is_null() {
+            Err("Could not initialize device")
+        } else {
+            Ok(PcapSessionBuilder { p: p, activated: false })
+        }
     }
 
     pub fn buffer_size(&mut self, sz: i32) -> &mut PcapSessionBuilder {
-        if self.activated { fail!("Session already activated") }
+        if self.activated { panic!("Session already activated") }
         unsafe { pcap::pcap_set_buffer_size(self.p, sz); }
         self
     }
 
     pub fn timeout(&mut self, to: i32) -> &mut PcapSessionBuilder {
-        if self.activated { fail!("Session already activated") }
+        if self.activated { panic!("Session already activated") }
         unsafe { pcap::pcap_set_timeout(self.p, to); }
         self
     }
 
     pub fn promisc(&mut self, promisc: bool) -> &mut PcapSessionBuilder {
-        if self.activated { fail!("Session already activated") }
+        if self.activated { panic!("Session already activated") }
         unsafe { pcap::pcap_set_promisc(self.p, promisc as c_int); }
         self
     }
 
     pub fn rfmon(&mut self, rfmon: bool) -> &mut PcapSessionBuilder {
-        if self.activated { fail!("Session already activated") }
+        if self.activated { panic!("Session already activated") }
         unsafe { pcap::pcap_set_rfmon(self.p, rfmon as c_int); }
         self
     }
 
     pub fn activate(&mut self) -> PcapSession {
-        if self.activated { fail!("Session already activated") }
+        if self.activated { panic!("Session already activated") }
         unsafe { pcap::pcap_activate(self.p); }
         self.activated = true;
         PcapSession { p: self.p }
@@ -104,19 +112,19 @@ impl PcapSession {
     }
 
     //TODO: add a return value for success/failure
-    pub fn next<T>(&self, f: |&T, u32|) {
+    pub fn next(&self, f: |*const u8, u32|) {
         let mut head_ptr = ptr::null_mut();
         let mut data_ptr = ptr::null();
         let res = unsafe { pcap::pcap_next_ex(self.p, &mut head_ptr, &mut data_ptr) };
         match res {
             0 => return, //timed out
             1 => {
-                let (t, sz) = unsafe { (&*(data_ptr as *const T), (*head_ptr).len) };
+                let (t, sz) = unsafe { (data_ptr, (*head_ptr).len) };
                 f(t, sz);
             }
             _ => {
-                fail!("pcap_next_ex failed with {}, find something better to do than blow up",
-                      res);
+                panic!("pcap_next_ex panicked with {}, find something better to do than blow up",
+                       res);
             }
         }
     }

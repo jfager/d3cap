@@ -1,40 +1,39 @@
-use std;
 use std::io::{Stream,BufferedStream,IoResult};
 
-use serialize::base64::{ToBase64, STANDARD};
+use rustc_serialize::base64::{ToBase64, STANDARD};
 
-use openssl::crypto::hash as crypto_hash;
+use openssl::crypto::hash::{mod, HashType};
 
-static CONNECTION_FIELD: &'static str = "Connection";
-static UPGRADE: &'static str = "upgrade";
-static UPGRADE_FIELD: &'static str = "Upgrade";
-static WEBSOCKET: &'static str = "websocket";
-static HOST_FIELD: &'static str = "Host";
-static ORIGIN_FIELD: &'static str = "Origin";
-static KEY_FIELD: &'static str = "Sec-WebSocket-Key";
-static PROTOCOL_FIELD: &'static str = "Sec-WebSocket-Protocol";
-static VERSION_FIELD: &'static str = "Sec-WebSocket-Version";
-static VERSION: &'static str = "13";
-static ACCEPT_FIELD: &'static str = "Sec-WebSocket-Accept";
-static SECRET: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+const CONNECTION_FIELD: &'static str = "Connection";
+const UPGRADE: &'static str = "upgrade";
+const UPGRADE_FIELD: &'static str = "Upgrade";
+const WEBSOCKET: &'static str = "websocket";
+const HOST_FIELD: &'static str = "Host";
+const ORIGIN_FIELD: &'static str = "Origin";
+const KEY_FIELD: &'static str = "Sec-WebSocket-Key";
+const PROTOCOL_FIELD: &'static str = "Sec-WebSocket-Protocol";
+const VERSION_FIELD: &'static str = "Sec-WebSocket-Version";
+const VERSION: &'static str = "13";
+const ACCEPT_FIELD: &'static str = "Sec-WebSocket-Accept";
+const SECRET: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 #[deriving(FromPrimitive)]
 pub enum FrameType {
-    EmptyFrame = 0xF0,
-    ErrorFrame = 0xF1,
-    IncompleteFrame = 0xF2,
-    TextFrame = 0x01,
-    BinaryFrame = 0x02,
-    PingFrame = 0x09,
-    PongFrame = 0x0A,
-    OpeningFrame = 0xF3,
-    ClosingFrame = 0x08
+    Empty = 0xF0,
+    Error = 0xF1,
+    Incomplete = 0xF2,
+    Text = 0x01,
+    Binary = 0x02,
+    Ping = 0x09,
+    Pong = 0x0A,
+    Opening = 0xF3,
+    Closing = 0x08
 }
 
 enum State {
-    OpeningState,
-    NormalState,
-    ClosingState
+    Opening,
+    Normal,
+    Closing
 }
 
 struct Handshake {
@@ -45,7 +44,7 @@ struct Handshake {
 
 impl Handshake {
     pub fn get_answer(&self) -> String {
-        let res = crypto_hash::hash(crypto_hash::SHA1, self.key.as_bytes());
+        let res = hash::hash(HashType::SHA1, self.key.as_bytes());
         let response_key = res.as_slice().to_base64(STANDARD);
         format!("HTTP/1.1 101 Switching Protocols\r\n\
                  {}: {}\r\n\
@@ -69,7 +68,7 @@ pub fn parse_handshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake
         //origin: ~"",
         key: "".to_string(),
         resource: prop[1].as_slice().trim().to_string(),
-        frame_type: OpeningFrame
+        frame_type: FrameType::Opening
     };
 
     let mut has_handshake = false;
@@ -131,35 +130,35 @@ fn frame_type_from(i: u8) -> FrameType {
 
 pub fn parse_input_frame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<Vec<u8>>, FrameType) {
     let hdr = match s.read_exact(2 as uint) {
-        Ok(h) => if h.len() == 2 { h } else { return (None, ErrorFrame) },
+        Ok(h) => if h.len() == 2 { h } else { return (None, FrameType::Error) },
         //Ok(h) if h.len() == 2 => h //Fails w/ cannot bind by-move into a pattern guard
         //Ok(ref h) if h.len() == 2 => h.clone(),
-        _ => return (None, ErrorFrame)
+        _ => return (None, FrameType::Error)
     };
 
     if hdr[0] & 0x70 != 0x0    //extensions must be off
     || hdr[0] & 0x80 != 0x80   //no continuation frames
     || hdr[1] & 0x80 != 0x80 { //masking bit must be set
-        return (None, ErrorFrame);
+        return (None, FrameType::Error);
     }
 
     let opcode = (hdr[0] & 0x0F) as u8;
-    if opcode == TextFrame as u8
-    || opcode == BinaryFrame as u8
-    || opcode == ClosingFrame as u8
-    || opcode == PingFrame as u8
-    || opcode == PongFrame as u8 {
+    if opcode == FrameType::Text as u8
+    || opcode == FrameType::Binary as u8
+    || opcode == FrameType::Closing as u8
+    || opcode == FrameType::Ping as u8
+    || opcode == FrameType::Pong as u8 {
         let frame_type = frame_type_from(opcode);
         let payload_len = hdr[1] & 0x7F;
         if payload_len < 0x7E { //Only handle short payloads right now.
             let toread = (payload_len + 4) as uint; //+4 for mask
             let masked_payload = match s.read_exact(toread) {
                 Ok(mp) => mp,
-                _ => return (None, ErrorFrame)
+                _ => return (None, FrameType::Error)
             };
             let payload = masked_payload.slice_from(4).iter()
                 .enumerate()
-                .map(|(i, t)| { t ^ masked_payload[i%4] })
+                .map(|(i, t)| { *t ^ masked_payload[i%4] })
                 .collect();
             return (Some(payload), frame_type);
         }
@@ -167,5 +166,5 @@ pub fn parse_input_frame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<Vec<u8
         return (None, frame_type);
     }
 
-    return (None, ErrorFrame);
+    return (None, FrameType::Error);
 }

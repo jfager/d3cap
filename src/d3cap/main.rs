@@ -1,12 +1,12 @@
 #![feature(macro_rules, default_type_params)]
 
 extern crate getopts;
-extern crate serialize;
 extern crate collections;
 extern crate time;
 extern crate libc;
 
 extern crate toml;
+extern crate "rustc-serialize" as rustc_serialize;
 
 extern crate pcap;
 extern crate multicast;
@@ -25,6 +25,7 @@ mod readline;
 
 
 fn main() {
+
     use getopts as go;
     use std::{os};
     use d3cap::{D3capConf};
@@ -55,7 +56,7 @@ fn main() {
 
     let matches = match go::getopts(args.tail(), opts.as_slice()) {
         Ok(m) => { m }
-        Err(f) => { fail!("{}", f) }
+        Err(f) => { panic!("{}", f) }
     };
 
     if matches.opt_present("h") {
@@ -65,7 +66,7 @@ fn main() {
 
     let conf = D3capConf {
         websocket: matches.opt_default(websocket_opt, "7432").map(|p| {
-            from_str::<u16>(p.as_slice()).expect("websocket port must be a number")
+            p.parse::<u16>().expect("websocket port must be a number")
         }),
         interface: matches.opt_str(interface_opt),
         file: matches.opt_str(file_opt),
