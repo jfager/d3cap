@@ -111,12 +111,12 @@ impl ProtoGraphController {
         foo
     }
 
-    fn pkt_sender(&self) -> &Sender<Pkt> {
-        &self.cap_tx
+    fn pkt_sender(&self) -> Sender<Pkt> {
+        self.cap_tx.clone()
     }
 
-    fn req_sender(&self) -> &Sender<ProtoGraphReq> {
-        &self.req_tx
+    fn req_sender(&self) -> Sender<ProtoGraphReq> {
+        self.req_tx.clone()
     }
 }
 
@@ -124,11 +124,11 @@ trait CaptureCtx {
     fn parse(&mut self, pkt: *const u8, len: u32);
 }
 
-struct EthernetCtx<'a> {
-    pkts: &'a Sender<Pkt>,
+struct EthernetCtx {
+    pkts: Sender<Pkt>,
 }
 
-impl <'a> CaptureCtx for EthernetCtx<'a> {
+impl CaptureCtx for EthernetCtx {
     fn parse(&mut self, pkt_ptr: *const u8, size: u32) {
         let ether_hdr = unsafe { &*(pkt_ptr as *const EthernetHeader) };
         self.pkts.send(Pkt::Mac(PktMeta::new(ether_hdr.src, ether_hdr.dst, size)));
@@ -154,11 +154,11 @@ impl <'a> CaptureCtx for EthernetCtx<'a> {
     }
 }
 
-struct RadiotapCtx<'a> {
-    pkts: &'a Sender<Pkt>,
+struct RadiotapCtx {
+    pkts: Sender<Pkt>,
 }
 
-impl <'a> CaptureCtx for RadiotapCtx<'a> {
+impl CaptureCtx for RadiotapCtx {
     fn parse(&mut self, pkt_ptr: *const u8, size: u32) {
 
         let tap_hdr = unsafe { &*(pkt_ptr as *const tap::RadiotapHeader) };
@@ -256,10 +256,8 @@ impl <'a> CaptureCtx for RadiotapCtx<'a> {
     }
 }
 
-pub fn start_capture(conf: D3capConf) -> Sender<ProtoGraphReq> {
+pub fn start_capture(conf: D3capConf, pkt_sender: Sender<Pkt>) -> JoinGuard<()> {
     use pcap::rustpcap as cap;
-
-    let (tx, rx) = channel();
 
     thread::Builder::new().name("packet_capture".to_string()).spawn(move || {
         let sess = match conf.file {
@@ -283,21 +281,12 @@ pub fn start_capture(conf: D3capConf) -> Sender<ProtoGraphReq> {
             loop { sess.next(|t,sz| ctx.parse(t, sz)); }
         }
 
-        let foo = ProtoGraphController::spawn();
-        tx.send(foo.req_sender().clone());
-
         match sess.datalink() {
-            cap::DLT_ETHERNET => go(&sess, &mut EthernetCtx {
-                pkts: foo.pkt_sender()
-            }),
-            cap::DLT_IEEE802_11_RADIO => go(&sess, &mut RadiotapCtx {
-                pkts: foo.pkt_sender()
-            }),
+            cap::DLT_ETHERNET => go(&sess, &mut EthernetCtx { pkts: pkt_sender }),
+            cap::DLT_IEEE802_11_RADIO => go(&sess, &mut RadiotapCtx { pkts: pkt_sender }),
             x => panic!("unsupported datalink type: {}", x)
         };
-    }).detach();
-
-    rx.recv().unwrap()
+    })
 }
 
 enum ProtoGraphReq {
@@ -397,7 +386,8 @@ fn start_web_socket(port: u16, mac_addr_map: &MacMap, caps: &Sender<ProtoGraphRe
 type MacMap = HashMap<MacAddr, String>;
 
 pub struct D3capController {
-    mac_addr_map: MacMap,
+    pg_ctrl: ProtoGraphController,
+    mac_map: MacMap,
     tx: Sender<CtrlReq>
 }
 
@@ -407,12 +397,16 @@ impl D3capController {
             .map(|x| load_mac_addrs(x.to_string()))
             .unwrap_or_else(HashMap::new);
 
+
+        let pg_ctrl = ProtoGraphController::spawn();
+
+        start_capture(conf, pg_ctrl.pkt_sender()).detach();
+
         let (tx, rx) = channel();
-        let out = D3capController { mac_addr_map: mac_map.clone(), tx: tx };
-        let cap_snd = start_capture(conf);
+        let req_snd = pg_ctrl.req_sender();
+        let mm = mac_map.clone();
 
         thread::Builder::new().name("controller".to_string()).spawn(move || -> () {
-            let caps = cap_snd.clone();
             let mut server_started = false;
             loop {
                 match rx.recv().unwrap() {
@@ -423,7 +417,7 @@ impl D3capController {
                         if server_started {
                             println!("server already started");
                         } else {
-                            start_web_socket(port, &mac_map, &caps);
+                            start_web_socket(port, &mm, &req_snd);
                             server_started = true;
                         }
                     }
@@ -431,11 +425,11 @@ impl D3capController {
             }
         }).detach();
 
-        out
+        D3capController { pg_ctrl: pg_ctrl, mac_map: mac_map, tx: tx }
     }
 
-    fn mac_addr_map(&self) -> &MacMap {
-        &self.mac_addr_map
+    fn mac_map(&self) -> &MacMap {
+        &self.mac_map
     }
 
     fn get_sender(&self) -> Sender<CtrlReq> {
