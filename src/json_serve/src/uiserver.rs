@@ -3,6 +3,7 @@ use std::io::{Acceptor,Listener,Stream,BufferedStream,IoResult,IoError};
 use std::io::net::tcp::{TcpListener};
 use std::thread;
 use std::sync::Arc;
+use std::fmt;
 
 use rustc_serialize::{json, Encodable, Encoder};
 
@@ -76,7 +77,7 @@ pub struct UIServer {
 }
 
 impl UIServer {
-    pub fn spawn<'a, T:Encodable<json::Encoder<'a>,IoError>>(port: u16, welcome: &T) -> UIServer {
+    pub fn spawn<T:for<'a> Encodable<json::Encoder<'a>,fmt::Error>>(port: u16, welcome: &T) -> UIServer {
         let welcome_msg = Arc::new(json::encode(welcome));
 
         let mc = Multicast::spawn();
@@ -106,7 +107,7 @@ impl UIServer {
         UIServer { json_multicast: mc }
     }
 
-    pub fn create_sender<'a, T:Encodable<json::Encoder<'a>,IoError>+Send+Sync>(&self) -> Sender<Arc<T>> {
+    pub fn create_sender<T:for<'a> Encodable<json::Encoder<'a>,fmt::Error>+Send+Sync>(&self) -> Sender<Arc<T>> {
         let (tx, rx) = channel();
         let jb = self.json_multicast.clone();
         thread::Builder::new().name("routes_ui".to_string()).spawn(move || -> () {
