@@ -69,7 +69,9 @@ impl<E,S: Encoder<E>,T: Encodable<S, E>> Encodable<S, E> for RingBuffer<T> {
     }
 }
 
-impl<T> std::ops::Index<uint, T> for RingBuffer<T> {
+impl<T> std::ops::Index<uint> for RingBuffer<T> {
+    type Output = T;
+
     fn index(&self, index: &uint) -> &T {
         assert!(*index < self.size);
 
@@ -86,7 +88,9 @@ pub struct RingIterator<'s, T:'s> {
     i: uint
 }
 
-impl<'s, T> Iterator<&'s T> for RingIterator<'s, T> {
+impl<'s, T> Iterator for RingIterator<'s, T> {
+    type Item = &'s T;
+
     fn next(&mut self) -> Option<&'s T> {
         if self.i < self.rb.size {
             let out = Some(&self.rb[self.i]);

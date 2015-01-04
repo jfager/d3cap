@@ -1,4 +1,4 @@
-#![feature(macro_rules, default_type_params, old_orphan_check)]
+#![feature(macro_rules, default_type_params, old_orphan_check, associated_types)]
 
 extern crate getopts;
 extern crate collections;
