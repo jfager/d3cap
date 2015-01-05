@@ -1,9 +1,9 @@
 use std::thread;
-use std::sync::mpsc::{channel, Sender, Receiver};
 use std::hash::Hash;
 use std::collections::HashMap;
 use std::io::File;
-use std::sync::Arc;
+use std::sync::{Arc,RWLock};
+use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread::JoinGuard;
 use std::time::duration::Duration;
 
@@ -35,9 +35,10 @@ enum Pkt {
     IP6(PktMeta<IP6Addr>),
 }
 
+#[derive(Clone)]
 struct ProtocolHandler<T:Send+Sync> {
     typ: &'static str,
-    graph: ProtocolGraph<T>,
+    graph: Arc<RWLock<ProtocolGraph<T>>>,
     stats_mcast: Multicast<RouteStatsMsg<T>>,
 }
 
@@ -45,13 +46,15 @@ impl <T:Send+Sync+Copy+Eq+Hash> ProtocolHandler<T> {
     fn new(typ: &'static str) -> ProtocolHandler<T> {
         ProtocolHandler {
             typ: typ,
-            graph: ProtocolGraph::new(),
+            graph: Arc::new(RWLock::new(ProtocolGraph::new())),
             stats_mcast: Multicast::spawn()
         }
     }
 
     fn update(&mut self, pkt: &PktMeta<T>) {
-        let route_stats = self.graph.update(pkt);
+        let route_stats = {
+            self.graph.write().unwrap().update(pkt)
+        };
         let route_stats_msg = Arc::new(RouteStatsMsg {
             typ: self.typ,
             route: route_stats
@@ -60,63 +63,56 @@ impl <T:Send+Sync+Copy+Eq+Hash> ProtocolHandler<T> {
     }
 }
 
+#[derive(Clone)]
 struct ProtoGraphController {
     cap_tx: Sender<Pkt>,
-    req_tx: Sender<ProtoGraphReq>,
+    mac: ProtocolHandler<MacAddr>,
+    ip4: ProtocolHandler<IP4Addr>,
+    ip6: ProtocolHandler<IP6Addr>,
 }
 
 impl ProtoGraphController {
     fn spawn() -> ProtoGraphController {
         let (cap_tx, cap_rx) = channel();
-        let (req_tx, req_rx) = channel();
-        let foo = ProtoGraphController {
+        let ctl = ProtoGraphController {
             cap_tx: cap_tx,
-            req_tx: req_tx,
+            mac: ProtocolHandler::new("mac"),
+            ip4: ProtocolHandler::new("ip4"),
+            ip6: ProtocolHandler::new("ip6"),
         };
 
+        let mut phctl = ctl.clone();
         thread::Builder::new().name("protocol_handler".to_string()).spawn(move || -> () {
-            let mut mac = ProtocolHandler::new("mac");
-            let mut ip4 = ProtocolHandler::new("ip4");
-            let mut ip6 = ProtocolHandler::new("ip6");
-
             loop {
-                select!(
-                    pkt = cap_rx.recv() => {
-                        if pkt.is_err() {
-                            break
-                        }
-                        match pkt.unwrap() {
-                            Pkt::Mac(ref p) => mac.update(p),
-                            Pkt::IP4(ref p) => ip4.update(p),
-                            Pkt::IP6(ref p) => ip6.update(p),
-                        }
-                    },
-                    request = req_rx.recv() => {
-                        if request.is_err() {
-                            break
-                        }
-                        match request.unwrap() {
-                            ProtoGraphReq::Ping(x) => {
-                                let _ = x.send(ProtoGraphRsp::Pong);
-                            }
-                            ProtoGraphReq::MacStatListener(s) => mac.stats_mcast.register(s),
-                            ProtoGraphReq::IP4StatListener(s) => ip4.stats_mcast.register(s),
-                            ProtoGraphReq::IP6StatListener(s) => ip6.stats_mcast.register(s),
-                        }
-                    }
-                )
+                let pkt = cap_rx.recv();
+                if pkt.is_err() {
+                    break
+                }
+                match pkt.unwrap() {
+                    Pkt::Mac(ref p) => phctl.mac.update(p),
+                    Pkt::IP4(ref p) => phctl.ip4.update(p),
+                    Pkt::IP6(ref p) => phctl.ip6.update(p),
+                }
             }
         }).detach();
 
-        foo
+        ctl
     }
 
     fn pkt_sender(&self) -> Sender<Pkt> {
         self.cap_tx.clone()
     }
 
-    fn req_sender(&self) -> Sender<ProtoGraphReq> {
-        self.req_tx.clone()
+    fn register_mac_listener(&self, s: Sender<Arc<RouteStatsMsg<MacAddr>>>) {
+        self.mac.stats_mcast.register(s);
+    }
+
+    fn register_ip4_listener(&self, s: Sender<Arc<RouteStatsMsg<IP4Addr>>>) {
+        self.ip4.stats_mcast.register(s);
+    }
+
+    fn register_ip6_listener(&self, s: Sender<Arc<RouteStatsMsg<IP6Addr>>>) {
+        self.ip6.stats_mcast.register(s);
     }
 }
 
@@ -376,11 +372,11 @@ fn load_mac_addrs(file: String) -> HashMap<MacAddr, String> {
         .collect()
 }
 
-fn start_web_socket(port: u16, mac_addr_map: &MacMap, caps: &Sender<ProtoGraphReq>) {
+fn start_web_socket(port: u16, mac_addr_map: &MacMap, pg_ctl: &ProtoGraphController) {
     let ui = UIServer::spawn(port, mac_addr_map);
-    caps.send(ProtoGraphReq::MacStatListener(ui.create_sender()));
-    caps.send(ProtoGraphReq::IP4StatListener(ui.create_sender()));
-    caps.send(ProtoGraphReq::IP6StatListener(ui.create_sender()));
+    pg_ctl.register_mac_listener(ui.create_sender());
+    pg_ctl.register_ip4_listener(ui.create_sender());
+    pg_ctl.register_ip6_listener(ui.create_sender());
 }
 
 type MacMap = HashMap<MacAddr, String>;
@@ -403,8 +399,9 @@ impl D3capController {
         start_capture(conf, pg_ctrl.pkt_sender()).detach();
 
         let (tx, rx) = channel();
-        let req_snd = pg_ctrl.req_sender();
         let mm = mac_map.clone();
+
+        let pctl = pg_ctrl.clone();
 
         thread::Builder::new().name("controller".to_string()).spawn(move || -> () {
             let mut server_started = false;
@@ -417,7 +414,7 @@ impl D3capController {
                         if server_started {
                             println!("server already started");
                         } else {
-                            start_web_socket(port, &mm, &req_snd);
+                            start_web_socket(port, &mm, &pctl);
                             server_started = true;
                         }
                     }
