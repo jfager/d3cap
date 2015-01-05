@@ -297,29 +297,22 @@ enum ProtoGraphRsp {
     Pong
 }
 
-fn start_cli(tx: Sender<CtrlReq>) -> JoinGuard<()> {
-    let (my_tx, my_rx) = channel();
-
+fn start_cli(ctrl: D3capController) -> JoinGuard<()> {
     thread::Builder::new().name("cli".to_string()).spawn(move || {
+        let mut ctrl = ctrl;
+
         let mut cmds: HashMap<String, (&str, |Vec<&str>|->())> = HashMap::new();
 
-        cmds.insert("ping".to_string(), ("ping", |_| {
-            tx.send(CtrlReq::Ping(my_tx.clone()));
-            match my_rx.recv().unwrap() {
-                CtrlRsp::Pong => println!("pong"),
-            }
-        }));
+        cmds.insert("ping".to_string(), ("ping", |_| println!("pong")));
 
         cmds.insert("websocket".to_string(), ("websocket", |cmd| {
             match cmd.as_slice() {
                 [_, port] => {
                     if let Some(p) = port.parse() {
-                        tx.send(CtrlReq::StartWebSocket(p));
+                        ctrl.start_websocket(p);
                     }
                 },
-                [_] => {
-                    tx.send(CtrlReq::StartWebSocket(7432u16));
-                },
+                [_] => ctrl.start_websocket(7432u16),
                 _ => println!("Illegal argument")
             }
         }));
@@ -372,7 +365,7 @@ fn load_mac_addrs(file: String) -> HashMap<MacAddr, String> {
         .collect()
 }
 
-fn start_web_socket(port: u16, mac_addr_map: &MacMap, pg_ctl: &ProtoGraphController) {
+fn start_websocket(port: u16, mac_addr_map: &MacMap, pg_ctl: &ProtoGraphController) {
     let ui = UIServer::spawn(port, mac_addr_map);
     pg_ctl.register_mac_listener(ui.create_sender());
     pg_ctl.register_ip4_listener(ui.create_sender());
@@ -381,10 +374,11 @@ fn start_web_socket(port: u16, mac_addr_map: &MacMap, pg_ctl: &ProtoGraphControl
 
 type MacMap = HashMap<MacAddr, String>;
 
+#[derive(Clone)]
 pub struct D3capController {
     pg_ctrl: ProtoGraphController,
     mac_map: MacMap,
-    tx: Sender<CtrlReq>
+    server_started: bool
 }
 
 impl D3capController {
@@ -393,44 +387,24 @@ impl D3capController {
             .map(|x| load_mac_addrs(x.to_string()))
             .unwrap_or_else(HashMap::new);
 
-
         let pg_ctrl = ProtoGraphController::spawn();
 
         start_capture(conf, pg_ctrl.pkt_sender()).detach();
 
-        let (tx, rx) = channel();
-        let mm = mac_map.clone();
-
-        let pctl = pg_ctrl.clone();
-
-        thread::Builder::new().name("controller".to_string()).spawn(move || -> () {
-            let mut server_started = false;
-            loop {
-                match rx.recv().unwrap() {
-                    CtrlReq::Ping(s) => {
-                        let _ = s.send(CtrlRsp::Pong);
-                    }
-                    CtrlReq::StartWebSocket(port) => {
-                        if server_started {
-                            println!("server already started");
-                        } else {
-                            start_web_socket(port, &mm, &pctl);
-                            server_started = true;
-                        }
-                    }
-                }
-            }
-        }).detach();
-
-        D3capController { pg_ctrl: pg_ctrl, mac_map: mac_map, tx: tx }
+        D3capController { pg_ctrl: pg_ctrl, mac_map: mac_map, server_started: false }
     }
 
     fn mac_map(&self) -> &MacMap {
         &self.mac_map
     }
 
-    fn get_sender(&self) -> Sender<CtrlReq> {
-        self.tx.clone()
+    fn start_websocket(&mut self, port: u16) {
+        if self.server_started {
+            println!("server already started");
+        } else {
+            start_websocket(port, &self.mac_map, &self.pg_ctrl);
+            self.server_started = true;
+        }
     }
 }
 
@@ -447,12 +421,11 @@ pub struct D3capConf {
 pub fn run(conf: D3capConf) {
 
     let mut ctrl = D3capController::spawn(conf.clone());
-    let mut sndr = ctrl.get_sender();
 
     // Only start the websocket server if the option is explicitly provided.
     if let Some(port) = conf.websocket {
-        sndr.send(CtrlReq::StartWebSocket(port));
+        ctrl.start_websocket(port);
     }
 
-    start_cli(sndr);
+    start_cli(ctrl);
 }
