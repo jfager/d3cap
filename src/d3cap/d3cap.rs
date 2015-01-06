@@ -42,7 +42,7 @@ struct ProtocolHandler<T:Send+Sync> {
     stats_mcast: Multicast<RouteStatsMsg<T>>,
 }
 
-impl <T:Send+Sync+Copy+Eq+Hash> ProtocolHandler<T> {
+impl <T:Send+Sync+Copy+Clone+Eq+Hash> ProtocolHandler<T> {
     fn new(typ: &'static str) -> ProtocolHandler<T> {
         ProtocolHandler {
             typ: typ,

@@ -10,6 +10,10 @@ authors = [ "jfager@gmail.com" ]
 name = "d3cap"
 path = "src/d3cap/main.rs"
 
+[dependencies]
+
+time = "*"
+
 
 [dependencies.pcap]
 

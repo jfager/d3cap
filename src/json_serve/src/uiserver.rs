@@ -67,7 +67,6 @@ impl WebSocketWorker {
                 _ => ()
             }
         }
-        println!("Done with worker");
         Ok(())
     }
 }

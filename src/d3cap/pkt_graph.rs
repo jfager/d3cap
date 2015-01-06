@@ -32,20 +32,19 @@ impl PktStats {
     }
 }
 
-//TODO: derive this manually
-//#[derive(Encodable)]
+//TODO: derive Encodable manually
+#[derive(Clone)]
 pub struct AddrStats<T> {
     sent: PktStats,
     sent_to: HashMap<T, PktStats>,
     received: PktStats,
     received_from: HashMap<T, PktStats>
 }
-impl <T:Hash+Eq> AddrStats<T> {
+impl <T:Hash+Eq+Clone> AddrStats<T> {
     pub fn new() -> AddrStats<T> {
         AddrStats { sent: PktStats::new(), sent_to: HashMap::new(),
                     received: PktStats::new(), received_from: HashMap::new() }
     }
-
 
     pub fn update_sent_to(&mut self, to: T, size: u32) -> PktStats {
         self.sent.update(size);
@@ -83,8 +82,8 @@ impl <T:Hash+Eq> AddrStats<T> {
     }
 
     fn update(m: &mut HashMap<T, PktStats>, addr: T, size: u32) -> PktStats {
-        let stats = match m.entry(addr) {
-            Vacant(entry) => entry.set(PktStats::new()),
+        let stats = match m.entry(&addr) {
+            Vacant(entry) => entry.insert(PktStats::new()),
             Occupied(entry) => entry.into_mut()
         };
         stats.update(size);
@@ -104,14 +103,14 @@ pub struct RouteStats<T> {
     b: SentStats<T>
 }
 
-//TODO: derive manually
-//#[derive(Encodable)]
+//TODO: derive Encodable manually
+#[derive(Clone)]
 pub struct ProtocolGraph<T> {
     stats: PktStats,
     routes: HashMap<T, AddrStats<T>>,
 }
 
-impl<'a, T: Hash+Eq+Copy> ProtocolGraph<T> {
+impl<'a, T: Hash+Eq+Copy+Clone> ProtocolGraph<T> {
     pub fn new() -> ProtocolGraph<T> {
         ProtocolGraph { stats: PktStats::new(), routes: HashMap::new() }
     }
@@ -121,8 +120,8 @@ impl<'a, T: Hash+Eq+Copy> ProtocolGraph<T> {
         // TODO: can we do something to avoid all these clones?
         let a_to_b;
         {
-            let a = match self.routes.entry(pkt.src) {
-                Vacant(entry) => entry.set(AddrStats::new()),
+            let a = match self.routes.entry(&pkt.src) {
+                Vacant(entry) => entry.insert(AddrStats::new()),
                 Occupied(entry) => entry.into_mut()
             };
             a_to_b = a.update_sent_to(pkt.dst, pkt.size);
@@ -130,8 +129,8 @@ impl<'a, T: Hash+Eq+Copy> ProtocolGraph<T> {
 
         let b_to_a;
         {
-            let b = match self.routes.entry(pkt.dst) {
-                Vacant(entry) => entry.set(AddrStats::new()),
+            let b = match self.routes.entry(&pkt.dst) {
+                Vacant(entry) => entry.insert(AddrStats::new()),
                 Occupied(entry) => entry.into_mut()
             };
             b.update_received_from(pkt.src, pkt.size);
