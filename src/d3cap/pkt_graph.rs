@@ -17,7 +17,7 @@ impl<T> PktMeta<T> {
     }
 }
 
-#[derive(RustcEncodable, Copy, Clone)]
+#[derive(RustcEncodable, Copy, Clone, Show)]
 pub struct PktStats {
     count: u64,
     size: u64
@@ -33,8 +33,8 @@ impl PktStats {
 }
 
 //TODO: derive Encodable manually
-#[derive(Clone)]
-pub struct AddrStats<T> {
+#[derive(Clone,Show)]
+pub struct AddrStats<T:Hash+Eq> {
     sent: PktStats,
     sent_to: HashMap<T, PktStats>,
     received: PktStats,
@@ -104,8 +104,8 @@ pub struct RouteStats<T> {
 }
 
 //TODO: derive Encodable manually
-#[derive(Clone)]
-pub struct ProtocolGraph<T> {
+#[derive(Clone, Show)]
+pub struct ProtocolGraph<T:Hash+Eq> {
     stats: PktStats,
     routes: HashMap<T, AddrStats<T>>,
 }

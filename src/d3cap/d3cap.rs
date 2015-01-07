@@ -3,7 +3,7 @@ use std::hash::Hash;
 use std::collections::HashMap;
 use std::io::File;
 use std::sync::{Arc,RWLock};
-use std::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::mpsc::{channel, Sender};
 use std::thread::JoinGuard;
 use std::time::duration::Duration;
 
@@ -197,7 +197,7 @@ impl CaptureCtx for RadiotapCtx {
         }
 
         match &tap_hdr.it_present {
-            a @ &tap::COMMON_A => {
+            &tap::COMMON_A => {
                 match tap::CommonA::parse(tap_hdr) {
                     Some(vals) => {
                         println!("tsft: {}", vals.tsft.timer_micros);
@@ -211,7 +211,7 @@ impl CaptureCtx for RadiotapCtx {
                     }
                 }
             },
-            b @ &tap::COMMON_B => {
+            &tap::COMMON_B => {
                 match tap::CommonB::parse(tap_hdr) {
                     Some(vals) => {
                         println!("tsft: {}", vals.tsft.timer_micros);
@@ -259,7 +259,7 @@ pub fn start_capture(conf: D3capConf, pkt_sender: Sender<Pkt>) -> JoinGuard<()> 
         let sess = match conf.file {
             Some(ref f) => cap::PcapSession::from_file(f.as_slice()),
             None => {
-                let mut sess_builder = match conf.interface {
+                let sess_builder = match conf.interface {
                     Some(ref dev) => cap::PcapSessionBuilder::new_dev(dev.as_slice()),
                     None => cap::PcapSessionBuilder::new()
                 };
@@ -285,27 +285,16 @@ pub fn start_capture(conf: D3capConf, pkt_sender: Sender<Pkt>) -> JoinGuard<()> 
     })
 }
 
-enum ProtoGraphReq {
-    Ping(Sender<ProtoGraphRsp>),
-    MacStatListener(Sender<Arc<RouteStatsMsg<MacAddr>>>),
-    IP4StatListener(Sender<Arc<RouteStatsMsg<IP4Addr>>>),
-    IP6StatListener(Sender<Arc<RouteStatsMsg<IP6Addr>>>),
-}
-
-#[derive(Show)]
-enum ProtoGraphRsp {
-    Pong
-}
-
 fn start_cli(ctrl: D3capController) -> JoinGuard<()> {
     thread::Builder::new().name("cli".to_string()).spawn(move || {
         let mut ctrl = ctrl;
 
-        let mut cmds: HashMap<String, (&str, |Vec<&str>|->())> = HashMap::new();
+        let mut cmds: HashMap<String, (&str, |Vec<&str>, &mut D3capController|->())>
+            = HashMap::new();
 
-        cmds.insert("ping".to_string(), ("ping", |_| println!("pong")));
+        cmds.insert("ping".to_string(), ("ping", |_,_| println!("pong")));
 
-        cmds.insert("websocket".to_string(), ("websocket", |cmd| {
+        cmds.insert("websocket".to_string(), ("websocket", |cmd, ctrl| {
             match cmd.as_slice() {
                 [_, port] => {
                     if let Some(p) = port.parse() {
@@ -317,6 +306,20 @@ fn start_cli(ctrl: D3capController) -> JoinGuard<()> {
             }
         }));
 
+        cmds.insert("ls".to_string(), ("ls", |cmd, ctrl| {
+            match cmd.as_slice() {
+                [_, "mac"] => {
+                    println!("{}", *ctrl.pg_ctrl.mac.graph.read().unwrap());
+                }
+                [_, "ip4"] => {
+                    println!("{}", *ctrl.pg_ctrl.ip4.graph.read().unwrap());
+                }
+                [_, "ip6"] => {
+                    println!("{}", *ctrl.pg_ctrl.ip6.graph.read().unwrap());
+                }
+                _ => println!("Illegal argument")
+            }
+        }));
 
         let maxlen = cmds.keys().map(|x| x.len()).max().unwrap();
 
@@ -332,21 +335,12 @@ fn start_cli(ctrl: D3capController) -> JoinGuard<()> {
                 },
                 "" => {}
                 cmd => match cmds.get_mut(cmd) {
-                    Some(&(_, ref mut f)) => (*f)(full_cmd),
+                    Some(&(_, ref mut f)) => (*f)(full_cmd, &mut ctrl),
                     None => println!("unknown command")
                 }
             }
         }
     })
-}
-
-enum CtrlReq {
-    Ping(Sender<CtrlRsp>),
-    StartWebSocket(u16)
-}
-
-enum CtrlRsp {
-    Pong
 }
 
 fn load_mac_addrs(file: String) -> HashMap<MacAddr, String> {
