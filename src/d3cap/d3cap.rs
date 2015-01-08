@@ -2,7 +2,7 @@ use std::thread;
 use std::hash::Hash;
 use std::collections::HashMap;
 use std::io::File;
-use std::sync::{Arc,RWLock};
+use std::sync::{Arc,RwLock};
 use std::sync::mpsc::{channel, Sender};
 use std::thread::JoinGuard;
 use std::time::duration::Duration;
@@ -38,7 +38,7 @@ enum Pkt {
 #[derive(Clone)]
 struct ProtocolHandler<T:Send+Sync> {
     typ: &'static str,
-    graph: Arc<RWLock<ProtocolGraph<T>>>,
+    graph: Arc<RwLock<ProtocolGraph<T>>>,
     stats_mcast: Multicast<RouteStatsMsg<T>>,
 }
 
@@ -46,7 +46,7 @@ impl <T:Send+Sync+Copy+Clone+Eq+Hash> ProtocolHandler<T> {
     fn new(typ: &'static str) -> ProtocolHandler<T> {
         ProtocolHandler {
             typ: typ,
-            graph: Arc::new(RWLock::new(ProtocolGraph::new())),
+            graph: Arc::new(RwLock::new(ProtocolGraph::new())),
             stats_mcast: Multicast::spawn()
         }
     }
@@ -289,57 +289,57 @@ fn start_cli(ctrl: D3capController) -> JoinGuard<()> {
     thread::Builder::new().name("cli".to_string()).spawn(move || {
         let mut ctrl = ctrl;
 
-        let mut cmds: HashMap<String, (&str, |Vec<&str>, &mut D3capController|->())>
-            = HashMap::new();
+        // let mut cmds: HashMap<String, (&str, Fn<(Vec<&str>, &mut D3capController),()>+'a)>
+        //     = HashMap::new();
 
-        cmds.insert("ping".to_string(), ("ping", |_,_| println!("pong")));
+        // cmds.insert("ping".to_string(), ("ping", |&: _,_| println!("pong")));
 
-        cmds.insert("websocket".to_string(), ("websocket", |cmd, ctrl| {
-            match cmd.as_slice() {
-                [_, port] => {
-                    if let Some(p) = port.parse() {
-                        ctrl.start_websocket(p);
-                    }
-                },
-                [_] => ctrl.start_websocket(7432u16),
-                _ => println!("Illegal argument")
-            }
-        }));
+        // cmds.insert("websocket".to_string(), ("websocket", box |&: cmd, ctrl| {
+        //     match cmd.as_slice() {
+        //         [_, port] => {
+        //             if let Some(p) = port.parse() {
+        //                 ctrl.start_websocket(p);
+        //             }
+        //         },
+        //         [_] => ctrl.start_websocket(7432u16),
+        //         _ => println!("Illegal argument")
+        //     }
+        // }));
 
-        cmds.insert("ls".to_string(), ("ls", |cmd, ctrl| {
-            match cmd.as_slice() {
-                [_, "mac"] => {
-                    println!("{}", *ctrl.pg_ctrl.mac.graph.read().unwrap());
-                }
-                [_, "ip4"] => {
-                    println!("{}", *ctrl.pg_ctrl.ip4.graph.read().unwrap());
-                }
-                [_, "ip6"] => {
-                    println!("{}", *ctrl.pg_ctrl.ip6.graph.read().unwrap());
-                }
-                _ => println!("Illegal argument")
-            }
-        }));
+        // cmds.insert("ls".to_string(), ("ls", box |&: cmd, ctrl| {
+        //     match cmd.as_slice() {
+        //         [_, "mac"] => {
+        //             println!("{}", *ctrl.pg_ctrl.mac.graph.read().unwrap());
+        //         }
+        //         [_, "ip4"] => {
+        //             println!("{}", *ctrl.pg_ctrl.ip4.graph.read().unwrap());
+        //         }
+        //         [_, "ip6"] => {
+        //             println!("{}", *ctrl.pg_ctrl.ip6.graph.read().unwrap());
+        //         }
+        //         _ => println!("Illegal argument")
+        //     }
+        // }));
 
-        let maxlen = cmds.keys().map(|x| x.len()).max().unwrap();
+        // let maxlen = cmds.keys().map(|x| x.len()).max().unwrap();
 
-        while let Some(val) = readline("> ") {
-            let full_cmd: Vec<&str> = val.split(' ').collect();
-            match full_cmd[0] {
-                "help" => {
-                    println!("\nAvailable commands are:");
-                    for (cmd, &(desc, _)) in cmds.iter() {
-                        println!("    {:2$}\t{}", cmd, desc, maxlen);
-                    }
-                    println!("");
-                },
-                "" => {}
-                cmd => match cmds.get_mut(cmd) {
-                    Some(&(_, ref mut f)) => (*f)(full_cmd, &mut ctrl),
-                    None => println!("unknown command")
-                }
-            }
-        }
+        // while let Some(val) = readline("> ") {
+        //     let full_cmd: Vec<&str> = val.split(' ').collect();
+        //     match full_cmd[0] {
+        //         "help" => {
+        //             println!("\nAvailable commands are:");
+        //             for (cmd, &(desc, _)) in cmds.iter() {
+        //                 println!("    {:2$}\t{}", cmd, desc, maxlen);
+        //             }
+        //             println!("");
+        //         },
+        //         "" => {}
+        //         cmd => match cmds.get_mut(cmd) {
+        //             Some(&(_, ref mut f)) => (*f)(full_cmd, &mut ctrl),
+        //             None => println!("unknown command")
+        //         }
+        //     }
+        // }
     })
 }
 

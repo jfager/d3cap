@@ -58,8 +58,8 @@ impl<T> RingBuffer<T> {
     }
 }
 
-impl<E,S: Encoder<E>,T: Encodable<S, E>> Encodable<S, E> for RingBuffer<T> {
-    fn encode(&self, s: &mut S) -> Result<(), E> {
+impl<T:Encodable> Encodable for RingBuffer<T> {
+    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
         s.emit_seq(self.len(), |s| {
             for (i, e) in self.iter().enumerate() {
                 try!(s.emit_seq_elt(i, |s| e.encode(s)));

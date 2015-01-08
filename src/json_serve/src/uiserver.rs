@@ -76,7 +76,7 @@ pub struct UIServer {
 }
 
 impl UIServer {
-    pub fn spawn<T:for<'a> Encodable<json::Encoder<'a>,fmt::Error>>(port: u16, welcome: &T) -> UIServer {
+    pub fn spawn<T: Encodable>(port: u16, welcome: &T) -> UIServer {
         let welcome_msg = Arc::new(json::encode(welcome));
 
         let mc = Multicast::spawn();
@@ -106,7 +106,7 @@ impl UIServer {
         UIServer { json_multicast: mc }
     }
 
-    pub fn create_sender<T:for<'a> Encodable<json::Encoder<'a>,fmt::Error>+Send+Sync>(&self) -> Sender<Arc<T>> {
+    pub fn create_sender<T:Encodable+Send+Sync>(&self) -> Sender<Arc<T>> {
         let (tx, rx) = channel();
         let jb = self.json_multicast.clone();
         thread::Builder::new().name("routes_ui".to_string()).spawn(move || -> () {

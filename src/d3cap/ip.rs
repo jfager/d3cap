@@ -13,8 +13,8 @@ impl Show for IP4Addr {
     }
 }
 
-impl<E,S: Encoder<E>> Encodable<S, E> for IP4Addr {
-    fn encode(&self, s: &mut S) -> Result<(), E> {
+impl Encodable for IP4Addr {
+    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
         s.emit_str(self.to_string().as_slice())
     }
 }
@@ -60,8 +60,8 @@ impl Show for IP6Addr {
     }
 }
 
-impl<E,S: Encoder<E>> Encodable<S, E> for IP6Addr {
-    fn encode(&self, s: &mut S) -> Result<(), E> {
+impl Encodable for IP6Addr {
+    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
         s.emit_str(self.to_string().as_slice())
     }
 }

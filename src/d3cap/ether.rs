@@ -15,8 +15,8 @@ impl Show for MacAddr {
     }
 }
 
-impl<E,S: Encoder<E>> Encodable<S, E> for MacAddr {
-    fn encode(&self, s: &mut S) -> Result<(), E> {
+impl Encodable for MacAddr {
+    fn encode<S:Encoder> (&self, s: &mut S) -> Result<(), S::Error> {
         s.emit_str(self.to_string().as_slice())
     }
 }

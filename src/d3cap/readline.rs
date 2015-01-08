@@ -1,4 +1,5 @@
-use std::c_str::{self, ToCStr};
+use std::ffi::{self, CString};
+use std::str;
 use libc;
 
 mod raw {
@@ -6,21 +7,21 @@ mod raw {
 
     #[link(name="readline")]
     extern {
-        pub fn readline(p: *mut libc::c_char) -> *mut libc::c_char;
-        pub fn add_history(p: *mut libc::c_char);
+        pub fn readline(p: *const libc::c_char) -> *const libc::c_char;
+        pub fn add_history(p: *const libc::c_char);
     }
 }
 
 
 pub fn readline(prompt: &str) -> Option<String> {
-    let mut cprmt = prompt.to_c_str();
-    let in_buf = cprmt.as_mut_ptr();
+    let cprmt = prompt.as_bytes();
+    let in_buf = cprmt.as_ptr();
     unsafe {
-        let raw = raw::readline(in_buf);
+        let raw = raw::readline(in_buf as *const libc::c_char);
         if !raw.is_null() {
-            let ret = c_str::CString::new(raw as *const libc::c_char, true);
-            match ret.as_str().map(|ret| ret.trim()) {
-                Some(a) if !a.is_empty() => {
+            let slice = ffi::c_str_to_bytes(&raw);
+            match str::from_utf8(slice).map(|ret| ret.trim()) {
+                Ok(a) if !a.is_empty() => {
                     raw::add_history(raw);
                     Some(a.to_string())
                 }

@@ -1,8 +1,8 @@
 #![crate_type="lib"]
 
-#![feature(phase)]
+#![feature(plugin)]
 
-#[phase(plugin)]
+#[plugin]
 extern crate bindgen;
 
 extern crate libc;

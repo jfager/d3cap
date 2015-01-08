@@ -1,6 +1,6 @@
-#![macro_escape]
+#![macro_use]
 
-macro_rules! fixed_vec(
+macro_rules! fixed_vec {
     ($t:ident, $arrt: ty, $len:expr) => (
         #[derive(Copy)]
         pub struct $t([$arrt; $len]);
@@ -42,4 +42,4 @@ macro_rules! fixed_vec(
         }
 
     );
-);
+}

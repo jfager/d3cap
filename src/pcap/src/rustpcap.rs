@@ -1,6 +1,6 @@
 use libc::{c_char,c_int};
 use std::ptr;
-use std::c_str::ToCStr;
+use std::ffi::CString;
 
 mod pcap {
     #![allow(dead_code)]
@@ -30,7 +30,7 @@ impl PcapSessionBuilder {
 
     pub fn new_dev(dev: &str) -> Result<PcapSessionBuilder, &'static str> {
         let mut errbuf = Vec::with_capacity(256u);
-        let c_dev = unsafe { dev.to_c_str().into_inner() };
+        let c_dev = unsafe { CString::from_slice(dev.as_bytes()).as_ptr() };
         PcapSessionBuilder::do_new(c_dev, errbuf.as_mut_slice())
     }
 
@@ -94,7 +94,7 @@ impl PcapSession {
     pub fn from_file(f: &str) -> PcapSession {
         let mut errbuf = Vec::with_capacity(256u);
         unsafe {
-            let p = pcap::pcap_open_offline(f.to_c_str().into_inner(),
+            let p = pcap::pcap_open_offline(CString::from_slice(f.as_bytes()).as_ptr(),
                                             errbuf.as_mut_slice().as_mut_ptr());
             PcapSession { p: p }
         }
@@ -115,7 +115,7 @@ impl PcapSession {
     }
 
     //TODO: add a return value for success/failure
-    pub fn next(&self, f: |*const u8, u32|) {
+    pub fn next<F>(&self, mut f: F) where F: FnMut(*const u8, u32) {
         let mut head_ptr = ptr::null_mut();
         let mut data_ptr = ptr::null();
         let res = unsafe { pcap::pcap_next_ex(self.p, &mut head_ptr, &mut data_ptr) };
