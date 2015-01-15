@@ -1,7 +1,10 @@
 // Example modified from https://github.com/mozilla/rust/issues/3562#issuecomment-9210203
 
-// Fixed size buffer: when it is at capacity push will drop the oldest element.
-extern crate std;
+// Fixed-size ring buffer: when it is at capacity push will drop the oldest element.
+
+#![allow(unstable)]
+
+extern crate "rustc-serialize" as rustc_serialize;
 
 use std::iter::Iterator;
 use std::fmt;
@@ -9,25 +12,24 @@ use std::fmt::{Show,Formatter};
 
 use rustc_serialize::{Encoder, Encodable};
 
-// This contains the data that represents our ring buffer. In general only one
-// allocation occurs: when the struct is first created and buffer is allocated.
-// Copying a RingBuffer will cause a heap allocation but the compiler will
-// warn us on attempts to copy it implicitly.
-pub struct RingBuffer<T> {
+pub struct FixedRingBuffer<T> {
     buffer: Vec<T>,
-    capacity: uint,        // number of elements the buffer is able to hold (can't guarantee that vec capacity is exactly what we set it to)
-    size: uint,            // number of elements with legit values in the buffer
-    next: uint,            // index at which new elements land
+    capacity: usize,        // number of elements the buffer is able to hold (can't guarantee that vec capacity is exactly what we set it to)
+    size: usize,            // number of elements with legit values in the buffer
+    next: usize,            // index at which new elements land
 }
 
-impl<T> RingBuffer<T> {
-    pub fn new(capacity: uint) -> RingBuffer<T> {
-        let mut ring = RingBuffer {buffer: Vec::new(), capacity: capacity, size: 0, next: 0};
-        ring.buffer.reserve(capacity);
-        ring
+impl<T> FixedRingBuffer<T> {
+    pub fn new(capacity: usize) -> FixedRingBuffer<T> {
+        FixedRingBuffer {
+            buffer: Vec::with_capacity(capacity),
+            capacity: capacity,
+            size: 0,
+            next: 0
+        }
     }
 
-    pub fn len(&self) -> uint {
+    pub fn len(&self) -> usize {
         self.size
     }
 
@@ -58,7 +60,7 @@ impl<T> RingBuffer<T> {
     }
 }
 
-impl<T:Encodable> Encodable for RingBuffer<T> {
+impl<T:Encodable> Encodable for FixedRingBuffer<T> {
     fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
         s.emit_seq(self.len(), |s| {
             for (i, e) in self.iter().enumerate() {
@@ -69,10 +71,10 @@ impl<T:Encodable> Encodable for RingBuffer<T> {
     }
 }
 
-impl<T> std::ops::Index<uint> for RingBuffer<T> {
+impl<T> std::ops::Index<usize> for FixedRingBuffer<T> {
     type Output = T;
 
-    fn index(&self, index: &uint) -> &T {
+    fn index(&self, index: &usize) -> &T {
         assert!(*index < self.size);
 
         if self.size < self.capacity {
@@ -84,8 +86,8 @@ impl<T> std::ops::Index<uint> for RingBuffer<T> {
 }
 
 pub struct RingIterator<'s, T:'s> {
-    rb: &'s RingBuffer<T>,
-    i: uint
+    rb: &'s FixedRingBuffer<T>,
+    i: usize
 }
 
 impl<'s, T> Iterator for RingIterator<'s, T> {
@@ -102,7 +104,7 @@ impl<'s, T> Iterator for RingIterator<'s, T> {
     }
 }
 
-impl<T: Show> Show for RingBuffer<T> {
+impl<T: Show> Show for FixedRingBuffer<T> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         try!(write!(f, "["));
         let mut first = true;
@@ -120,14 +122,14 @@ impl<T: Show> Show for RingBuffer<T> {
 #[test]
 fn test_basics() {
     // size 0
-    let buffer: RingBuffer<int> = RingBuffer::new(0);    // rust type inference works very well, but not in this case
+    let buffer: FixedRingBuffer<i32> = FixedRingBuffer::new(0);    // rust type inference works very well, but not in this case
     assert!(buffer.len() == 0);
 
     // size 1
-    let mut buffer = RingBuffer::new(1);
+    let mut buffer = FixedRingBuffer::new(1);
     assert!(buffer.len() == 0);
 
-    buffer.push(2i);
+    buffer.push(2);
     assert!(buffer.len() == 1);
     assert!(buffer[0] == 2);
 
@@ -136,10 +138,10 @@ fn test_basics() {
     assert!(buffer[0] == 3);
 
     // size 4
-    let mut buffer = RingBuffer::new(4);
+    let mut buffer = FixedRingBuffer::new(4);
     assert!(buffer.len() == 0);
 
-    buffer.push(1i);
+    buffer.push(1);
     assert!(buffer.len() == 1);
     assert!(buffer[0] == 1);
 
@@ -195,7 +197,7 @@ fn test_basics() {
 // each, map, filter, and fold.
 #[test]
 fn test_functional() {
-    let mut buffer: RingBuffer<int> = RingBuffer::new(4);
+    let mut buffer: FixedRingBuffer<i32> = FixedRingBuffer::new(4);
     buffer.push(1);
     buffer.push(3);
     buffer.push(5);
@@ -214,13 +216,13 @@ fn test_functional() {
     assert!(odd == vec![true, true, true, false]);
 
     // filter returns elements for which the closure returns true
-    let odd: Vec<int> = buffer.iter().filter_map(|&e| {
+    let odd: Vec<i32> = buffer.iter().filter_map(|&e| {
         if e & 1 == 1 { Some(e) } else { None }
     }).collect();
     assert!(odd == vec![1, 3, 5]);
 
     // fold uses the closure to combine elements together (possibly into a different type)
     // either forwards (foldl) or in reverse (foldr)
-    let sum: int = buffer.iter().fold(0, |a, &b| a + b);
+    let sum: i32 = buffer.iter().fold(0, |a, &b| a + b);
     assert!(sum == 1 + 3 + 5 + 2);
 }

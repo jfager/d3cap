@@ -14,7 +14,7 @@ mod raw {
 
 
 pub fn readline(prompt: &str) -> Option<String> {
-    let cprmt = prompt.as_bytes();
+    let cprmt = CString::from_slice(prompt.as_bytes());
     let in_buf = cprmt.as_ptr();
     unsafe {
         let raw = raw::readline(in_buf as *const libc::c_char);

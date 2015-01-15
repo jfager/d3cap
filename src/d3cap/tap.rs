@@ -142,7 +142,7 @@ impl CommonA {
     pub fn parse(hdr: &RadiotapHeader) -> Option<&CommonA> {
         let sz = size_of::<RadiotapHeader>() + size_of::<CommonA>();
         if hdr.it_present == COMMON_A
-        && hdr.it_len as uint >= sz {
+        && hdr.it_len as usize >= sz {
             let out: &CommonA = unsafe { skip_cast(hdr) };
             Some(out)
         } else {
@@ -166,7 +166,7 @@ impl CommonB {
     pub fn parse(hdr: &RadiotapHeader) -> Option<&CommonB> {
         let sz = size_of::<RadiotapHeader>() + size_of::<CommonB>();
         if hdr.it_present == COMMON_B
-        && hdr.it_len as uint >= sz {
+        && hdr.it_len as usize >= sz {
             let out: &CommonB = unsafe { skip_cast(hdr) };
             Some(out)
         } else {

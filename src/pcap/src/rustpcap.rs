@@ -29,13 +29,13 @@ pub fn list_devices() {
 impl PcapSessionBuilder {
 
     pub fn new_dev(dev: &str) -> Result<PcapSessionBuilder, &'static str> {
-        let mut errbuf = Vec::with_capacity(256u);
-        let c_dev = unsafe { CString::from_slice(dev.as_bytes()).as_ptr() };
+        let mut errbuf = Vec::with_capacity(256us);
+        let c_dev = CString::from_slice(dev.as_bytes()).as_ptr();
         PcapSessionBuilder::do_new(c_dev, errbuf.as_mut_slice())
     }
 
     pub fn new() -> Result<PcapSessionBuilder, &'static str> {
-        let mut errbuf = Vec::with_capacity(256u);
+        let mut errbuf = Vec::with_capacity(256us);
         let dev = unsafe { pcap::pcap_lookupdev(errbuf.as_mut_slice().as_mut_ptr()) };
         if dev.is_null() {
             Err("No device available")
@@ -92,7 +92,7 @@ pub struct PcapSession {
 
 impl PcapSession {
     pub fn from_file(f: &str) -> PcapSession {
-        let mut errbuf = Vec::with_capacity(256u);
+        let mut errbuf = Vec::with_capacity(256us);
         unsafe {
             let p = pcap::pcap_open_offline(CString::from_slice(f.as_bytes()).as_ptr(),
                                             errbuf.as_mut_slice().as_mut_ptr());
@@ -108,7 +108,7 @@ impl PcapSession {
         unsafe {
             let mut dlt_buf = ptr::null_mut();
             let sz = pcap::pcap_list_datalinks(self.p, &mut dlt_buf);
-            let out = Vec::from_raw_buf(dlt_buf as *const c_int, sz as uint);
+            let out = Vec::from_raw_buf(dlt_buf as *const c_int, sz as usize);
             pcap::pcap_free_datalinks(dlt_buf);
             out
         }

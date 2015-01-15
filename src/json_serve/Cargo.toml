@@ -11,7 +11,7 @@ git = "https://github.com/sfackler/rust-openssl.git"
 
 
 [dependencies]
-rustc-serialize = "0.2.2"
+rustc-serialize = "*"
 
 [dependencies.multicast]
 path = "../multicast"

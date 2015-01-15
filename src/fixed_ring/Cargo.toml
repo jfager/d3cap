@@ -1,0 +1,8 @@
+[package]
+
+name = "fixed_ring"
+version = "0.0.1"
+authors = [ "jfager@gmail.com" ]
+
+[dependencies]
+rustc-serialize = "*"

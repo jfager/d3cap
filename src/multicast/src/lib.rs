@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread;
 use std::sync::Arc;
@@ -39,7 +41,7 @@ impl<T:Send+Sync> Multicast<T> {
                     Err(_) => break
                 }
             }
-        }).detach();
+        });
         Multicast { tx: tx }
     }
 

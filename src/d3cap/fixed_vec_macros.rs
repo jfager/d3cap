@@ -2,10 +2,10 @@
 
 macro_rules! fixed_vec {
     ($t:ident, $arrt: ty, $len:expr) => (
-        #[derive(Copy)]
+        #[derive(Copy,Show)]
         pub struct $t([$arrt; $len]);
 
-        impl<S: ::std::hash::Writer> Hash<S> for $t {
+        impl<S: ::std::hash::Writer+::std::hash::Hasher> Hash<S> for $t {
             fn hash(&self, state: &mut S) {
                 let &$t(a) = self;
                 a.hash(state)
@@ -16,7 +16,7 @@ macro_rules! fixed_vec {
             fn eq(&self, other: &$t) -> bool {
                 let &$t(a) = self;
                 let &$t(b) = other;
-                a[].eq(b[])
+                a[].eq(&b[])
             }
         }
 
@@ -26,7 +26,7 @@ macro_rules! fixed_vec {
             fn partial_cmp(&self, other: &$t) -> Option<::std::cmp::Ordering> {
                 let &$t(a) = self;
                 let &$t(b) = other;
-                a[].partial_cmp(b[])
+                a[].partial_cmp(&b[])
             }
         }
 

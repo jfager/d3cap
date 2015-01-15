@@ -1,17 +1,18 @@
 use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
-use std::io::{Acceptor,Listener,Stream,BufferedStream,IoResult,IoError};
+use std::io::{Acceptor,Listener,Stream,BufferedStream,IoResult};
 use std::io::net::tcp::{TcpListener};
 use std::thread;
 use std::sync::Arc;
-use std::fmt;
 
-use rustc_serialize::{json, Encodable, Encoder};
+use rustc_serialize::{json, Encodable};
 
 use rustwebsocket as ws;
 
 use multicast::{Multicast};
 
+#[derive(Copy)]
 pub struct WebSocketWorker;
+
 impl WebSocketWorker {
     fn handshake<S: Stream>(&self, tcps: &mut BufferedStream<S>) -> IoResult<()> {
         match ws::parse_handshake(tcps) {
@@ -31,13 +32,13 @@ impl WebSocketWorker {
         try!(self.handshake(tcps));
 
         loop {
-            let mut counter = 0u;
+            let mut counter = 0u32;
             loop {
                 match data_po.try_recv() {
                     Ok(msg) => {
                         let res = ws::write_frame(msg.as_bytes(), ws::FrameType::Text, tcps);
                         if res.is_err() {
-                            println!("Error writing msg frame: {}", res);
+                            println!("Error writing msg frame: {:?}", res);
                             break
                         }
                         if counter < 100 {
@@ -60,7 +61,7 @@ impl WebSocketWorker {
                 ws::FrameType::Error   => {
                     let res = ws::write_frame(&[], ws::FrameType::Closing, tcps);
                     if res.is_err() {
-                        println!("Error writing closing frame: {}", res);
+                        println!("Error writing closing frame: {:?}", res);
                     }
                     break;
                 }
@@ -84,9 +85,9 @@ impl UIServer {
 
         thread::Builder::new().name("ui_server".to_string()).spawn(move || {
             let mut acceptor = TcpListener::bind(("127.0.0.1", port)).listen();
-            println!("Server listening on port {}", port as uint);
+            println!("Server listening on port {}", port as u32);
 
-            let mut wrkr_cnt = 0u;
+            let mut wrkr_cnt = 0u32;
             for tcp_stream in acceptor.incoming() {
                 let (conn_tx, conn_rx) = channel();
                 conn_tx.send(welcome_msg.clone());
@@ -98,10 +99,10 @@ impl UIServer {
                         }
                         _ => panic!("Could not start websocket worker")
                     }
-                }).detach();
+                });
                 wrkr_cnt += 1;
             }
-        }).detach();
+        });
 
         UIServer { json_multicast: mc }
     }
@@ -120,7 +121,7 @@ impl UIServer {
                     Err(_) => panic!("oh shit")
                 }
             }
-        }).detach();
+        });
         tx
     }
 }

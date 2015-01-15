@@ -13,6 +13,7 @@ path = "src/d3cap/main.rs"
 [dependencies]
 
 time = "*"
+getopts = "*"
 
 
 [dependencies.pcap]
@@ -25,6 +26,11 @@ path = "src/pcap"
 path = "src/multicast"
 
 
+[dependencies.fixed_ring]
+
+path = "src/fixed_ring"
+
+
 [dependencies.json_serve]
 
 path = "src/json_serve"
@@ -33,6 +39,7 @@ path = "src/json_serve"
 [dependencies.toml]
 
 git = "https://github.com/alexcrichton/toml-rs.git"
+
 
 
 # [dependencies.rustc-serialize]

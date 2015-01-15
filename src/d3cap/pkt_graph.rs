@@ -1,6 +1,6 @@
-use std::collections::hash_map::{HashMap};
+use std::collections::hash_map::{HashMap, Hasher};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
-use std::hash::Hash;
+use std::hash::{Hash};
 
 use time;
 
@@ -34,13 +34,13 @@ impl PktStats {
 
 //TODO: derive Encodable manually
 #[derive(Clone,Show)]
-pub struct AddrStats<T:Hash+Eq> {
+pub struct AddrStats<T:Hash<Hasher>+Eq> {
     sent: PktStats,
     sent_to: HashMap<T, PktStats>,
     received: PktStats,
     received_from: HashMap<T, PktStats>
 }
-impl <T:Hash+Eq+Clone> AddrStats<T> {
+impl <T:Hash<Hasher>+Eq+Clone> AddrStats<T> {
     pub fn new() -> AddrStats<T> {
         AddrStats { sent: PktStats::new(), sent_to: HashMap::new(),
                     received: PktStats::new(), received_from: HashMap::new() }
@@ -82,7 +82,7 @@ impl <T:Hash+Eq+Clone> AddrStats<T> {
     }
 
     fn update(m: &mut HashMap<T, PktStats>, addr: T, size: u32) -> PktStats {
-        let stats = match m.entry(&addr) {
+        let stats = match m.entry(addr) {
             Vacant(entry) => entry.insert(PktStats::new()),
             Occupied(entry) => entry.into_mut()
         };
@@ -105,12 +105,12 @@ pub struct RouteStats<T> {
 
 //TODO: derive Encodable manually
 #[derive(Clone, Show)]
-pub struct ProtocolGraph<T:Hash+Eq> {
+pub struct ProtocolGraph<T:Hash<Hasher>+Eq> {
     stats: PktStats,
     routes: HashMap<T, AddrStats<T>>,
 }
 
-impl<'a, T: Hash+Eq+Copy+Clone> ProtocolGraph<T> {
+impl<'a, T: Hash<Hasher>+Eq+Copy+Clone> ProtocolGraph<T> {
     pub fn new() -> ProtocolGraph<T> {
         ProtocolGraph { stats: PktStats::new(), routes: HashMap::new() }
     }
@@ -120,7 +120,7 @@ impl<'a, T: Hash+Eq+Copy+Clone> ProtocolGraph<T> {
         // TODO: can we do something to avoid all these clones?
         let a_to_b;
         {
-            let a = match self.routes.entry(&pkt.src) {
+            let a = match self.routes.entry(pkt.src) {
                 Vacant(entry) => entry.insert(AddrStats::new()),
                 Occupied(entry) => entry.into_mut()
             };
@@ -129,7 +129,7 @@ impl<'a, T: Hash+Eq+Copy+Clone> ProtocolGraph<T> {
 
         let b_to_a;
         {
-            let b = match self.routes.entry(&pkt.dst) {
+            let b = match self.routes.entry(pkt.dst) {
                 Vacant(entry) => entry.insert(AddrStats::new()),
                 Occupied(entry) => entry.into_mut()
             };

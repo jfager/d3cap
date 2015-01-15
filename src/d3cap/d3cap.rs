@@ -1,18 +1,16 @@
 use std::thread;
-use std::hash::Hash;
-use std::collections::HashMap;
+use std::hash::{Hash};
+use std::collections::hash_map::{HashMap, Hasher};
 use std::io::File;
 use std::sync::{Arc,RwLock};
 use std::sync::mpsc::{channel, Sender};
 use std::thread::JoinGuard;
-use std::time::duration::Duration;
 
 use toml;
 
 use multicast::Multicast;
 use json_serve::uiserver::UIServer;
 use readline::readline;
-use ring::RingBuffer;
 use util::{ntohs, skip_bytes_cast, skip_cast};
 use ip::{IP4Addr, IP6Addr, IP4Header, IP6Header};
 use ether::{EthernetHeader, MacAddr,
@@ -42,7 +40,7 @@ struct ProtocolHandler<T:Send+Sync> {
     stats_mcast: Multicast<RouteStatsMsg<T>>,
 }
 
-impl <T:Send+Sync+Copy+Clone+Eq+Hash> ProtocolHandler<T> {
+impl <T:Send+Sync+Copy+Clone+Eq+Hash<Hasher>> ProtocolHandler<T> {
     fn new(typ: &'static str) -> ProtocolHandler<T> {
         ProtocolHandler {
             typ: typ,
@@ -94,7 +92,7 @@ impl ProtoGraphController {
                     Pkt::IP6(ref p) => phctl.ip6.update(p),
                 }
             }
-        }).detach();
+        });
 
         ctl
     }
@@ -160,7 +158,7 @@ impl CaptureCtx for RadiotapCtx {
         let tap_hdr = unsafe { &*(pkt_ptr as *const tap::RadiotapHeader) };
 
         fn magic<U>(pkt: &tap::RadiotapHeader) -> &U {
-            unsafe { skip_bytes_cast(pkt, pkt.it_len as int) }
+            unsafe { skip_bytes_cast(pkt, pkt.it_len as isize) }
         }
 
         let base: &dot11::Dot11BaseHeader = magic(tap_hdr);
@@ -170,7 +168,7 @@ impl CaptureCtx for RadiotapCtx {
             return;
         }
 
-        println!("frame_type: {}", fc.frame_type());
+        println!("frame_type: {:?}", fc.frame_type());
         println!("frame_subtype: {:x}", fc.frame_subtype());
 
         println!("toDS: {}", fc.has_flag(dot11::TO_DS));
@@ -252,15 +250,15 @@ impl CaptureCtx for RadiotapCtx {
     }
 }
 
-pub fn start_capture(conf: D3capConf, pkt_sender: Sender<Pkt>) -> JoinGuard<()> {
+pub fn start_capture<'a>(conf: D3capConf, pkt_sender: Sender<Pkt>) -> JoinGuard<'a, ()> {
     use pcap::rustpcap as cap;
 
-    thread::Builder::new().name("packet_capture".to_string()).spawn(move || {
+    thread::Builder::new().name("packet_capture".to_string()).scoped(move || {
         let sess = match conf.file {
-            Some(ref f) => cap::PcapSession::from_file(f.as_slice()),
+            Some(ref f) => cap::PcapSession::from_file(&f[]),
             None => {
                 let sess_builder = match conf.interface {
-                    Some(ref dev) => cap::PcapSessionBuilder::new_dev(dev.as_slice()),
+                    Some(ref dev) => cap::PcapSessionBuilder::new_dev(&dev[]),
                     None => cap::PcapSessionBuilder::new()
                 };
 
@@ -285,72 +283,80 @@ pub fn start_capture(conf: D3capConf, pkt_sender: Sender<Pkt>) -> JoinGuard<()> 
     })
 }
 
-fn start_cli(ctrl: D3capController) -> JoinGuard<()> {
-    thread::Builder::new().name("cli".to_string()).spawn(move || {
+fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
+    thread::Builder::new().name("cli".to_string()).scoped(move || {
         let mut ctrl = ctrl;
 
-        // let mut cmds: HashMap<String, (&str, Fn<(Vec<&str>, &mut D3capController),()>+'a)>
-        //     = HashMap::new();
+        let mut cmds: HashMap<String, (&str, Box<FnMut(Vec<&str>, &mut D3capController)>)>
+            = HashMap::new();
 
-        // cmds.insert("ping".to_string(), ("ping", |&: _,_| println!("pong")));
+        cmds.insert("ping".to_string(),
+                    ("ping", Box::new(|&mut: _: Vec<&str>, _: &mut D3capController| {
+                        println!("pong");
+                    })));
 
-        // cmds.insert("websocket".to_string(), ("websocket", box |&: cmd, ctrl| {
-        //     match cmd.as_slice() {
-        //         [_, port] => {
-        //             if let Some(p) = port.parse() {
-        //                 ctrl.start_websocket(p);
-        //             }
-        //         },
-        //         [_] => ctrl.start_websocket(7432u16),
-        //         _ => println!("Illegal argument")
-        //     }
-        // }));
+        cmds.insert("websocket".to_string(),
+                    ("websocket", Box::new(|&mut: cmd: Vec<&str>, ctrl: &mut D3capController| {
+                        match &cmd[] {
+                            [_, ref port] => {
+                                if let Some(p) = port.parse() {
+                                    ctrl.start_websocket(p);
+                                }
+                            },
+                            [_] => ctrl.start_websocket(7432u16),
+                            _ => println!("Illegal argument")
+                        }
+                    })));
 
-        // cmds.insert("ls".to_string(), ("ls", box |&: cmd, ctrl| {
-        //     match cmd.as_slice() {
-        //         [_, "mac"] => {
-        //             println!("{}", *ctrl.pg_ctrl.mac.graph.read().unwrap());
-        //         }
-        //         [_, "ip4"] => {
-        //             println!("{}", *ctrl.pg_ctrl.ip4.graph.read().unwrap());
-        //         }
-        //         [_, "ip6"] => {
-        //             println!("{}", *ctrl.pg_ctrl.ip6.graph.read().unwrap());
-        //         }
-        //         _ => println!("Illegal argument")
-        //     }
-        // }));
+        cmds.insert("ls".to_string(),
+                    ("ls", Box::new(|&mut: cmd: Vec<&str>, ctrl: &mut D3capController| {
+                        match &cmd[] {
+                            [_, "mac"] => {
+                                println!("{:?}", *ctrl.pg_ctrl.mac.graph.read().unwrap());
+                            }
+                            [_, "ip4"] => {
+                                println!("{:?}", *ctrl.pg_ctrl.ip4.graph.read().unwrap());
+                            }
+                            [_, "ip6"] => {
+                                println!("{:?}", *ctrl.pg_ctrl.ip6.graph.read().unwrap());
+                            }
+                            _ => println!("Illegal argument")
+                        }
+                    })));
 
-        // let maxlen = cmds.keys().map(|x| x.len()).max().unwrap();
+        let maxlen = cmds.keys().map(|x| x.len()).max().unwrap();
 
-        // while let Some(val) = readline("> ") {
-        //     let full_cmd: Vec<&str> = val.split(' ').collect();
-        //     match full_cmd[0] {
-        //         "help" => {
-        //             println!("\nAvailable commands are:");
-        //             for (cmd, &(desc, _)) in cmds.iter() {
-        //                 println!("    {:2$}\t{}", cmd, desc, maxlen);
-        //             }
-        //             println!("");
-        //         },
-        //         "" => {}
-        //         cmd => match cmds.get_mut(cmd) {
-        //             Some(&(_, ref mut f)) => (*f)(full_cmd, &mut ctrl),
-        //             None => println!("unknown command")
-        //         }
-        //     }
-        // }
+        while let Some(val) = readline("> ") {
+             let full_cmd: Vec<&str> = val.split(' ').collect();
+             match full_cmd[0] {
+                 "h" | "help" => {
+                     println!("\nAvailable commands are:");
+                     for (cmd, &(desc, _)) in cmds.iter() {
+                         println!("    {:2$}\t{}", cmd, desc, maxlen);
+                     }
+                     println!("");
+                 },
+                 "q" | "quit" | "exit" => break,
+                 "" => {}
+                 cmd => match cmds.get_mut(cmd) {
+                     Some(&mut (_, ref mut f)) => f(full_cmd, &mut ctrl),
+                     None => println!("unknown command")
+                 }
+             }
+        }
     })
 }
 
+// unboxed closure question:  why does http://is.gd/mlI7FS work but http://is.gd/yUbkvT blow up?  diff is in former closure takes String arg, latter it takes &str.  how would i get a ref arg to work?
+
 fn load_mac_addrs(file: String) -> HashMap<MacAddr, String> {
     let s = File::open(&Path::new(file)).read_to_string().unwrap();
-    let t = toml::Parser::new(s.as_slice()).parse().unwrap();
+    let t = toml::Parser::new(&s[]).parse().unwrap();
     let known_macs = t.get(&"known-macs".to_string()).unwrap().as_table().unwrap();
 
     known_macs.iter()
         .map(|(k,v)| {
-            (MacAddr::from_string(k.as_slice()), v.as_str())
+            (MacAddr::from_string(&k[]), v.as_str())
         })
         .filter_map(|x| match x {
             (Some(addr), Some(alias)) => Some((addr, alias.to_string())),
@@ -421,5 +427,5 @@ pub fn run(conf: D3capConf) {
         ctrl.start_websocket(port);
     }
 
-    start_cli(ctrl);
+    start_cli(ctrl).join();
 }

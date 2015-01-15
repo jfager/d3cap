@@ -1,4 +1,5 @@
 #![crate_type="lib"]
+#![allow(unstable)]
 
 extern crate openssl;
 

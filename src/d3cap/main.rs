@@ -1,4 +1,4 @@
-#![feature(old_orphan_check)]
+#![allow(unstable)]
 
 extern crate getopts;
 extern crate collections;
@@ -10,9 +10,9 @@ extern crate "rustc-serialize" as rustc_serialize;
 
 extern crate pcap;
 extern crate multicast;
+extern crate fixed_ring;
 extern crate json_serve;
 
-mod ring;
 mod fixed_vec_macros;
 mod util;
 mod ip;
@@ -51,16 +51,16 @@ fn main() {
         go::optflag(promisc_flag, "promisc", "Turn on promiscuous mode"),
         go::optflag(monitor_flag, "monitor", "Turn on monitor mode"),
 
-        go::optflagopt("", websocket_opt, "Run websocket ui server on startup", format!("port [{}]", websocket_default).as_slice())
+        go::optflagopt("", websocket_opt, "Run websocket ui server on startup", &format!("port [{}]", websocket_default)[])
     ];
 
-    let matches = match go::getopts(args.tail(), opts.as_slice()) {
+    let matches = match go::getopts(args.tail(), &opts[]) {
         Ok(m) => { m }
         Err(f) => { panic!("{}", f) }
     };
 
     if matches.opt_present("h") {
-        println!("{}", go::usage(go::short_usage(args[0].as_slice(), opts.as_slice()).as_slice(), opts.as_slice()));
+        println!("{}", go::usage(&go::short_usage(&args[0][], &opts[])[], &opts[]));
         return;
     }
 

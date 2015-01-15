@@ -1,21 +1,19 @@
 use std::hash::Hash;
-use std::fmt;
-use std::fmt::{Show,Formatter};
 
 use rustc_serialize::{Encodable, Encoder};
 
 fixed_vec!(IP4Addr, u8, 4);
 
-impl Show for IP4Addr {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+impl ToString for IP4Addr {
+    fn to_string(&self) -> String {
         let &IP4Addr(a) = self;
-        write!(f, "{}.{}.{}.{}", a[0] as uint, a[1] as uint, a[2] as uint, a[3] as uint)
+        format!("{}.{}.{}.{}", a[0], a[1], a[2], a[3])
     }
 }
 
 impl Encodable for IP4Addr {
     fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
-        s.emit_str(self.to_string().as_slice())
+        s.emit_str(&self.to_string()[])
     }
 }
 
@@ -36,25 +34,25 @@ pub struct IP4Header {
 
 fixed_vec!(IP6Addr, u16, 8);
 
-impl Show for IP6Addr {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+impl ToString for IP6Addr {
+    fn to_string(&self) -> String {
         let &IP6Addr(a) = self;
         match a {
             //ip4-compatible
             [0,0,0,0,0,0,g,h] => {
-                write!(f, "::{}.{}.{}.{}",
-                       (g >> 8) as u8, g as u8, (h >> 8) as u8, h as u8)
+                format!("::{}.{}.{}.{}",
+                        (g >> 8) as u8, g as u8, (h >> 8) as u8, h as u8)
             }
 
             // ip4-mapped address
             [0,0,0,0,0,0xFFFF,g,h] => {
-                write!(f, "::FFFF:{}.{}.{}.{}",
-                       (g >> 8) as u8, g as u8, (h >> 8) as u8, h as u8)
+                format!("::FFFF:{}.{}.{}.{}",
+                        (g >> 8) as u8, g as u8, (h >> 8) as u8, h as u8)
             }
 
             [a,b,c,d,e,f_,g,h] => {
-                write!(f, "{:04x}:{:04x}:{:04x}:{:04x}:{:04x}:{:04x}:{:04x}:{:04x}",
-                       a, b, c, d, e, f_, g, h)
+                format!("{:04x}:{:04x}:{:04x}:{:04x}:{:04x}:{:04x}:{:04x}:{:04x}",
+                        a, b, c, d, e, f_, g, h)
             }
         }
     }
@@ -62,7 +60,7 @@ impl Show for IP6Addr {
 
 impl Encodable for IP6Addr {
     fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
-        s.emit_str(self.to_string().as_slice())
+        s.emit_str(&self.to_string()[])
     }
 }
 

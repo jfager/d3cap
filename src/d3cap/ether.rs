@@ -1,23 +1,21 @@
 use std::hash::Hash;
-use std::fmt;
-use std::fmt::{Show,Formatter};
 
 use rustc_serialize::hex::FromHex;
 use rustc_serialize::{Encoder,Encodable};
 
 fixed_vec!(MacAddr, u8, 6);
 
-impl Show for MacAddr {
-    fn fmt(&self, fo: &mut Formatter) -> fmt::Result {
+impl ToString for MacAddr {
+    fn to_string(&self) -> String {
         let &MacAddr(a) = self;
-        write!(fo, "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-               a[0], a[1], a[2], a[3], a[4], a[5])
+        format!("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                a[0], a[1], a[2], a[3], a[4], a[5])
     }
 }
 
 impl Encodable for MacAddr {
     fn encode<S:Encoder> (&self, s: &mut S) -> Result<(), S::Error> {
-        s.emit_str(self.to_string().as_slice())
+        s.emit_str(&self.to_string()[])
     }
 }
 
