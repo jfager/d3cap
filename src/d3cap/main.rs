@@ -13,7 +13,6 @@ extern crate multicast;
 extern crate fixed_ring;
 extern crate json_serve;
 
-mod fixed_vec_macros;
 mod util;
 mod ip;
 mod ether;

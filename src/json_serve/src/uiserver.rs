@@ -85,20 +85,16 @@ impl UIServer {
 
         thread::Builder::new().name("ui_server".to_string()).spawn(move || {
             let mut acceptor = TcpListener::bind(("127.0.0.1", port)).listen();
-            println!("Server listening on port {}", port as u32);
+            println!("Server listening on port {}", port);
 
             let mut wrkr_cnt = 0u32;
             for tcp_stream in acceptor.incoming() {
                 let (conn_tx, conn_rx) = channel();
-                conn_tx.send(welcome_msg.clone());
-                json_dest_sender.register(conn_tx);
-                thread::Builder::new().name(format!("websocketWorker_{}", wrkr_cnt)).spawn(move || {
-                    match tcp_stream {
-                        Ok(tcps) => {
-                            WebSocketWorker.run(&mut BufferedStream::new(tcps), &conn_rx).unwrap();
-                        }
-                        _ => panic!("Could not start websocket worker")
-                    }
+                conn_tx.send(welcome_msg.clone()).unwrap();
+                json_dest_sender.register(conn_tx).unwrap();
+                thread::Builder::new().name(format!("websocket_{}", wrkr_cnt)).spawn(move || {
+                    let tcps = tcp_stream.unwrap();
+                    WebSocketWorker.run(&mut BufferedStream::new(tcps), &conn_rx).unwrap();
                 });
                 wrkr_cnt += 1;
             }

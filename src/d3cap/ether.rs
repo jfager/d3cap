@@ -3,7 +3,8 @@ use std::hash::Hash;
 use rustc_serialize::hex::FromHex;
 use rustc_serialize::{Encoder,Encodable};
 
-fixed_vec!(MacAddr, u8, 6);
+#[derive(Copy, Clone, PartialEq, Eq, Show)]
+pub struct MacAddr([u8; 6]);
 
 impl ToString for MacAddr {
     fn to_string(&self) -> String {
@@ -18,6 +19,15 @@ impl Encodable for MacAddr {
         s.emit_str(&self.to_string()[])
     }
 }
+
+
+//TODO: replace w/ derive once https://github.com/rust-lang/rust/pull/21404 lands
+impl<S: ::std::hash::Writer+::std::hash::Hasher> Hash<S> for MacAddr {
+    fn hash(&self, state: &mut S) {
+        self.0.hash(state)
+    }
+}
+
 
 impl MacAddr {
     pub fn from_string(mac: &str) -> Option<MacAddr> {

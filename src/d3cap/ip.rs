@@ -2,7 +2,8 @@ use std::hash::Hash;
 
 use rustc_serialize::{Encodable, Encoder};
 
-fixed_vec!(IP4Addr, u8, 4);
+#[derive(Copy, Clone, PartialEq, Eq, Show)]
+pub struct IP4Addr([u8; 4]);
 
 impl ToString for IP4Addr {
     fn to_string(&self) -> String {
@@ -14,6 +15,13 @@ impl ToString for IP4Addr {
 impl Encodable for IP4Addr {
     fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
         s.emit_str(&self.to_string()[])
+    }
+}
+
+//TODO: replace w/ derive once https://github.com/rust-lang/rust/pull/21404 lands
+impl<S: ::std::hash::Writer+::std::hash::Hasher> Hash<S> for IP4Addr {
+    fn hash(&self, state: &mut S) {
+        self.0.hash(state)
     }
 }
 
@@ -31,8 +39,8 @@ pub struct IP4Header {
     pub dst: IP4Addr,
 }
 
-
-fixed_vec!(IP6Addr, u16, 8);
+#[derive(Copy, Clone, PartialEq, Eq, Show)]
+pub struct IP6Addr([u16; 8]);
 
 impl ToString for IP6Addr {
     fn to_string(&self) -> String {
@@ -61,6 +69,13 @@ impl ToString for IP6Addr {
 impl Encodable for IP6Addr {
     fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
         s.emit_str(&self.to_string()[])
+    }
+}
+
+//TODO: replace w/ derive once https://github.com/rust-lang/rust/pull/21404 lands
+impl<S: ::std::hash::Writer+::std::hash::Hasher> Hash<S> for IP6Addr {
+    fn hash(&self, state: &mut S) {
+        self.0.hash(state)
     }
 }
 
