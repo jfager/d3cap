@@ -162,6 +162,7 @@ impl CaptureCtx for RadiotapCtx {
         }
 
         let base: &dot11::Dot11BaseHeader = magic(tap_hdr);
+
         let fc = &base.fr_ctrl;
         if fc.protocol_version() != 0 {
             // bogus packet, bail

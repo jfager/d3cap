@@ -9,7 +9,7 @@ use util::skip_cast;
 //https://github.com/simsong/tcpflow/blob/master/src/wifipcap/ieee802_11_radio.h
 
 #[derive(Show)]
-#[packed]
+#[repr(packed)]
 pub struct RadiotapHeader {
     pub it_version: u8, // 8 -> 1
     pub it_pad: u8, // 8 -> 1
@@ -43,20 +43,20 @@ bitflags!(flags ItPresent: u32 {
     const MORE_IT_PRESENT   = 1 << 31,
 
     const COMMON_A          = TSFT.bits
-                             | FLAGS.bits
-                             | RATE.bits
-                             | CHANNEL.bits
-                             | ANTENNA_SIGNAL.bits
-                             | ANTENNA_NOISE.bits
-                             | ANTENNA.bits,
+                            | FLAGS.bits
+                            | RATE.bits
+                            | CHANNEL.bits
+                            | ANTENNA_SIGNAL.bits
+                            | ANTENNA_NOISE.bits
+                            | ANTENNA.bits,
 
     const COMMON_B          = TSFT.bits
-                             | FLAGS.bits
-                             | CHANNEL.bits
-                             | ANTENNA_SIGNAL.bits
-                             | ANTENNA_NOISE.bits
-                             | ANTENNA.bits
-                             | MCS.bits
+                            | FLAGS.bits
+                            | CHANNEL.bits
+                            | ANTENNA_SIGNAL.bits
+                            | ANTENNA_NOISE.bits
+                            | ANTENNA.bits
+                            | MCS.bits
 });
 
 impl fmt::Show for ItPresent {
@@ -65,7 +65,7 @@ impl fmt::Show for ItPresent {
     }
 }
 
-#[packed]
+#[repr(packed)]
 pub struct Tsft {
     pub timer_micros: u64
 }
@@ -81,7 +81,7 @@ bitflags!(flags Flags: u8 {
     const SHORT_GUARD    = 0x80
 });
 
-#[packed]
+#[repr(packed)]
 pub struct Rate {
     pub in_500kbps: u8
 }
@@ -97,28 +97,28 @@ bitflags!(flags ChannelFlags: u16 {
     const GFSK         = 0x0800
 });
 
-#[packed]
+#[repr(packed)]
 pub struct Channel {
     pub mhz: u16,
     pub flags: ChannelFlags
 }
 
-#[packed]
+#[repr(packed)]
 pub struct AntennaSignal {
     pub dbm: i8
 }
 
-#[packed]
+#[repr(packed)]
 pub struct AntennaNoise {
     pub dbm: i8
 }
 
-#[packed]
+#[repr(packed)]
 pub struct Antenna {
     pub idx: u8
 }
 
-#[packed]
+#[repr(packed)]
 pub struct Mcs {
     pub known: u8,
     pub flags: u8,
@@ -127,16 +127,17 @@ pub struct Mcs {
 
 // For now just predefining a few types of packets I actually see with my setup,
 // rather than defining a general parser.
-#[packed]
+#[repr(packed)]
 pub struct CommonA {
-    pub tsft: Tsft,
-    pub flags: Flags,
-    pub rate: Rate,
-    pub channel: Channel,
-    pub antenna_signal: AntennaSignal,
-    pub antenna_noise: AntennaNoise,
-    pub antenna: Antenna
+    pub tsft: Tsft,  // 8
+    pub flags: Flags, // 1
+    pub rate: Rate, // 1
+    pub channel: Channel, // 2 + 2 = 4
+    pub antenna_signal: AntennaSignal, // 1
+    pub antenna_noise: AntennaNoise, // 1
+    pub antenna: Antenna // 1
 }
+// sizeof should be 17.
 
 impl CommonA {
     pub fn parse(hdr: &RadiotapHeader) -> Option<&CommonA> {
@@ -151,7 +152,7 @@ impl CommonA {
     }
 }
 
-#[packed]
+#[repr(packed)]
 pub struct CommonB {
     pub tsft: Tsft,
     pub flags: Flags,

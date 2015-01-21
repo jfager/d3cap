@@ -25,7 +25,7 @@ impl<S: ::std::hash::Writer+::std::hash::Hasher> Hash<S> for IP4Addr {
     }
 }
 
-#[packed]
+#[repr(packed)]
 pub struct IP4Header {
     pub ver_ihl: u8,
     pub dscp_ecn: u8,
@@ -79,7 +79,7 @@ impl<S: ::std::hash::Writer+::std::hash::Hasher> Hash<S> for IP6Addr {
     }
 }
 
-#[packed]
+#[repr(packed)]
 pub struct IP6Header {
     pub ver_tc_fl: u32,
     pub len: u16,

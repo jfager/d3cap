@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use ether::{MacAddr};
+use std::fmt::{Show, Formatter, Error};
 
 // For possible reference:
 // https://github.com/simsong/tcpflow/blob/master/src/wifipcap/wifipcap.h
@@ -18,7 +19,14 @@ bitflags!(flags FrameControlFlags: u8 {
     const ORDER           = 1 << 7
 });
 
-#[packed]
+impl Show for FrameControlFlags {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        f.write_str(format!("{:?}", self.bits).as_slice())
+    }
+}
+
+#[derive(Show)]
+#[repr(packed)]
 pub struct FrameControl {
     pub ty: u8,
     pub flags: FrameControlFlags
@@ -48,6 +56,7 @@ impl FrameControl {
     }
 }
 
+
 #[derive(Show)]
 pub enum FrameType {
     Management,
@@ -57,12 +66,14 @@ pub enum FrameType {
 }
 
 //8.2.4.2 Duration/ID field
-#[packed]
+#[derive(Show)]
+#[repr(packed)]
 pub struct DurationID {
     dur_id: u16
 }
 
-#[packed]
+#[derive(Show)]
+#[repr(packed)]
 pub struct Dot11BaseHeader {
     pub fr_ctrl: FrameControl,
     pub dur_id: DurationID,
@@ -100,7 +111,7 @@ type FCS = [u8; 4];
 // 8.3.1 Control Frames
 
 // 8.3.1.2 RTS
-#[packed]
+#[repr(packed)]
 pub struct RTS {
     pub base: Dot11BaseHeader,
     pub ra: MacAddr,
@@ -109,7 +120,7 @@ pub struct RTS {
 }
 
 // 8.3.1.3 CTS
-#[packed]
+#[repr(packed)]
 pub struct CTS {
     pub base: Dot11BaseHeader,
     pub ra: MacAddr,
@@ -117,7 +128,7 @@ pub struct CTS {
 }
 
 // 8.3.1.4 ACK
-#[packed]
+#[repr(packed)]
 pub struct ACK {
     pub base: Dot11BaseHeader,
     pub ra: MacAddr,
@@ -125,7 +136,7 @@ pub struct ACK {
 }
 
 // 8.3.1.5 PS-Poll
-#[packed]
+#[repr(packed)]
 pub struct PSPoll {
     pub base: Dot11BaseHeader,
     pub bssid: MacAddr, //ra
@@ -134,7 +145,7 @@ pub struct PSPoll {
 }
 
 // 8.3.1.6 CF-End
-#[packed]
+#[repr(packed)]
 pub struct CFEnd {
     pub base: Dot11BaseHeader,
     pub ra: MacAddr,
@@ -143,7 +154,7 @@ pub struct CFEnd {
 }
 
 // 8.3.1.7 CF-End+CF-Ack
-#[packed]
+#[repr(packed)]
 pub struct CFEndCFAck {
     pub base: Dot11BaseHeader,
     pub ra: MacAddr,
@@ -152,7 +163,7 @@ pub struct CFEndCFAck {
 }
 
 // 8.3.1.8 BlockAckReq
-#[packed]
+#[repr(packed)]
 pub struct BlockAckReq {
     pub base: Dot11BaseHeader,
     pub ra: MacAddr,
@@ -161,7 +172,7 @@ pub struct BlockAckReq {
 }
 
 // 8.3.1.9 BlockAck
-#[packed]
+#[repr(packed)]
 pub struct BlockAck {
     pub base: Dot11BaseHeader,
     pub ra: MacAddr,
@@ -170,7 +181,7 @@ pub struct BlockAck {
 }
 
 // 8.3.1.10 Control Wrapper
-#[packed]
+#[repr(packed)]
 pub struct ControlWrapper {
     pub base: Dot11BaseHeader,
     pub ra: MacAddr,
@@ -181,7 +192,7 @@ pub struct ControlWrapper {
 // 8.3.2 Data Frames
 
 // 8.3.2.1 Data Frame Header
-#[packed]
+#[repr(packed)]
 pub struct DataFrameHeader {
     pub base: Dot11BaseHeader,
     pub addr1: MacAddr,
@@ -220,7 +231,7 @@ impl DataFrameHeader {
 // 8.3.3 Management Frames
 
 // 8.3.3.1 Management Frame Format
-#[packed]
+#[repr(packed)]
 pub struct ManagementFrameHeader {
     pub base: Dot11BaseHeader,
     pub addr1: MacAddr,
