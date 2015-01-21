@@ -15,6 +15,7 @@ path = "src/d3cap/main.rs"
 time = "*"
 getopts = "*"
 rustc-serialize = "*"
+bitflags = "*"
 
 
 [dependencies.pcap]
