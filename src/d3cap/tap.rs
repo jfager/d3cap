@@ -8,7 +8,7 @@ use util::skip_cast;
 //For possible reference:
 //https://github.com/simsong/tcpflow/blob/master/src/wifipcap/ieee802_11_radio.h
 
-#[derive(Show)]
+#[derive(Show,Copy)]
 #[repr(packed)]
 pub struct RadiotapHeader {
     pub it_version: u8, // 8 -> 1
@@ -65,6 +65,7 @@ impl fmt::Show for ItPresent {
     }
 }
 
+#[derive(Copy, Show)]
 #[repr(packed)]
 pub struct Tsft {
     pub timer_micros: u64
@@ -81,6 +82,7 @@ bitflags!(flags Flags: u8 {
     const SHORT_GUARD    = 0x80
 });
 
+#[derive(Copy, Show)]
 #[repr(packed)]
 pub struct Rate {
     pub in_500kbps: u8
@@ -97,27 +99,38 @@ bitflags!(flags ChannelFlags: u16 {
     const GFSK         = 0x0800
 });
 
+impl fmt::Show for ChannelFlags {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:08x}", self.bits)
+    }
+}
+
+#[derive(Copy, Show)]
 #[repr(packed)]
 pub struct Channel {
     pub mhz: u16,
     pub flags: ChannelFlags
 }
 
+#[derive(Copy, Show)]
 #[repr(packed)]
 pub struct AntennaSignal {
     pub dbm: i8
 }
 
+#[derive(Copy, Show)]
 #[repr(packed)]
 pub struct AntennaNoise {
     pub dbm: i8
 }
 
+#[derive(Copy, Show)]
 #[repr(packed)]
 pub struct Antenna {
     pub idx: u8
 }
 
+#[derive(Copy, Show)]
 #[repr(packed)]
 pub struct Mcs {
     pub known: u8,
@@ -127,6 +140,7 @@ pub struct Mcs {
 
 // For now just predefining a few types of packets I actually see with my setup,
 // rather than defining a general parser.
+#[derive(Copy)]
 #[repr(packed)]
 pub struct CommonA {
     pub tsft: Tsft,  // 8

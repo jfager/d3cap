@@ -148,9 +148,132 @@ impl CaptureCtx for EthernetCtx {
     }
 }
 
+#[derive(Show)]
+struct PhysData { // TODO: this name sucks
+    addrs: [MacAddr; 3],
+    rate: Option<tap::Rate>,
+    channel: tap::Channel,
+    antenna_signal: tap::AntennaSignal,
+    antenna_noise: tap::AntennaNoise,
+    antenna: tap::Antenna,
+}
+
+impl PhysData {
+    fn new(addrs: [MacAddr; 3],
+           rate: Option<tap::Rate>,
+           channel: tap::Channel,
+           antenna_signal: tap::AntennaSignal,
+           antenna_noise: tap::AntennaNoise,
+           antenna: tap::Antenna,
+           ) -> PhysData {
+        PhysData {
+            addrs: addrs,
+            rate: rate,
+            channel: channel,
+            antenna_signal: antenna_signal,
+            antenna_noise: antenna_noise,
+            antenna: antenna
+        }
+    }
+}
+
+#[derive(Clone)]
+struct PhysDataController {
+    pd_tx: Sender<PhysData>,
+}
+
+impl PhysDataController {
+    fn spawn() -> PhysDataController {
+        let (pd_tx, pd_rx) = channel();
+        let ctl = PhysDataController {
+            pd_tx: pd_tx,
+        };
+
+        let mut phctl = ctl.clone();
+        thread::Builder::new().name("physdata_handler".to_string()).spawn(move || -> () {
+            loop {
+                let res = pd_rx.recv();
+                if res.is_err() {
+                    break
+                }
+                let pd = res.unwrap();
+                println!("sig: {}, noise: {}", pd.antenna_signal.dbm, pd.antenna_noise.dbm);
+            }
+        });
+
+        ctl
+    }
+}
+
+
 struct RadiotapCtx {
     pkts: Sender<Pkt>,
+    phys: Sender<PhysData>
 }
+
+impl RadiotapCtx {
+    fn blah(&self, addrs: [MacAddr; 3], tap_hdr: &tap::RadiotapHeader) {
+        match &tap_hdr.it_present {
+            &tap::COMMON_A => {
+                match tap::CommonA::parse(tap_hdr) {
+                    Some(vals) => {
+                        self.phys.send(PhysData::new(
+                            addrs,
+                            Some(vals.rate),
+                            vals.channel,
+                            vals.antenna_signal,
+                            vals.antenna_noise,
+                            vals.antenna
+                        ));
+                    },
+                    _ => {
+                        println!("Couldn't parse as CommonA");
+                    }
+                }
+            },
+            &tap::COMMON_B => {
+                match tap::CommonB::parse(tap_hdr) {
+                    Some(vals) => {
+                        self.phys.send(PhysData::new(
+                            addrs,
+                            None,
+                            vals.channel,
+                            vals.antenna_signal,
+                            vals.antenna_noise,
+                            vals.antenna
+                        ));
+                    },
+                    _ => {
+                        println!("Couldn't parse as CommonB");
+                    }
+                }
+            },
+            _ => {
+                // println!("Unknown header!");
+                // println!("has tsft? {}", tap_hdr.has_field(tap::TSFT));
+                // println!("has flags? {}", tap_hdr.has_field(tap::FLAGS));
+                // println!("has rate? {}", tap_hdr.has_field(tap::RATE));
+                // println!("has channel? {}", tap_hdr.has_field(tap::CHANNEL));
+                // println!("has fhss? {}", tap_hdr.has_field(tap::FHSS));
+                // println!("has antenna_signal? {}", tap_hdr.has_field(tap::ANTENNA_SIGNAL));
+                // println!("has antenna_noise? {}", tap_hdr.has_field(tap::ANTENNA_NOISE));
+                // println!("has lock_quality? {}", tap_hdr.has_field(tap::LOCK_QUALITY));
+                // println!("has tx_attenuation? {}", tap_hdr.has_field(tap::TX_ATTENUATION));
+                // println!("has db_tx_attenuation? {}", tap_hdr.has_field(tap::DB_TX_ATTENUATION));
+                // println!("has dbm_tx_power? {}", tap_hdr.has_field(tap::DBM_TX_POWER));
+                // println!("has antenna? {}", tap_hdr.has_field(tap::ANTENNA));
+                // println!("has db_antenna_signal? {}", tap_hdr.has_field(tap::DB_ANTENNA_SIGNAL));
+                // println!("has db_antenna_noise? {}", tap_hdr.has_field(tap::DB_ANTENNA_NOISE));
+                // println!("has rx_flags? {}", tap_hdr.has_field(tap::RX_FLAGS));
+                // println!("has mcs? {}", tap_hdr.has_field(tap::MCS));
+                // println!("has a_mpdu_status? {}", tap_hdr.has_field(tap::A_MPDU_STATUS));
+                // println!("has vht? {}", tap_hdr.has_field(tap::VHT));
+                // println!("has more_it_present? {}", tap_hdr.has_field(tap::MORE_IT_PRESENT));
+            }
+        }
+    }
+}
+
 
 impl CaptureCtx for RadiotapCtx {
     fn parse(&mut self, pkt_ptr: *const u8, size: u32) {
@@ -169,86 +292,33 @@ impl CaptureCtx for RadiotapCtx {
             return;
         }
 
-        println!("frame_type: {:?}", fc.frame_type());
-        println!("frame_subtype: {:x}", fc.frame_subtype());
+        // println!("frame_type: {:?}", fc.frame_type());
+        // println!("frame_subtype: {:x}", fc.frame_subtype());
 
-        println!("toDS: {}", fc.has_flag(dot11::TO_DS));
-        println!("fromDS: {}", fc.has_flag(dot11::FROM_DS));
-        println!("protected: {}", fc.has_flag(dot11::PROTECTED_FRAME));
+        // println!("toDS: {}", fc.has_flag(dot11::TO_DS));
+        // println!("fromDS: {}", fc.has_flag(dot11::FROM_DS));
+        // println!("protected: {}", fc.has_flag(dot11::PROTECTED_FRAME));
 
         match fc.frame_type() {
             FrameType::Management => {
-                println!("Management frame");
                 let mgt: &dot11::ManagementFrameHeader = magic(tap_hdr);
+                self.blah([mgt.addr1, mgt.addr2, mgt.addr3], tap_hdr);
             }
             FrameType::Control => {
-                println!("Control frame");
+                //println!("Control frame");
             }
             FrameType::Data => {
-                println!("Data frame");
                 let data: &dot11::DataFrameHeader = magic(tap_hdr);
                 //TODO: get length
                 self.pkts.send(Pkt::Mac(PktMeta::new(data.addr1, data.addr2, 1)));
+                self.blah([data.addr1, data.addr2, data.addr3], tap_hdr);
             }
             FrameType::Unknown => {
-                println!("Unknown frame type");
+                //println!("Unknown frame type");
             }
         }
-
-        match &tap_hdr.it_present {
-            &tap::COMMON_A => {
-                match tap::CommonA::parse(tap_hdr) {
-                    Some(vals) => {
-                        println!("tsft: {}", vals.tsft.timer_micros);
-                        println!("channel: {}", vals.channel.mhz);
-                        println!("antenna_signal: {}", vals.antenna_signal.dbm);
-                        println!("antenna_noise: {}", vals.antenna_noise.dbm);
-                        println!("antenna: {}", vals.antenna.idx);
-                    },
-                    _ => {
-                        println!("Couldn't parse as CommonA");
-                    }
-                }
-            },
-            &tap::COMMON_B => {
-                match tap::CommonB::parse(tap_hdr) {
-                    Some(vals) => {
-                        println!("tsft: {}", vals.tsft.timer_micros);
-                        println!("channel: {}", vals.channel.mhz);
-                        println!("antenna_signal: {}", vals.antenna_signal.dbm);
-                        println!("antenna_noise: {}", vals.antenna_noise.dbm);
-                        println!("antenna: {}", vals.antenna.idx);
-                    },
-                    _ => {
-                        println!("Couldn't parse as CommonB");
-                    }
-                }
-            },
-            _ => {
-                println!("Unknown header!");
-                println!("has tsft? {}", tap_hdr.has_field(tap::TSFT));
-                println!("has flags? {}", tap_hdr.has_field(tap::FLAGS));
-                println!("has rate? {}", tap_hdr.has_field(tap::RATE));
-                println!("has channel? {}", tap_hdr.has_field(tap::CHANNEL));
-                println!("has fhss? {}", tap_hdr.has_field(tap::FHSS));
-                println!("has antenna_signal? {}", tap_hdr.has_field(tap::ANTENNA_SIGNAL));
-                println!("has antenna_noise? {}", tap_hdr.has_field(tap::ANTENNA_NOISE));
-                println!("has lock_quality? {}", tap_hdr.has_field(tap::LOCK_QUALITY));
-                println!("has tx_attenuation? {}", tap_hdr.has_field(tap::TX_ATTENUATION));
-                println!("has db_tx_attenuation? {}", tap_hdr.has_field(tap::DB_TX_ATTENUATION));
-                println!("has dbm_tx_power? {}", tap_hdr.has_field(tap::DBM_TX_POWER));
-                println!("has antenna? {}", tap_hdr.has_field(tap::ANTENNA));
-                println!("has db_antenna_signal? {}", tap_hdr.has_field(tap::DB_ANTENNA_SIGNAL));
-                println!("has db_antenna_noise? {}", tap_hdr.has_field(tap::DB_ANTENNA_NOISE));
-                println!("has rx_flags? {}", tap_hdr.has_field(tap::RX_FLAGS));
-                println!("has mcs? {}", tap_hdr.has_field(tap::MCS));
-                println!("has a_mpdu_status? {}", tap_hdr.has_field(tap::A_MPDU_STATUS));
-                println!("has vht? {}", tap_hdr.has_field(tap::VHT));
-                println!("has more_it_present? {}", tap_hdr.has_field(tap::MORE_IT_PRESENT));
-            }
-        }
-        println!("");
     }
+
 }
 
 pub fn start_capture<'a>(conf: D3capConf, pkt_sender: Sender<Pkt>) -> JoinGuard<'a, ()> {
@@ -278,7 +348,10 @@ pub fn start_capture<'a>(conf: D3capConf, pkt_sender: Sender<Pkt>) -> JoinGuard<
 
         match sess.datalink() {
             cap::DLT_ETHERNET => go(&sess, &mut EthernetCtx { pkts: pkt_sender }),
-            cap::DLT_IEEE802_11_RADIO => go(&sess, &mut RadiotapCtx { pkts: pkt_sender }),
+            cap::DLT_IEEE802_11_RADIO => {
+                let pd = PhysDataController::spawn();
+                go(&sess, &mut RadiotapCtx { pkts: pkt_sender, phys: pd.pd_tx })
+            }
             x => panic!("unsupported datalink type: {}", x)
         };
     })
