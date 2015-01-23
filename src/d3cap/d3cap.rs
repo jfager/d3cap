@@ -2,6 +2,7 @@ use std::thread;
 use std::hash::{Hash};
 use std::collections::hash_map::{HashMap, Hasher};
 use std::io::File;
+use std::num::Float;
 use std::sync::{Arc,RwLock};
 use std::sync::mpsc::{channel, Sender};
 use std::thread::JoinGuard;
@@ -197,7 +198,15 @@ impl PhysDataController {
                     break
                 }
                 let pd = res.unwrap();
-                println!("sig: {}, noise: {}", pd.antenna_signal.dbm, pd.antenna_noise.dbm);
+
+                let freq = pd.channel.mhz as f32;
+                let signal = pd.antenna_signal.dbm as f32;
+
+                let exp = (27.55 - (20.0 * freq.log10()) + signal.abs()) / 20.0;
+                let dist = (10.0f32).powf(exp);
+
+                println!("sig: {}, noise: {}, freq: {}, dist: {}",
+                         pd.antenna_signal.dbm, pd.antenna_noise.dbm, freq, dist);
             }
         });
 
