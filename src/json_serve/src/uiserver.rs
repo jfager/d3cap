@@ -78,7 +78,7 @@ pub struct UIServer {
 
 impl UIServer {
     pub fn spawn<T: Encodable>(port: u16, welcome: &T) -> UIServer {
-        let welcome_msg = Arc::new(json::encode(welcome));
+        let welcome_msg = Arc::new(json::encode(welcome).unwrap());
 
         let mc = Multicast::spawn();
         let json_dest_sender = mc.clone();
@@ -111,7 +111,7 @@ impl UIServer {
                 let t: Result<Arc<T>, _> = rx.recv();
                 match t {
                     Ok(t) => {
-                        let j: String = json::encode(&*t);
+                        let j: String = json::encode(&*t).unwrap();
                         jb.send(Arc::new(j));
                     }
                     Err(_) => panic!("oh shit")
