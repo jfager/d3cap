@@ -1,14 +1,16 @@
 use std::hash::Hash;
+use std::fmt::{Display,Error,Formatter};
 
 use rustc_serialize::{Encodable, Encoder};
+
 
 #[derive(Copy, Clone, PartialEq, Eq, Show)]
 pub struct IP4Addr([u8; 4]);
 
-impl ToString for IP4Addr {
-    fn to_string(&self) -> String {
+impl Display for IP4Addr {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         let &IP4Addr(a) = self;
-        format!("{}.{}.{}.{}", a[0], a[1], a[2], a[3])
+        f.write_str(&format!("{}.{}.{}.{}", a[0], a[1], a[2], a[3])[])
     }
 }
 
@@ -42,25 +44,25 @@ pub struct IP4Header {
 #[derive(Copy, Clone, PartialEq, Eq, Show)]
 pub struct IP6Addr([u16; 8]);
 
-impl ToString for IP6Addr {
-    fn to_string(&self) -> String {
+impl Display for IP6Addr {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         let &IP6Addr(a) = self;
         match a {
             //ip4-compatible
             [0,0,0,0,0,0,g,h] => {
-                format!("::{}.{}.{}.{}",
-                        (g >> 8) as u8, g as u8, (h >> 8) as u8, h as u8)
+                f.write_str(&format!("::{}.{}.{}.{}",
+                                     (g >> 8) as u8, g as u8, (h >> 8) as u8, h as u8)[])
             }
 
             // ip4-mapped address
             [0,0,0,0,0,0xFFFF,g,h] => {
-                format!("::FFFF:{}.{}.{}.{}",
-                        (g >> 8) as u8, g as u8, (h >> 8) as u8, h as u8)
+                f.write_str(&format!("::FFFF:{}.{}.{}.{}",
+                                     (g >> 8) as u8, g as u8, (h >> 8) as u8, h as u8)[])
             }
 
             [a,b,c,d,e,f_,g,h] => {
-                format!("{:04x}:{:04x}:{:04x}:{:04x}:{:04x}:{:04x}:{:04x}:{:04x}",
-                        a, b, c, d, e, f_, g, h)
+                f.write_str(&format!("{:04x}:{:04x}:{:04x}:{:04x}:{:04x}:{:04x}:{:04x}:{:04x}",
+                                     a, b, c, d, e, f_, g, h)[])
             }
         }
     }

@@ -8,7 +8,7 @@ extern crate "rustc-serialize" as rustc_serialize;
 
 use std::iter::Iterator;
 use std::fmt;
-use std::fmt::{Show,Formatter};
+use std::fmt::{Debug,Formatter};
 
 use rustc_serialize::{Encoder, Encodable};
 
@@ -104,7 +104,7 @@ impl<'s, T> Iterator for RingIterator<'s, T> {
     }
 }
 
-impl<T: Show> Show for FixedRingBuffer<T> {
+impl<T: Debug> Debug for FixedRingBuffer<T> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         try!(write!(f, "["));
         let mut first = true;

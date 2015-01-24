@@ -1,4 +1,5 @@
 use std::hash::Hash;
+use std::fmt::{Display, Error, Formatter};
 
 use rustc_serialize::hex::FromHex;
 use rustc_serialize::{Encoder,Encodable};
@@ -6,11 +7,11 @@ use rustc_serialize::{Encoder,Encodable};
 #[derive(Copy, Clone, PartialEq, Eq, Show)]
 pub struct MacAddr([u8; 6]);
 
-impl ToString for MacAddr {
-    fn to_string(&self) -> String {
+impl Display for MacAddr {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         let &MacAddr(a) = self;
-        format!("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                a[0], a[1], a[2], a[3], a[4], a[5])
+        f.write_str(&format!("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                             a[0], a[1], a[2], a[3], a[4], a[5])[])
     }
 }
 

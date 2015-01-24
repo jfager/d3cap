@@ -1,6 +1,6 @@
 use std::thread;
 use std::hash::{Hash};
-use std::collections::hash_map::{HashMap, Hasher};
+use std::collections::hash_map::{Entry, HashMap, Hasher};
 use std::io::File;
 use std::num::Float;
 use std::sync::{Arc,RwLock};
@@ -19,6 +19,7 @@ use ether::{EthernetHeader, MacAddr,
 use dot11::{self, FrameType};
 use tap;
 use pkt_graph::{PktMeta, ProtocolGraph, RouteStats};
+use fixed_ring::FixedRingBuffer;
 
 
 #[derive(RustcEncodable, Clone)]
@@ -176,6 +177,14 @@ impl PhysData {
             antenna: antenna
         }
     }
+
+    fn dist(&self) -> f32 {
+        let freq = self.channel.mhz as f32;
+        let signal = self.antenna_signal.dbm as f32;
+
+        let exp = (27.55 - (20.0 * freq.log10()) + signal.abs()) / 20.0;
+        (10.0f32).powf(exp)
+    }
 }
 
 #[derive(Clone)]
@@ -192,6 +201,9 @@ impl PhysDataController {
 
         let mut phctl = ctl.clone();
         thread::Builder::new().name("physdata_handler".to_string()).spawn(move || -> () {
+            let mut map: HashMap<[MacAddr;3], FixedRingBuffer<PhysData>> = HashMap::new();
+
+            let mut counter = 0;
             loop {
                 let res = pd_rx.recv();
                 if res.is_err() {
@@ -199,18 +211,37 @@ impl PhysDataController {
                 }
                 let pd = res.unwrap();
 
-                let freq = pd.channel.mhz as f32;
-                let signal = pd.antenna_signal.dbm as f32;
+                match map.entry(pd.addrs) {
+                    Entry::Occupied(mut e) => e.get_mut().push(pd),
+                    Entry::Vacant(e) => e.insert(FixedRingBuffer::new(10)).push(pd)
+                }
 
-                let exp = (27.55 - (20.0 * freq.log10()) + signal.abs()) / 20.0;
-                let dist = (10.0f32).powf(exp);
-
-                println!("sig: {}, noise: {}, freq: {}, dist: {}",
-                         pd.antenna_signal.dbm, pd.antenna_noise.dbm, freq, dist);
+                if counter % 100 == 0 {
+                    for (k, v) in map.iter() {
+                        println!("[{}, {}, {}]: len: {}, dist: {}",
+                                 k[0], k[1], k[2], v.len(), v.avg_dist());
+                    }
+                    println!("");
+                }
+                counter += 1;
             }
         });
 
         ctl
+    }
+}
+
+trait AvgDist {
+    fn avg_dist(&self) -> f32;
+}
+
+impl AvgDist for FixedRingBuffer<PhysData> {
+    fn avg_dist(&self) -> f32 {
+        let mut s = 0.0;
+        for pd in self.iter() {
+            s += pd.dist();
+        }
+        s / (self.len() as f32)
     }
 }
 
