@@ -4,7 +4,7 @@ use std::hash::{Hash};
 
 use time;
 
-#[derive(Show)]
+#[derive(Debug)]
 pub struct PktMeta<T> {
     pub src: T,
     pub dst: T,
@@ -17,7 +17,7 @@ impl<T> PktMeta<T> {
     }
 }
 
-#[derive(RustcEncodable, Copy, Clone, Show)]
+#[derive(RustcEncodable, Copy, Clone, Debug)]
 pub struct PktStats {
     count: u64,
     size: u64
@@ -33,7 +33,7 @@ impl PktStats {
 }
 
 //TODO: derive Encodable manually
-#[derive(Clone,Show)]
+#[derive(Clone, Debug)]
 pub struct AddrStats<T:Hash<Hasher>+Eq> {
     sent: PktStats,
     sent_to: HashMap<T, PktStats>,
@@ -104,7 +104,7 @@ pub struct RouteStats<T> {
 }
 
 //TODO: derive Encodable manually
-#[derive(Clone, Show)]
+#[derive(Clone, Debug)]
 pub struct ProtocolGraph<T:Hash<Hasher>+Eq> {
     stats: PktStats,
     routes: HashMap<T, AddrStats<T>>,

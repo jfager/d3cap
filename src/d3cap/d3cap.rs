@@ -28,7 +28,7 @@ struct RouteStatsMsg<T> {
     route: RouteStats<T>,
 }
 
-#[derive(Show)]
+#[derive(Debug)]
 enum Pkt {
     Mac(PktMeta<MacAddr>),
     IP4(PktMeta<IP4Addr>),
@@ -99,7 +99,7 @@ impl ProtoGraphController {
         ctl
     }
 
-    fn pkt_sender(&self) -> Sender<Pkt> {
+    fn sender(&self) -> Sender<Pkt> {
         self.cap_tx.clone()
     }
 
@@ -150,8 +150,9 @@ impl CaptureCtx for EthernetCtx {
     }
 }
 
-#[derive(Show)]
+#[derive(Debug)]
 struct PhysData { // TODO: this name sucks
+    frame_ty: FrameType,
     addrs: [MacAddr; 3],
     rate: Option<tap::Rate>,
     channel: tap::Channel,
@@ -161,7 +162,8 @@ struct PhysData { // TODO: this name sucks
 }
 
 impl PhysData {
-    fn new(addrs: [MacAddr; 3],
+    fn new(frame_ty: FrameType,
+           addrs: [MacAddr; 3],
            rate: Option<tap::Rate>,
            channel: tap::Channel,
            antenna_signal: tap::AntennaSignal,
@@ -169,6 +171,7 @@ impl PhysData {
            antenna: tap::Antenna,
            ) -> PhysData {
         PhysData {
+            frame_ty: frame_ty,
             addrs: addrs,
             rate: rate,
             channel: channel,
@@ -193,16 +196,15 @@ struct PhysDataController {
 }
 
 impl PhysDataController {
-    fn spawn() -> PhysDataController {
+    fn spawn(macs: MacMap) -> PhysDataController {
         let (pd_tx, pd_rx) = channel();
         let ctl = PhysDataController {
             pd_tx: pd_tx,
         };
 
-        let mut phctl = ctl.clone();
         thread::Builder::new().name("physdata_handler".to_string()).spawn(move || -> () {
-            let mut map: HashMap<[MacAddr;3], FixedRingBuffer<PhysData>> = HashMap::new();
-
+            let mut map: HashMap<(FrameType, [MacAddr;3]), FixedRingBuffer<PhysData>>
+                = HashMap::new();
             let mut counter = 0;
             loop {
                 let res = pd_rx.recv();
@@ -211,15 +213,17 @@ impl PhysDataController {
                 }
                 let pd = res.unwrap();
 
-                match map.entry(pd.addrs) {
+                match map.entry((pd.frame_ty, pd.addrs)) {
                     Entry::Occupied(mut e) => e.get_mut().push(pd),
                     Entry::Vacant(e) => e.insert(FixedRingBuffer::new(10)).push(pd)
                 }
 
                 if counter % 100 == 0 {
-                    for (k, v) in map.iter() {
-                        println!("[{}, {}, {}]: len: {}, dist: {}",
-                                 k[0], k[1], k[2], v.len(), v.avg_dist());
+                    for (k,v) in map.iter().filter(|&(ref k, ref v)| v.len() > 1) {
+                        println!("{:?} [{}, {}, {}]: len: {}, dist: {}",
+                                 k.0,
+                                 macs.trans(k.1[0]), macs.trans(k.1[1]), macs.trans(k.1[2]),
+                                 v.len(), v.avg_dist());
                     }
                     println!("");
                 }
@@ -229,7 +233,26 @@ impl PhysDataController {
 
         ctl
     }
+
+
+    fn sender(&self) -> Sender<PhysData> {
+        self.pd_tx.clone()
+    }
 }
+
+trait TransMac {
+    fn trans(&self, addr: MacAddr) -> String;
+}
+
+impl TransMac for MacMap {
+    fn trans(&self, addr: MacAddr) -> String {
+        match self.get(&addr) {
+            Some(v) => v.clone(),
+            None => addr.to_string()
+        }
+    }
+}
+
 
 trait AvgDist {
     fn avg_dist(&self) -> f32;
@@ -252,71 +275,42 @@ struct RadiotapCtx {
 }
 
 impl RadiotapCtx {
-    fn blah(&self, addrs: [MacAddr; 3], tap_hdr: &tap::RadiotapHeader) {
+    fn blah(&self, frame_ty: FrameType, addrs: [MacAddr; 3], tap_hdr: &tap::RadiotapHeader) {
         match &tap_hdr.it_present {
             &tap::COMMON_A => {
-                match tap::CommonA::parse(tap_hdr) {
-                    Some(vals) => {
-                        self.phys.send(PhysData::new(
-                            addrs,
-                            Some(vals.rate),
-                            vals.channel,
-                            vals.antenna_signal,
-                            vals.antenna_noise,
-                            vals.antenna
-                        ));
-                    },
-                    _ => {
-                        println!("Couldn't parse as CommonA");
-                    }
+                if let Some(vals) = tap::CommonA::parse(tap_hdr) {
+                    self.phys.send(PhysData::new(
+                        frame_ty,
+                        addrs,
+                        Some(vals.rate),
+                        vals.channel,
+                        vals.antenna_signal,
+                        vals.antenna_noise,
+                        vals.antenna
+                    ));
                 }
             },
             &tap::COMMON_B => {
-                match tap::CommonB::parse(tap_hdr) {
-                    Some(vals) => {
-                        self.phys.send(PhysData::new(
-                            addrs,
-                            None,
-                            vals.channel,
-                            vals.antenna_signal,
-                            vals.antenna_noise,
-                            vals.antenna
-                        ));
-                    },
-                    _ => {
-                        println!("Couldn't parse as CommonB");
-                    }
+                if let Some(vals) = tap::CommonB::parse(tap_hdr) {
+                    self.phys.send(PhysData::new(
+                        frame_ty,
+                        addrs,
+                        None,
+                        vals.channel,
+                        vals.antenna_signal,
+                        vals.antenna_noise,
+                        vals.antenna
+                    ));
                 }
             },
-            _ => {
-                // println!("Unknown header!");
-                // println!("has tsft? {}", tap_hdr.has_field(tap::TSFT));
-                // println!("has flags? {}", tap_hdr.has_field(tap::FLAGS));
-                // println!("has rate? {}", tap_hdr.has_field(tap::RATE));
-                // println!("has channel? {}", tap_hdr.has_field(tap::CHANNEL));
-                // println!("has fhss? {}", tap_hdr.has_field(tap::FHSS));
-                // println!("has antenna_signal? {}", tap_hdr.has_field(tap::ANTENNA_SIGNAL));
-                // println!("has antenna_noise? {}", tap_hdr.has_field(tap::ANTENNA_NOISE));
-                // println!("has lock_quality? {}", tap_hdr.has_field(tap::LOCK_QUALITY));
-                // println!("has tx_attenuation? {}", tap_hdr.has_field(tap::TX_ATTENUATION));
-                // println!("has db_tx_attenuation? {}", tap_hdr.has_field(tap::DB_TX_ATTENUATION));
-                // println!("has dbm_tx_power? {}", tap_hdr.has_field(tap::DBM_TX_POWER));
-                // println!("has antenna? {}", tap_hdr.has_field(tap::ANTENNA));
-                // println!("has db_antenna_signal? {}", tap_hdr.has_field(tap::DB_ANTENNA_SIGNAL));
-                // println!("has db_antenna_noise? {}", tap_hdr.has_field(tap::DB_ANTENNA_NOISE));
-                // println!("has rx_flags? {}", tap_hdr.has_field(tap::RX_FLAGS));
-                // println!("has mcs? {}", tap_hdr.has_field(tap::MCS));
-                // println!("has a_mpdu_status? {}", tap_hdr.has_field(tap::A_MPDU_STATUS));
-                // println!("has vht? {}", tap_hdr.has_field(tap::VHT));
-                // println!("has more_it_present? {}", tap_hdr.has_field(tap::MORE_IT_PRESENT));
-            }
+            _ => {} //Unknown header
         }
     }
 }
 
 
 impl CaptureCtx for RadiotapCtx {
-    fn parse(&mut self, pkt_ptr: *const u8, size: u32) {
+    fn parse(&mut self, pkt_ptr: *const u8, _: u32) {
 
         let tap_hdr = unsafe { &*(pkt_ptr as *const tap::RadiotapHeader) };
 
@@ -332,26 +326,19 @@ impl CaptureCtx for RadiotapCtx {
             return;
         }
 
-        // println!("frame_type: {:?}", fc.frame_type());
-        // println!("frame_subtype: {:x}", fc.frame_subtype());
-
-        // println!("toDS: {}", fc.has_flag(dot11::TO_DS));
-        // println!("fromDS: {}", fc.has_flag(dot11::FROM_DS));
-        // println!("protected: {}", fc.has_flag(dot11::PROTECTED_FRAME));
-
         match fc.frame_type() {
-            FrameType::Management => {
+            ft @ FrameType::Management => {
                 let mgt: &dot11::ManagementFrameHeader = magic(tap_hdr);
-                self.blah([mgt.addr1, mgt.addr2, mgt.addr3], tap_hdr);
+                self.blah(ft, [mgt.addr1, mgt.addr2, mgt.addr3], tap_hdr);
             }
             FrameType::Control => {
                 //println!("Control frame");
             }
-            FrameType::Data => {
+            ft @ FrameType::Data => {
                 let data: &dot11::DataFrameHeader = magic(tap_hdr);
                 //TODO: get length
                 self.pkts.send(Pkt::Mac(PktMeta::new(data.addr1, data.addr2, 1)));
-                self.blah([data.addr1, data.addr2, data.addr3], tap_hdr);
+                self.blah(ft, [data.addr1, data.addr2, data.addr3], tap_hdr);
             }
             FrameType::Unknown => {
                 //println!("Unknown frame type");
@@ -361,7 +348,10 @@ impl CaptureCtx for RadiotapCtx {
 
 }
 
-pub fn start_capture<'a>(conf: D3capConf, pkt_sender: Sender<Pkt>) -> JoinGuard<'a, ()> {
+pub fn start_capture<'a>(conf: D3capConf,
+                         pkt_sender: Sender<Pkt>,
+                         pd_sender: Sender<PhysData>)
+                         -> JoinGuard<'a, ()> {
     use pcap::rustpcap as cap;
 
     thread::Builder::new().name("packet_capture".to_string()).scoped(move || {
@@ -387,10 +377,11 @@ pub fn start_capture<'a>(conf: D3capConf, pkt_sender: Sender<Pkt>) -> JoinGuard<
         }
 
         match sess.datalink() {
-            cap::DLT_ETHERNET => go(&sess, &mut EthernetCtx { pkts: pkt_sender }),
+            cap::DLT_ETHERNET => {
+                go(&sess, &mut EthernetCtx { pkts: pkt_sender })
+            }
             cap::DLT_IEEE802_11_RADIO => {
-                let pd = PhysDataController::spawn();
-                go(&sess, &mut RadiotapCtx { pkts: pkt_sender, phys: pd.pd_tx })
+                go(&sess, &mut RadiotapCtx { pkts: pkt_sender, phys: pd_sender })
             }
             x => panic!("unsupported datalink type: {}", x)
         };
@@ -465,7 +456,8 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
 
 fn load_mac_addrs(file: String) -> HashMap<MacAddr, String> {
     let s = File::open(&Path::new(file)).read_to_string().unwrap();
-    let t = toml::Parser::new(&s[]).parse().unwrap();
+    let mut parser = toml::Parser::new(&s[]);
+    let t = parser.parse().unwrap();
     let known_macs = t.get(&"known-macs".to_string()).unwrap().as_table().unwrap();
 
     known_macs.iter()
@@ -491,6 +483,7 @@ type MacMap = HashMap<MacAddr, String>;
 #[derive(Clone)]
 pub struct D3capController {
     pg_ctrl: ProtoGraphController,
+    pd_ctrl: PhysDataController,
     mac_map: MacMap,
     server_started: bool
 }
@@ -502,14 +495,16 @@ impl D3capController {
             .unwrap_or_else(HashMap::new);
 
         let pg_ctrl = ProtoGraphController::spawn();
+        let pd_ctrl = PhysDataController::spawn(mac_map.clone());
 
-        start_capture(conf, pg_ctrl.pkt_sender()).detach();
+        start_capture(conf, pg_ctrl.sender(), pd_ctrl.sender()).detach();
 
-        D3capController { pg_ctrl: pg_ctrl, mac_map: mac_map, server_started: false }
-    }
-
-    fn mac_map(&self) -> &MacMap {
-        &self.mac_map
+        D3capController {
+            pg_ctrl: pg_ctrl,
+            pd_ctrl: pd_ctrl,
+            mac_map: mac_map,
+            server_started: false
+        }
     }
 
     fn start_websocket(&mut self, port: u16) {
@@ -522,7 +517,7 @@ impl D3capController {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct D3capConf {
     pub websocket: Option<u16>,
     pub interface: Option<String>,

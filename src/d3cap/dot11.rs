@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use ether::{MacAddr};
-use std::fmt::{Show, Formatter, Error};
+use std::fmt::{Debug, Formatter, Error};
 
 // For possible reference:
 // https://github.com/simsong/tcpflow/blob/master/src/wifipcap/wifipcap.h
@@ -19,13 +19,13 @@ bitflags!(flags FrameControlFlags: u8 {
     const ORDER           = 1 << 7
 });
 
-impl Show for FrameControlFlags {
+impl Debug for FrameControlFlags {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         f.write_str(format!("{:?}", self.bits).as_slice())
     }
 }
 
-#[derive(Show)]
+#[derive(Debug)]
 #[repr(packed)]
 pub struct FrameControl {
     pub ty: u8,
@@ -57,7 +57,7 @@ impl FrameControl {
 }
 
 
-#[derive(Show)]
+#[derive(Copy, PartialEq, Eq, Hash, Debug)]
 pub enum FrameType {
     Management,
     Control,
@@ -66,13 +66,13 @@ pub enum FrameType {
 }
 
 //8.2.4.2 Duration/ID field
-#[derive(Show)]
+#[derive(Debug)]
 #[repr(packed)]
 pub struct DurationID {
     dur_id: u16
 }
 
-#[derive(Show)]
+#[derive(Debug)]
 #[repr(packed)]
 pub struct Dot11BaseHeader {
     pub fr_ctrl: FrameControl,

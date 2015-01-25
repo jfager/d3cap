@@ -4,7 +4,7 @@ use std::fmt::{Display, Error, Formatter};
 use rustc_serialize::hex::FromHex;
 use rustc_serialize::{Encoder,Encodable};
 
-#[derive(Copy, Clone, PartialEq, Eq, Show)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct MacAddr([u8; 6]);
 
 impl Display for MacAddr {
@@ -49,7 +49,7 @@ impl MacAddr {
 }
 
 #[repr(packed)]
-#[derive(Show)]
+#[derive(Debug)]
 pub struct EthernetHeader {
     pub dst: MacAddr,
     pub src: MacAddr,

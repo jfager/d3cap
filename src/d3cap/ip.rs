@@ -4,7 +4,7 @@ use std::fmt::{Display,Error,Formatter};
 use rustc_serialize::{Encodable, Encoder};
 
 
-#[derive(Copy, Clone, PartialEq, Eq, Show)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct IP4Addr([u8; 4]);
 
 impl Display for IP4Addr {
@@ -41,7 +41,7 @@ pub struct IP4Header {
     pub dst: IP4Addr,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Show)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct IP6Addr([u16; 8]);
 
 impl Display for IP6Addr {

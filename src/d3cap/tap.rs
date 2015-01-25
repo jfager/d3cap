@@ -8,7 +8,7 @@ use util::skip_cast;
 //For possible reference:
 //https://github.com/simsong/tcpflow/blob/master/src/wifipcap/ieee802_11_radio.h
 
-#[derive(Show,Copy)]
+#[derive(Copy,Debug)]
 #[repr(packed)]
 pub struct RadiotapHeader {
     pub it_version: u8, // 8 -> 1
@@ -59,13 +59,13 @@ bitflags!(flags ItPresent: u32 {
                             | MCS.bits
 });
 
-impl fmt::Show for ItPresent {
+impl fmt::Debug for ItPresent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:08x}", self.bits)
     }
 }
 
-#[derive(Copy, Show)]
+#[derive(Copy, Debug)]
 #[repr(packed)]
 pub struct Tsft {
     pub timer_micros: u64
@@ -82,7 +82,7 @@ bitflags!(flags Flags: u8 {
     const SHORT_GUARD    = 0x80
 });
 
-#[derive(Copy, Show)]
+#[derive(Copy, Debug)]
 #[repr(packed)]
 pub struct Rate {
     pub in_500kbps: u8
@@ -99,38 +99,38 @@ bitflags!(flags ChannelFlags: u16 {
     const GFSK         = 0x0800
 });
 
-impl fmt::Show for ChannelFlags {
+impl fmt::Debug for ChannelFlags {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:08x}", self.bits)
     }
 }
 
-#[derive(Copy, Show)]
+#[derive(Copy, Debug)]
 #[repr(packed)]
 pub struct Channel {
     pub mhz: u16,
     pub flags: ChannelFlags
 }
 
-#[derive(Copy, Show)]
+#[derive(Copy, Debug)]
 #[repr(packed)]
 pub struct AntennaSignal {
     pub dbm: i8
 }
 
-#[derive(Copy, Show)]
+#[derive(Copy, Debug)]
 #[repr(packed)]
 pub struct AntennaNoise {
     pub dbm: i8
 }
 
-#[derive(Copy, Show)]
+#[derive(Copy, Debug)]
 #[repr(packed)]
 pub struct Antenna {
     pub idx: u8
 }
 
-#[derive(Copy, Show)]
+#[derive(Copy, Debug)]
 #[repr(packed)]
 pub struct Mcs {
     pub known: u8,
