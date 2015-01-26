@@ -219,7 +219,13 @@ impl PhysDataController {
                 }
 
                 if counter % 100 == 0 {
-                    for (k,v) in map.iter().filter(|&(ref k, ref v)| v.len() > 1) {
+                    let mut list: Vec<(&(FrameType, [MacAddr;3]), &FixedRingBuffer<PhysData>)>
+                        = map.iter().filter(|&(ref k, ref v)| v.len() > 1).collect();
+
+                    list.sort_by(|a, b| a.1.avg_dist().partial_cmp(&b.1.avg_dist()).unwrap());
+
+                    for i in list.iter() {
+                        let (ref k, ref v) = *i;
                         println!("{:?} [{}, {}, {}]: len: {}, dist: {}",
                                  k.0,
                                  macs.trans(k.1[0]), macs.trans(k.1[1]), macs.trans(k.1[2]),
@@ -233,7 +239,6 @@ impl PhysDataController {
 
         ctl
     }
-
 
     fn sender(&self) -> Sender<PhysData> {
         self.pd_tx.clone()
