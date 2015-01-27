@@ -45,25 +45,24 @@ fn main() {
 
     let args: Vec<String> = os::args();
 
-    let opts = vec![
-        go::optflag("h", "help", "Print this help menu"),
+    let mut opts = go::Options::new();
 
-        go::optopt(interface_opt, "interface", "Network interface to listen on", "interface"),
-        go::optopt(file_opt, "file", "File to load from", "cap_file"),
-        go::optopt(conf_opt, "conf", "Configuration file", "conf_file"),
-        go::optflag(promisc_flag, "promisc", "Turn on promiscuous mode"),
-        go::optflag(monitor_flag, "monitor", "Turn on monitor mode"),
+    opts.optflag("h", "help", "Print this help menu")
+        .optopt(interface_opt, "interface", "Network interface to listen on", "interface")
+        .optopt(file_opt, "file", "File to load from", "cap_file")
+        .optopt(conf_opt, "conf", "Configuration file", "conf_file")
+        .optflag(promisc_flag, "promisc", "Turn on promiscuous mode")
+        .optflag(monitor_flag, "monitor", "Turn on monitor mode")
+        .optflagopt("", websocket_opt, "Run websocket ui server on startup",
+                    &format!("port [{}]", websocket_default)[]);
 
-        go::optflagopt("", websocket_opt, "Run websocket ui server on startup", &format!("port [{}]", websocket_default)[])
-    ];
-
-    let matches = match go::getopts(args.tail(), &opts[]) {
+    let matches = match opts.parse(args.tail()) {
         Ok(m) => { m }
         Err(f) => { panic!("{}", f) }
     };
 
     if matches.opt_present("h") {
-        println!("{}", go::usage(&go::short_usage(&args[0][], &opts[])[], &opts[]));
+        println!("{}", opts.usage(&opts.short_usage(&args[0][])[]));
         return;
     }
 

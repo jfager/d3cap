@@ -244,7 +244,7 @@ impl PhysDataController {
                         pdc.dat.push(pd);
                         pdc.count += 1;
                     }
-                    Entry::Vacant(mut e) => {
+                    Entry::Vacant(e) => {
                         let mut pdc = PhysDataVal::new();
                         pdc.dat.push(pd);
                         pdc.count += 1;
@@ -254,7 +254,7 @@ impl PhysDataController {
 
                 if counter % 100 == 0 {
                     let mut list: Vec<(&PhysDataKey, &PhysDataVal)>
-                        = map.iter().filter(|&(ref k, ref v)| v.dat.len() > 1).collect();
+                        = map.iter().filter(|&(_, ref v)| v.dat.len() > 1).collect();
 
                     list.sort_by(|a, b| a.1.avg_dist().partial_cmp(&b.1.avg_dist()).unwrap());
 
