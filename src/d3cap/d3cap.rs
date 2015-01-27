@@ -190,6 +190,32 @@ impl PhysData {
     }
 }
 
+#[derive(PartialEq, Eq, Hash)]
+struct PhysDataKey(FrameType, [MacAddr;3]);
+
+struct PhysDataVal {
+    dat: FixedRingBuffer<PhysData>,
+    count: u32,
+}
+
+impl PhysDataVal {
+    fn new() -> PhysDataVal {
+        PhysDataVal {
+            dat: FixedRingBuffer::new(10),
+            count: 0
+        }
+    }
+
+    fn avg_dist(&self) -> f32 {
+        let mut s = 0.0;
+        for pd in self.dat.iter() {
+            s += pd.dist();
+        }
+        s / (self.dat.len() as f32)
+    }
+
+}
+
 #[derive(Clone)]
 struct PhysDataController {
     pd_tx: Sender<PhysData>,
@@ -203,8 +229,7 @@ impl PhysDataController {
         };
 
         thread::Builder::new().name("physdata_handler".to_string()).spawn(move || -> () {
-            let mut map: HashMap<(FrameType, [MacAddr;3]), FixedRingBuffer<PhysData>>
-                = HashMap::new();
+            let mut map: HashMap<PhysDataKey, PhysDataVal> = HashMap::new();
             let mut counter = 0;
             loop {
                 let res = pd_rx.recv();
@@ -213,23 +238,32 @@ impl PhysDataController {
                 }
                 let pd = res.unwrap();
 
-                match map.entry((pd.frame_ty, pd.addrs)) {
-                    Entry::Occupied(mut e) => e.get_mut().push(pd),
-                    Entry::Vacant(e) => e.insert(FixedRingBuffer::new(10)).push(pd)
-                }
+                match map.entry(PhysDataKey(pd.frame_ty, pd.addrs)) {
+                    Entry::Occupied(mut e) => {
+                        let mut pdc = e.get_mut();
+                        pdc.dat.push(pd);
+                        pdc.count += 1;
+                    }
+                    Entry::Vacant(mut e) => {
+                        let mut pdc = PhysDataVal::new();
+                        pdc.dat.push(pd);
+                        pdc.count += 1;
+                        e.insert(pdc);
+                    }
+                };
 
                 if counter % 100 == 0 {
-                    let mut list: Vec<(&(FrameType, [MacAddr;3]), &FixedRingBuffer<PhysData>)>
-                        = map.iter().filter(|&(ref k, ref v)| v.len() > 1).collect();
+                    let mut list: Vec<(&PhysDataKey, &PhysDataVal)>
+                        = map.iter().filter(|&(ref k, ref v)| v.dat.len() > 1).collect();
 
                     list.sort_by(|a, b| a.1.avg_dist().partial_cmp(&b.1.avg_dist()).unwrap());
 
                     for i in list.iter() {
                         let (ref k, ref v) = *i;
-                        println!("{:?} [{}, {}, {}]: len: {}, dist: {}",
+                        println!("{:?} [{}, {}, {}]: total: {}, curr_len: {}, dist: {}",
                                  k.0,
                                  macs.trans(k.1[0]), macs.trans(k.1[1]), macs.trans(k.1[2]),
-                                 v.len(), v.avg_dist());
+                                 v.count, v.dat.len(), v.avg_dist());
                     }
                     println!("");
                 }
@@ -255,21 +289,6 @@ impl TransMac for MacMap {
             Some(v) => v.clone(),
             None => addr.to_string()
         }
-    }
-}
-
-
-trait AvgDist {
-    fn avg_dist(&self) -> f32;
-}
-
-impl AvgDist for FixedRingBuffer<PhysData> {
-    fn avg_dist(&self) -> f32 {
-        let mut s = 0.0;
-        for pd in self.iter() {
-            s += pd.dist();
-        }
-        s / (self.len() as f32)
     }
 }
 
