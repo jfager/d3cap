@@ -1,7 +1,7 @@
 use std::thread;
 use std::hash::{Hash};
 use std::collections::hash_map::{Entry, HashMap, Hasher};
-use std::io::File;
+use std::old_io::File;
 use std::num::Float;
 use std::sync::{Arc,RwLock};
 use std::sync::mpsc::{channel, Sender};

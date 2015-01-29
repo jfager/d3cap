@@ -1,6 +1,6 @@
 use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
-use std::io::{Acceptor,Listener,Stream,BufferedStream,IoResult};
-use std::io::net::tcp::{TcpListener};
+use std::old_io::{Acceptor,Listener,Stream,BufferedStream,IoResult};
+use std::old_io::net::tcp::{TcpListener};
 use std::thread;
 use std::sync::Arc;
 

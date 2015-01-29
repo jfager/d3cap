@@ -1,9 +1,9 @@
-use std::io::{Stream,BufferedStream,IoResult};
+use std::old_io::{Stream,BufferedStream,IoResult};
 use std::num::{FromPrimitive};
 
 use rustc_serialize::base64::{ToBase64, STANDARD};
 
-use openssl::crypto::hash::{self, HashType};
+use openssl::crypto::hash::{self, Type};
 
 const CONNECTION_FIELD: &'static str = "Connection";
 const UPGRADE: &'static str = "upgrade";
@@ -45,7 +45,7 @@ struct Handshake {
 
 impl Handshake {
     pub fn get_answer(&self) -> String {
-        let res = hash::hash(HashType::SHA1, self.key.as_bytes());
+        let res = hash::hash(Type::SHA1, self.key.as_bytes());
         let response_key = res.to_base64(STANDARD);
         format!("HTTP/1.1 101 Switching Protocols\r\n\
                  {}: {}\r\n\
