@@ -1,4 +1,4 @@
-#![allow(unstable)]
+#![feature(std_misc, collections)]
 
 use std::sync::mpsc::{channel, Sender, SendError, Receiver};
 use std::thread;

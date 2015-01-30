@@ -17,11 +17,11 @@ impl WebSocketWorker {
     fn handshake<S: Stream>(&self, tcps: &mut BufferedStream<S>) -> IoResult<()> {
         match ws::parse_handshake(tcps) {
             Some(hs) => {
-                try!(tcps.write(hs.get_answer().as_bytes()));
+                try!(tcps.write_all(hs.get_answer().as_bytes()));
                 try!(tcps.flush());
             }
             None => {
-                try!(tcps.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()));
+                try!(tcps.write_all("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()));
             }
         }
         Ok(())

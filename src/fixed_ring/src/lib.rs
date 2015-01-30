@@ -2,7 +2,7 @@
 
 // Fixed-size ring buffer: when it is at capacity push will drop the oldest element.
 
-#![allow(unstable)]
+#![feature(core)]
 
 extern crate "rustc-serialize" as rustc_serialize;
 

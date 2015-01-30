@@ -121,7 +121,7 @@ pub fn write_frame<W:Writer>(data: &[u8], frame_type: FrameType, w: &mut W) -> I
         try!(w.write_u8(LARGE_FRAME_FLAG));
         try!(w.write_be_u64(data.len() as u64));
     }
-    try!(w.write(data));
+    try!(w.write_all(data));
     w.flush()
 }
 
@@ -157,7 +157,7 @@ pub fn parse_input_frame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<Vec<u8
                 Ok(mp) => mp,
                 _ => return (None, FrameType::Error)
             };
-            let payload = masked_payload.slice_from(4).iter()
+            let payload = masked_payload[4..].iter()
                 .enumerate()
                 .map(|(i, t)| { *t ^ masked_payload[i%4] })
                 .collect();

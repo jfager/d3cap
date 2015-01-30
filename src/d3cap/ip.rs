@@ -1,10 +1,9 @@
-use std::hash::Hash;
 use std::fmt::{Display,Error,Formatter};
 
 use rustc_serialize::{Encodable, Encoder};
 
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct IP4Addr([u8; 4]);
 
 impl Display for IP4Addr {
@@ -20,12 +19,6 @@ impl Encodable for IP4Addr {
     }
 }
 
-//TODO: replace w/ derive once https://github.com/rust-lang/rust/pull/21404 lands
-impl<S: ::std::hash::Writer+::std::hash::Hasher> Hash<S> for IP4Addr {
-    fn hash(&self, state: &mut S) {
-        self.0.hash(state)
-    }
-}
 
 #[repr(packed)]
 pub struct IP4Header {
@@ -41,7 +34,7 @@ pub struct IP4Header {
     pub dst: IP4Addr,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct IP6Addr([u16; 8]);
 
 impl Display for IP6Addr {
@@ -74,12 +67,6 @@ impl Encodable for IP6Addr {
     }
 }
 
-//TODO: replace w/ derive once https://github.com/rust-lang/rust/pull/21404 lands
-impl<S: ::std::hash::Writer+::std::hash::Hasher> Hash<S> for IP6Addr {
-    fn hash(&self, state: &mut S) {
-        self.0.hash(state)
-    }
-}
 
 #[repr(packed)]
 pub struct IP6Header {
