@@ -420,12 +420,10 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
             = HashMap::new();
 
         cmds.insert("ping".to_string(),
-                    ("ping", Box::new(|&mut: _: Vec<&str>, _: &mut D3capController| {
-                        println!("pong");
-                    })));
+                    ("ping", Box::new(|_, _| println!("pong"))));
 
         cmds.insert("websocket".to_string(),
-                    ("websocket", Box::new(|&mut: cmd: Vec<&str>, ctrl: &mut D3capController| {
+                    ("websocket", Box::new(|cmd, ctrl| {
                         match &cmd[] {
                             [_, ref port] => {
                                 if let Some(p) = port.parse() {
@@ -438,7 +436,7 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
                     })));
 
         cmds.insert("ls".to_string(),
-                    ("ls", Box::new(|&mut: cmd: Vec<&str>, ctrl: &mut D3capController| {
+                    ("ls", Box::new(|cmd, ctrl| {
                         match &cmd[] {
                             [_, "mac"] => {
                                 println!("{:?}", *ctrl.pg_ctrl.mac.graph.read().unwrap());
@@ -475,8 +473,6 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
         }
     })
 }
-
-// unboxed closure question:  why does http://is.gd/mlI7FS work but http://is.gd/yUbkvT blow up?  diff is in former closure takes String arg, latter it takes &str.  how would i get a ref arg to work?
 
 fn load_mac_addrs(file: String) -> HashMap<MacAddr, String> {
     let s = File::open(&Path::new(file)).read_to_string().unwrap();
