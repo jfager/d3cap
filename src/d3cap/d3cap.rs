@@ -82,7 +82,7 @@ impl ProtoGraphController {
         };
 
         let mut phctl = ctl.clone();
-        thread::Builder::new().name("protocol_handler".to_string()).spawn(move || -> () {
+        thread::Builder::new().name("protocol_handler".to_string()).spawn(move || {
             loop {
                 let pkt = cap_rx.recv();
                 if pkt.is_err() {
@@ -219,18 +219,19 @@ impl PhysDataVal {
 #[derive(Clone)]
 struct PhysDataController {
     pd_tx: Sender<PhysData>,
+    map:  Arc<RwLock<HashMap<PhysDataKey, PhysDataVal>>>
 }
 
 impl PhysDataController {
-    fn spawn(macs: MacMap) -> PhysDataController {
+    fn spawn() -> PhysDataController {
         let (pd_tx, pd_rx) = channel();
-        let ctl = PhysDataController {
+        let out = PhysDataController {
             pd_tx: pd_tx,
+            map: Arc::new(RwLock::new(HashMap::new()))
         };
 
-        thread::Builder::new().name("physdata_handler".to_string()).spawn(move || -> () {
-            let mut map: HashMap<PhysDataKey, PhysDataVal> = HashMap::new();
-            let mut counter = 0;
+        let ctl = out.clone();
+        thread::Builder::new().name("physdata_handler".to_string()).spawn(move || {
             loop {
                 let res = pd_rx.recv();
                 if res.is_err() {
@@ -238,7 +239,7 @@ impl PhysDataController {
                 }
                 let pd = res.unwrap();
 
-                match map.entry(PhysDataKey(pd.frame_ty, pd.addrs)) {
+                match ctl.map.write().unwrap().entry(PhysDataKey(pd.frame_ty, pd.addrs)) {
                     Entry::Occupied(mut e) => {
                         let mut pdc = e.get_mut();
                         pdc.dat.push(pd);
@@ -251,27 +252,10 @@ impl PhysDataController {
                         e.insert(pdc);
                     }
                 };
-
-                if counter % 100 == 0 {
-                    let mut list: Vec<(&PhysDataKey, &PhysDataVal)>
-                        = map.iter().filter(|&(_, ref v)| v.dat.len() > 1).collect();
-
-                    list.sort_by(|a, b| a.1.avg_dist().partial_cmp(&b.1.avg_dist()).unwrap());
-
-                    for i in list.iter() {
-                        let (ref k, ref v) = *i;
-                        println!("{:?} [{}, {}, {}]: total: {}, curr_len: {}, dist: {}",
-                                 k.0,
-                                 macs.trans(k.1[0]), macs.trans(k.1[1]), macs.trans(k.1[2]),
-                                 v.count, v.dat.len(), v.avg_dist());
-                    }
-                    println!("");
-                }
-                counter += 1;
             }
         });
 
-        ctl
+        out
     }
 
     fn sender(&self) -> Sender<PhysData> {
@@ -451,6 +435,27 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
                         }
                     })));
 
+        cmds.insert("foo".to_string(),
+                    ("foo", Box::new(|cmd, ctrl| {
+                        let m = ctrl.pd_ctrl.map.read().unwrap();
+                        let mut list: Vec<(&PhysDataKey, &PhysDataVal)> =
+                            m.iter().filter(|&(_, ref v)| v.dat.len() > 1).collect();
+
+                        list.sort_by(|a, b| a.1.avg_dist().partial_cmp(&b.1.avg_dist()).unwrap());
+
+                        let macs = &ctrl.mac_map;
+
+                        for i in list.iter() {
+                            let (ref k, ref v) = *i;
+                            println!("{:?} [{}, {}, {}]: total: {}, curr_len: {}, dist: {}",
+                                     k.0,
+                                     macs.trans(k.1[0]), macs.trans(k.1[1]), macs.trans(k.1[2]),
+                                     v.count, v.dat.len(), v.avg_dist());
+                        }
+                        println!("");
+
+                    })));
+
         let maxlen = cmds.keys().map(|x| x.len()).max().unwrap();
 
         while let Some(val) = readline("> ") {
@@ -515,7 +520,7 @@ impl D3capController {
             .unwrap_or_else(HashMap::new);
 
         let pg_ctrl = ProtoGraphController::spawn();
-        let pd_ctrl = PhysDataController::spawn(mac_map.clone());
+        let pd_ctrl = PhysDataController::spawn();
 
         start_capture(conf, pg_ctrl.sender(), pd_ctrl.sender()).detach();
 

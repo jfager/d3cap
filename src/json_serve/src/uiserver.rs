@@ -106,7 +106,7 @@ impl UIServer {
     pub fn create_sender<T:Encodable+Send+Sync>(&self) -> Sender<Arc<T>> {
         let (tx, rx) = channel();
         let jb = self.json_multicast.clone();
-        thread::Builder::new().name("routes_ui".to_string()).spawn(move || -> () {
+        thread::Builder::new().name("routes_ui".to_string()).spawn(move || {
             loop {
                 let t: Result<Arc<T>, _> = rx.recv();
                 match t {
