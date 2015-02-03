@@ -1,5 +1,6 @@
 use std::thread;
 use std::hash::{Hash};
+use std::iter;
 use std::collections::hash_map::{Entry, HashMap, Hasher};
 use std::old_io::File;
 use std::num::Float;
@@ -18,7 +19,7 @@ use ether::{EthernetHeader, MacAddr,
             ETHERTYPE_ARP, ETHERTYPE_IP4, ETHERTYPE_IP6, ETHERTYPE_802_1X};
 use dot11::{self, FrameType};
 use tap;
-use pkt_graph::{PktMeta, ProtocolGraph, RouteStats};
+use pkt_graph::{PktStats, PktMeta, ProtocolGraph, RouteStats};
 use fixed_ring::FixedRingBuffer;
 
 
@@ -421,14 +422,25 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
 
         cmds.insert("ls".to_string(),
                     ("ls", Box::new(|cmd, ctrl| {
-                        match &cmd[] {
-                            [_, "mac"] => {
-                                println!("{:?}", *ctrl.pg_ctrl.mac.graph.read().unwrap());
+                        match &cmd[1..] {
+                            ["mac"] => {
+                                let graph = ctrl.pg_ctrl.mac.graph.read().unwrap();
+                                let mut list: Vec<(&MacAddr, (&MacAddr, &PktStats))> =
+                                    graph.iter().flat_map(|(src_addr, astats)| {
+                                        iter::repeat(src_addr).zip(astats.sent_iter())
+                                    }).collect();
+
+                                list.sort_by(|a,b| (a.1).1.count.cmp(&(b.1).1.count).reverse());
+
+                                for &(src_addr, (dst_addr, pstats)) in list.iter() {
+                                    println!("{} -> {}: count: {}, size: {}",
+                                             src_addr, dst_addr, pstats.count, pstats.size);
+                                }
                             }
-                            [_, "ip4"] => {
+                            ["ip4"] => {
                                 println!("{:?}", *ctrl.pg_ctrl.ip4.graph.read().unwrap());
                             }
-                            [_, "ip6"] => {
+                            ["ip6"] => {
                                 println!("{:?}", *ctrl.pg_ctrl.ip6.graph.read().unwrap());
                             }
                             _ => println!("Illegal argument")

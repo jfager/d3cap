@@ -1,4 +1,4 @@
-use std::collections::hash_map::{HashMap, Hasher};
+use std::collections::hash_map::{self, HashMap, Hasher};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::hash::{Hash};
 
@@ -19,8 +19,8 @@ impl<T> PktMeta<T> {
 
 #[derive(RustcEncodable, Copy, Clone, Debug)]
 pub struct PktStats {
-    count: u64,
-    size: u64
+    pub count: u64,
+    pub size: u64
 }
 impl PktStats {
     pub fn new() -> PktStats {
@@ -40,7 +40,7 @@ pub struct AddrStats<T:Hash<Hasher>+Eq> {
     received: PktStats,
     received_from: HashMap<T, PktStats>
 }
-impl <T:Hash<Hasher>+Eq+Clone> AddrStats<T> {
+impl <'a, T:Hash<Hasher>+Eq+Clone> AddrStats<T> {
     pub fn new() -> AddrStats<T> {
         AddrStats { sent: PktStats::new(), sent_to: HashMap::new(),
                     received: PktStats::new(), received_from: HashMap::new() }
@@ -59,6 +59,10 @@ impl <T:Hash<Hasher>+Eq+Clone> AddrStats<T> {
         AddrStats::get(&self.sent_to, to)
     }
 
+    pub fn sent_iter(&'a self) -> ASIter<'a, T> {
+        ASIter { inner: self.sent_to.iter() }
+    }
+
 
     pub fn update_received_from(&mut self, from: T, size: u32) -> PktStats {
         self.received.update(size);
@@ -72,6 +76,11 @@ impl <T:Hash<Hasher>+Eq+Clone> AddrStats<T> {
     pub fn get_received_from(&self, from: &T) -> PktStats {
         AddrStats::get(&self.received_from, from)
     }
+
+    pub fn recv_iter(&'a self) -> ASIter<'a, T> {
+        ASIter { inner: self.received_from.iter() }
+    }
+
 
 
     fn get(m: &HashMap<T, PktStats>, addr: &T) -> PktStats {
@@ -90,6 +99,23 @@ impl <T:Hash<Hasher>+Eq+Clone> AddrStats<T> {
         *stats
     }
 }
+
+struct ASIter<'a, T:'a> {
+    inner: hash_map::Iter<'a, T, PktStats>
+}
+
+impl<'a, T: 'a+Hash<Hasher>+Eq+Copy+Clone> Iterator for ASIter<'a, T> {
+    type Item = (&'a T, &'a PktStats);
+
+    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+        self.inner.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
 
 #[derive(RustcEncodable, Clone)]
 pub struct SentStats<T> {
@@ -157,5 +183,25 @@ impl<'a, T: Hash<Hasher>+Eq+Copy+Clone> ProtocolGraph<T> {
 
     pub fn get_addr_stats(&self, addr: &T) -> Option<&AddrStats<T>> {
         self.routes.get(addr)
+    }
+
+    pub fn iter(&'a self) -> PGIter<'a, T> {
+        PGIter { inner: self.routes.iter() }
+    }
+}
+
+struct PGIter<'a, T:'a> {
+    inner: hash_map::Iter<'a, T, AddrStats<T>>
+}
+
+impl<'a, T: 'a+Hash<Hasher>+Eq+Copy+Clone> Iterator for PGIter<'a, T> {
+    type Item = (&'a T, &'a AddrStats<T>);
+
+    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+        self.inner.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
     }
 }
