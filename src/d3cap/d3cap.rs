@@ -425,8 +425,8 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
                         match &cmd[1..] {
                             ["mac"] => {
                                 let graph = ctrl.pg_ctrl.mac.graph.read().unwrap();
-                                let mut list: Vec<(&MacAddr, (&MacAddr, &PktStats))> =
-                                    graph.iter().flat_map(|(src_addr, astats)| {
+                                let mut list: Vec<_> = graph.iter()
+                                    .flat_map(|(src_addr, astats)| {
                                         iter::repeat(src_addr).zip(astats.sent_iter())
                                     }).collect();
 
@@ -450,8 +450,8 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
         cmds.insert("foo".to_string(),
                     ("foo", Box::new(|cmd, ctrl| {
                         let m = ctrl.pd_ctrl.map.read().unwrap();
-                        let mut list: Vec<(&PhysDataKey, &PhysDataVal)> =
-                            m.iter().filter(|&(_, ref v)| v.dat.len() > 1).collect();
+                        let mut list: Vec<_> = m.iter()
+                            .filter(|&(_, ref v)| v.dat.len() > 1).collect();
 
                         list.sort_by(|a, b| a.1.avg_dist().partial_cmp(&b.1.avg_dist()).unwrap());
 
@@ -471,7 +471,7 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
         let maxlen = cmds.keys().map(|x| x.len()).max().unwrap();
 
         while let Some(val) = readline("> ") {
-             let full_cmd: Vec<&str> = val.split(' ').collect();
+             let full_cmd: Vec<_> = val.split(' ').collect();
              match full_cmd[0] {
                  "h" | "help" => {
                      println!("\nAvailable commands are:");

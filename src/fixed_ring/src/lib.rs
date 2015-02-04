@@ -212,11 +212,11 @@ fn test_functional() {
     }
     assert!(max == 5);
 
-    let odd: Vec<bool> = buffer.iter().map(|e| {*e & 1 == 1}).collect();
+    let odd: Vec<_> = buffer.iter().map(|e| {*e & 1 == 1}).collect();
     assert!(odd == vec![true, true, true, false]);
 
     // filter returns elements for which the closure returns true
-    let odd: Vec<i32> = buffer.iter().filter_map(|&e| {
+    let odd: Vec<_> = buffer.iter().filter_map(|&e| {
         if e & 1 == 1 { Some(e) } else { None }
     }).collect();
     assert!(odd == vec![1, 3, 5]);

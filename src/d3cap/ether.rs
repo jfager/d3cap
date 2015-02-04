@@ -22,7 +22,7 @@ impl Encodable for MacAddr {
 
 impl MacAddr {
     pub fn from_string(mac: &str) -> Option<MacAddr> {
-        let v: Vec<&str> = mac.split(':').collect();
+        let v: Vec<_> = mac.split(':').collect();
         if v.len() == 6 {
             let mut out = [0; 6];
             for (i, s) in v.iter().enumerate() {

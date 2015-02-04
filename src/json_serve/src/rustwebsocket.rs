@@ -63,7 +63,7 @@ pub fn parse_handshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake
         _ => return None
     };
 
-    let prop: Vec<&str> = line.split_str(" ").collect();
+    let prop: Vec<_> = line.split_str(" ").collect();
     let mut hs = Handshake {
         //host: ~"",
         //origin: ~"",
@@ -84,7 +84,7 @@ pub fn parse_handshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake
             return if has_handshake { Some(hs) } else { None };
         }
 
-        let prop: Vec<&str> = line.split_str(": ").collect();
+        let prop: Vec<_> = line.split_str(": ").collect();
         if prop.len() != 2 {
             println!("Unexpected line: '{}'", line);
             return None;
