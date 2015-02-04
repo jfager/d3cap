@@ -68,7 +68,10 @@ fn main() {
 
     let conf = D3capConf {
         websocket: matches.opt_default(websocket_opt, "7432").map(|p| {
-            p.parse::<u16>().expect("websocket port must be a number")
+            match p.parse::<u16>() {
+                Ok(v) => v,
+                _ => panic!("websocket port must be a number")
+            }
         }),
         interface: matches.opt_str(interface_opt),
         file: matches.opt_str(file_opt),

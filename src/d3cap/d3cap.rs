@@ -411,7 +411,7 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
                     ("websocket", Box::new(|cmd, ctrl| {
                         match &cmd[] {
                             [_, ref port] => {
-                                if let Some(p) = port.parse() {
+                                if let Ok(p) = port.parse() {
                                     ctrl.start_websocket(p);
                                 }
                             },
