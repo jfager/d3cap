@@ -1,6 +1,7 @@
 use std::thread;
 use std::hash::{Hash};
 use std::iter;
+use std::fmt::{Display};
 use std::collections::hash_map::{Entry, HashMap, Hasher};
 use std::old_io::File;
 use std::num::Float;
@@ -420,29 +421,28 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
                         }
                     })));
 
+        fn print_ls<T:Eq+Hash<Hasher>+Copy+Clone+Display+Send+Sync>(ph: &ProtocolHandler<T>) {
+            let graph = ph.graph.read().unwrap();
+            let mut list: Vec<_> = graph.iter()
+                .flat_map(|(src_addr, astats)| {
+                    iter::repeat(src_addr).zip(astats.sent_iter())
+                }).collect();
+
+            list.sort_by(|a,b| (a.1).1.count.cmp(&(b.1).1.count).reverse());
+
+            for &(src_addr, (dst_addr, pstats)) in list.iter() {
+                println!("{} -> {}: count: {}, size: {}",
+                         src_addr, dst_addr, pstats.count, pstats.size);
+            }
+        }
+
+
         cmds.insert("ls".to_string(),
                     ("ls", Box::new(|cmd, ctrl| {
                         match &cmd[1..] {
-                            ["mac"] => {
-                                let graph = ctrl.pg_ctrl.mac.graph.read().unwrap();
-                                let mut list: Vec<_> = graph.iter()
-                                    .flat_map(|(src_addr, astats)| {
-                                        iter::repeat(src_addr).zip(astats.sent_iter())
-                                    }).collect();
-
-                                list.sort_by(|a,b| (a.1).1.count.cmp(&(b.1).1.count).reverse());
-
-                                for &(src_addr, (dst_addr, pstats)) in list.iter() {
-                                    println!("{} -> {}: count: {}, size: {}",
-                                             src_addr, dst_addr, pstats.count, pstats.size);
-                                }
-                            }
-                            ["ip4"] => {
-                                println!("{:?}", *ctrl.pg_ctrl.ip4.graph.read().unwrap());
-                            }
-                            ["ip6"] => {
-                                println!("{:?}", *ctrl.pg_ctrl.ip6.graph.read().unwrap());
-                            }
+                            ["mac"] => print_ls(&ctrl.pg_ctrl.mac),
+                            ["ip4"] => print_ls(&ctrl.pg_ctrl.ip4),
+                            ["ip6"] => print_ls(&ctrl.pg_ctrl.ip6),
                             _ => println!("Illegal argument")
                         }
                     })));
