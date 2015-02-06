@@ -265,13 +265,13 @@ impl PhysDataController {
     }
 }
 
-trait TransMac {
-    fn trans(&self, addr: MacAddr) -> String;
+trait TransAddr<T> {
+    fn trans(&self, addr: &T) -> String;
 }
 
-impl TransMac for MacMap {
-    fn trans(&self, addr: MacAddr) -> String {
-        match self.get(&addr) {
+impl<T:Display+Eq+PartialEq+Hash<Hasher>> TransAddr<T> for HashMap<T, String> {
+    fn trans(&self, addr: &T) -> String {
+        match self.get(addr) {
             Some(v) => v.clone(),
             None => addr.to_string()
         }
@@ -398,6 +398,8 @@ pub fn start_capture<'a>(conf: D3capConf,
     })
 }
 
+
+
 fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
     thread::Builder::new().name("cli".to_string()).scoped(move || {
         let mut ctrl = ctrl;
@@ -421,7 +423,10 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
                         }
                     })));
 
-        fn print_ls<T:Eq+Hash<Hasher>+Copy+Clone+Display+Send+Sync>(ph: &ProtocolHandler<T>) {
+        fn print_ls<A, T>(ph: &ProtocolHandler<A>, t: &T)
+            where A: Eq+Hash<Hasher>+Copy+Clone+Display+Send+Sync,
+                  T: TransAddr<A>
+        {
             let graph = ph.graph.read().unwrap();
             let mut list: Vec<_> = graph.iter()
                 .flat_map(|(src_addr, astats)| {
@@ -432,7 +437,7 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
 
             for &(src_addr, (dst_addr, pstats)) in list.iter() {
                 println!("{} -> {}: count: {}, size: {}",
-                         src_addr, dst_addr, pstats.count, pstats.size);
+                         t.trans(&src_addr), t.trans(&dst_addr), pstats.count, pstats.size);
             }
         }
 
@@ -440,9 +445,9 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
         cmds.insert("ls".to_string(),
                     ("ls", Box::new(|cmd, ctrl| {
                         match &cmd[1..] {
-                            ["mac"] => print_ls(&ctrl.pg_ctrl.mac),
-                            ["ip4"] => print_ls(&ctrl.pg_ctrl.ip4),
-                            ["ip6"] => print_ls(&ctrl.pg_ctrl.ip6),
+                            ["mac"] => print_ls(&ctrl.pg_ctrl.mac, &ctrl.mac_map),
+                            ["ip4"] => print_ls(&ctrl.pg_ctrl.ip4, &HashMap::new()),
+                            ["ip6"] => print_ls(&ctrl.pg_ctrl.ip6, &HashMap::new()),
                             _ => println!("Illegal argument")
                         }
                     })));
@@ -461,7 +466,7 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
                             let (ref k, ref v) = *i;
                             println!("{:?} [{}, {}, {}]: total: {}, curr_len: {}, dist: {}",
                                      k.0,
-                                     macs.trans(k.1[0]), macs.trans(k.1[1]), macs.trans(k.1[2]),
+                                     macs.trans(&k.1[0]), macs.trans(&k.1[1]), macs.trans(&k.1[2]),
                                      v.count, v.dat.len(), v.avg_dist());
                         }
                         println!("");
