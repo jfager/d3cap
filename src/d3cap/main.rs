@@ -30,7 +30,7 @@ mod readline;
 fn main() {
 
     use getopts as go;
-    use std::{os};
+    use std::{env};
     use d3cap::{D3capConf};
 
     let interface_opt = "i";
@@ -43,8 +43,6 @@ fn main() {
     let websocket_opt = "websocket";
     let websocket_default = "7432";
 
-    let args: Vec<String> = os::args();
-
     let mut opts = go::Options::new();
 
     opts.optflag("h", "help", "Print this help menu")
@@ -56,13 +54,13 @@ fn main() {
         .optflagopt("", websocket_opt, "Run websocket ui server on startup",
                     &format!("port [{}]", websocket_default)[]);
 
-    let matches = match opts.parse(args.tail()) {
+    let matches = match opts.parse(env::args()) {
         Ok(m) => { m }
         Err(f) => { panic!("{}", f) }
     };
 
     if matches.opt_present("h") {
-        println!("{}", opts.usage(&opts.short_usage(&args[0][])[]));
+        println!("{}", opts.usage(&opts.short_usage("d3cap")[]));
         return;
     }
 
