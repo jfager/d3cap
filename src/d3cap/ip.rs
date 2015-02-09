@@ -1,10 +1,22 @@
 use std::fmt::{Display,Error,Formatter};
+use std::old_io::{net};
 
 use rustc_serialize::{Encodable, Encoder};
+
+pub trait AsStdIpAddr {
+    fn as_std_ip(&self) -> net::ip::IpAddr;
+}
 
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct IP4Addr([u8; 4]);
+
+impl AsStdIpAddr for IP4Addr {
+    fn as_std_ip(&self) -> net::ip::IpAddr {
+        let &IP4Addr(a) = self;
+        net::ip::IpAddr::Ipv4Addr(a[0], a[1], a[2], a[3])
+    }
+}
 
 impl Display for IP4Addr {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
@@ -36,6 +48,13 @@ pub struct IP4Header {
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct IP6Addr([u16; 8]);
+
+impl AsStdIpAddr for IP6Addr {
+    fn as_std_ip(&self) -> net::ip::IpAddr {
+        let &IP6Addr(a) = self;
+        net::ip::IpAddr::Ipv6Addr(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7])
+    }
+}
 
 impl Display for IP6Addr {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {

@@ -1,10 +1,12 @@
 use std::thread;
+use std::cell::RefCell;
 use std::hash::{Hash};
 use std::iter;
 use std::fmt::{Display};
 use std::collections::hash_map::{Entry, HashMap, Hasher};
-use std::old_io::File;
+use std::old_io::{net, File};
 use std::num::Float;
+use std::rc::Rc;
 use std::sync::{Arc,RwLock};
 use std::sync::mpsc::{channel, Sender};
 use std::thread::JoinGuard;
@@ -15,12 +17,12 @@ use multicast::Multicast;
 use json_serve::uiserver::UIServer;
 use readline::readline;
 use util::{ntohs, skip_bytes_cast, skip_cast};
-use ip::{IP4Addr, IP6Addr, IP4Header, IP6Header};
+use ip::{AsStdIpAddr, IP4Addr, IP6Addr, IP4Header, IP6Header};
 use ether::{EthernetHeader, MacAddr,
             ETHERTYPE_ARP, ETHERTYPE_IP4, ETHERTYPE_IP6, ETHERTYPE_802_1X};
 use dot11::{self, FrameType};
 use tap;
-use pkt_graph::{PktStats, PktMeta, ProtocolGraph, RouteStats};
+use pkt_graph::{PktMeta, ProtocolGraph, RouteStats};
 use fixed_ring::FixedRingBuffer;
 
 
@@ -266,17 +268,38 @@ impl PhysDataController {
 }
 
 trait TransAddr<T> {
-    fn trans(&self, addr: &T) -> String;
+    fn trans(&mut self, addr: &T) -> String;
 }
 
-impl<T:Display+Eq+PartialEq+Hash<Hasher>> TransAddr<T> for HashMap<T, String> {
-    fn trans(&self, addr: &T) -> String {
+impl TransAddr<MacAddr> for HashMap<MacAddr, String> {
+    fn trans(&mut self, addr: &MacAddr) -> String {
         match self.get(addr) {
             Some(v) => v.clone(),
             None => addr.to_string()
         }
     }
 }
+
+impl<T:AsStdIpAddr+Eq+Hash<Hasher>+Display+Clone> TransAddr<T> for HashMap<T, String> {
+    fn trans(&mut self, addr: &T) -> String {
+        let mut k = addr.clone();
+        match self.entry(k) {
+            Entry::Occupied(e) => e.get().clone(),
+            Entry::Vacant(e) => {
+                let a = addr.as_std_ip();
+                let n = match net::addrinfo::get_address_name(a) {
+                    Ok(name) => name,
+                    _ => addr.to_string()
+                };
+                let out = n.clone();
+                e.insert(n);
+                out
+            }
+        }
+    }
+}
+
+
 
 
 struct RadiotapCtx {
@@ -423,7 +446,7 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
                         }
                     })));
 
-        fn print_ls<A, T>(ph: &ProtocolHandler<A>, t: &T)
+        fn print_ls<A, T>(ph: &ProtocolHandler<A>, t: &mut T)
             where A: Eq+Hash<Hasher>+Copy+Clone+Display+Send+Sync,
                   T: TransAddr<A>
         {
@@ -441,13 +464,12 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
             }
         }
 
-
         cmds.insert("ls".to_string(),
                     ("ls", Box::new(|cmd, ctrl| {
                         match &cmd[1..] {
-                            ["mac"] => print_ls(&ctrl.pg_ctrl.mac, &ctrl.mac_map),
-                            ["ip4"] => print_ls(&ctrl.pg_ctrl.ip4, &HashMap::new()),
-                            ["ip6"] => print_ls(&ctrl.pg_ctrl.ip6, &HashMap::new()),
+                            ["mac"] => print_ls(&ctrl.pg_ctrl.mac, &mut ctrl.mac_names),
+                            ["ip4"] => print_ls(&ctrl.pg_ctrl.ip4, &mut ctrl.ip4_names),
+                            ["ip6"] => print_ls(&ctrl.pg_ctrl.ip6, &mut ctrl.ip6_names),
                             _ => println!("Illegal argument")
                         }
                     })));
@@ -460,7 +482,7 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
 
                         list.sort_by(|a, b| a.1.avg_dist().partial_cmp(&b.1.avg_dist()).unwrap());
 
-                        let macs = &ctrl.mac_map;
+                        let macs = &mut ctrl.mac_names;
 
                         for i in list.iter() {
                             let (ref k, ref v) = *i;
@@ -521,20 +543,26 @@ fn start_websocket(port: u16, mac_addr_map: &MacMap, pg_ctl: &ProtoGraphControll
 }
 
 type MacMap = HashMap<MacAddr, String>;
+type IP4Map = HashMap<IP4Addr, String>;
+type IP6Map = HashMap<IP6Addr, String>;
 
 #[derive(Clone)]
 pub struct D3capController {
     pg_ctrl: ProtoGraphController,
     pd_ctrl: PhysDataController,
-    mac_map: MacMap,
+    mac_names: MacMap,
+    ip4_names: IP4Map,
+    ip6_names: IP6Map,
     server_started: bool
 }
 
 impl D3capController {
     fn spawn(conf: D3capConf) -> D3capController {
-        let mac_map = conf.conf.as_ref()
+        let mac_names = conf.conf.as_ref()
             .map(|x| load_mac_addrs(x.to_string()))
             .unwrap_or_else(HashMap::new);
+        let ip4_names = HashMap::new();
+        let ip6_names = HashMap::new();
 
         let pg_ctrl = ProtoGraphController::spawn();
         let pd_ctrl = PhysDataController::spawn();
@@ -544,7 +572,9 @@ impl D3capController {
         D3capController {
             pg_ctrl: pg_ctrl,
             pd_ctrl: pd_ctrl,
-            mac_map: mac_map,
+            mac_names: mac_names,
+            ip4_names: ip4_names,
+            ip6_names: ip6_names,
             server_started: false
         }
     }
@@ -553,7 +583,7 @@ impl D3capController {
         if self.server_started {
             println!("server already started");
         } else {
-            start_websocket(port, &self.mac_map, &self.pg_ctrl);
+            start_websocket(port, &self.mac_names, &self.pg_ctrl);
             self.server_started = true;
         }
     }
