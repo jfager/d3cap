@@ -1,12 +1,10 @@
 use std::thread;
-use std::cell::RefCell;
 use std::hash::{Hash};
 use std::iter;
 use std::fmt::{Display};
 use std::collections::hash_map::{Entry, HashMap, Hasher};
 use std::old_io::{net, File};
 use std::num::Float;
-use std::rc::Rc;
 use std::sync::{Arc,RwLock};
 use std::sync::mpsc::{channel, Sender};
 use std::thread::JoinGuard;
@@ -282,7 +280,7 @@ impl TransAddr<MacAddr> for HashMap<MacAddr, String> {
 
 impl<T:AsStdIpAddr+Eq+Hash<Hasher>+Display+Clone> TransAddr<T> for HashMap<T, String> {
     fn trans(&mut self, addr: &T) -> String {
-        let mut k = addr.clone();
+        let k = addr.clone();
         match self.entry(k) {
             Entry::Occupied(e) => e.get().clone(),
             Entry::Vacant(e) => {
