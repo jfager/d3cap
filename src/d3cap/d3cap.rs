@@ -22,7 +22,7 @@ use dot11::{self, FrameType};
 use tap;
 use pkt_graph::{PktMeta, ProtocolGraph, RouteStats};
 use fixed_ring::FixedRingBuffer;
-
+use pcap::rustpcap as cap;
 
 #[derive(RustcEncodable, Clone)]
 struct RouteStatsMsg<T> {
@@ -119,7 +119,7 @@ impl ProtoGraphController {
 }
 
 trait CaptureCtx {
-    fn parse(&mut self, pkt: *const u8, len: u32);
+    fn parse(&mut self, pkt: &cap::PcapData);
 }
 
 struct EthernetCtx {
@@ -127,9 +127,9 @@ struct EthernetCtx {
 }
 
 impl CaptureCtx for EthernetCtx {
-    fn parse(&mut self, pkt_ptr: *const u8, size: u32) {
-        let ether_hdr = unsafe { &*(pkt_ptr as *const EthernetHeader) };
-        self.pkts.send(Pkt::Mac(PktMeta::new(ether_hdr.src, ether_hdr.dst, size)));
+    fn parse(&mut self, pkt: &cap::PcapData) {
+        let ether_hdr = unsafe { &*(pkt.pkt_ptr() as *const EthernetHeader) };
+        self.pkts.send(Pkt::Mac(PktMeta::new(ether_hdr.src, ether_hdr.dst, pkt.len())));
         match ether_hdr.typ {
             ETHERTYPE_ARP => {
                 //io::println("ARP!");
@@ -145,8 +145,8 @@ impl CaptureCtx for EthernetCtx {
             ETHERTYPE_802_1X => {
                 //io::println("802.1X!");
             },
-            x => {
-                println!("Unknown type: {:x}", x);
+            _ => {
+                //println!("Unknown type: {:x}", x);
             }
         }
     }
@@ -341,9 +341,9 @@ impl RadiotapCtx {
 
 
 impl CaptureCtx for RadiotapCtx {
-    fn parse(&mut self, pkt_ptr: *const u8, _: u32) {
+    fn parse(&mut self, pkt: &cap::PcapData) {
 
-        let tap_hdr = unsafe { &*(pkt_ptr as *const tap::RadiotapHeader) };
+        let tap_hdr = unsafe { &*(pkt.pkt_ptr() as *const tap::RadiotapHeader) };
 
         fn magic<U>(pkt: &tap::RadiotapHeader) -> &U {
             unsafe { skip_bytes_cast(pkt, pkt.it_len as isize) }
@@ -383,8 +383,6 @@ pub fn start_capture<'a>(conf: D3capConf,
                          pkt_sender: Sender<Pkt>,
                          pd_sender: Sender<PhysData>)
                          -> JoinGuard<'a, ()> {
-    use pcap::rustpcap as cap;
-
     thread::Builder::new().name("packet_capture".to_string()).scoped(move || {
         let sess = match conf.file {
             Some(ref f) => cap::PcapSession::from_file(&f[]),
@@ -404,7 +402,7 @@ pub fn start_capture<'a>(conf: D3capConf,
         };
 
         fn go<T:CaptureCtx>(sess: &cap::PcapSession, ctx: &mut T) {
-            loop { sess.next(|t,sz| ctx.parse(t, sz)); }
+            loop { sess.next(|cap| ctx.parse(cap)); }
         }
 
         match sess.datalink() {

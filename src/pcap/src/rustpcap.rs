@@ -115,20 +115,83 @@ impl PcapSession {
     }
 
     //TODO: add a return value for success/failure
-    pub fn next<F>(&self, mut f: F) where F: FnMut(*const u8, u32) {
+    pub fn next<F>(&self, mut f: F) where F: FnMut(&PcapData) {
         let mut head_ptr = ptr::null_mut();
         let mut data_ptr = ptr::null();
         let res = unsafe { pcap::pcap_next_ex(self.p, &mut head_ptr, &mut data_ptr) };
         match res {
             0 => return, //timed out
             1 => {
-                let (t, sz) = unsafe { (data_ptr, (*head_ptr).len) };
-                f(t, sz);
+                let p = PcapData { hdr: head_ptr, dat: data_ptr };
+                f(&p);
             }
             _ => {
                 panic!("pcap_next_ex panicked with {}, find something better to do than blow up",
                        res);
             }
+        }
+    }
+}
+
+
+pub struct PcapTimeval(pcap::Struct_timeval);
+
+impl PcapTimeval {
+    pub fn sec(&self) -> i64 {
+        self.0.tv_sec
+    }
+
+    pub fn usec(&self) -> i32 {
+        self.0.tv_usec
+    }
+}
+
+pub struct PcapData {
+    hdr: *mut pcap::Struct_pcap_pkthdr,
+    dat: *const u8
+}
+
+impl PcapData {
+    pub fn len(&self) -> u32 {
+        unsafe { (*self.hdr).len }
+    }
+
+    pub fn caplen(&self) -> u32 {
+        unsafe { (*self.hdr).caplen }
+    }
+
+    pub fn ts(&self) -> PcapTimeval {
+        unsafe { PcapTimeval((*self.hdr).ts) }
+    }
+
+    pub fn pkt_ptr(&self) -> *const u8 {
+        self.dat
+    }
+}
+
+pub struct PcapDumper {
+    p: *mut pcap::Struct_pcap_dumper
+}
+
+impl PcapDumper {
+    pub fn new(sess: &PcapSession, path: &str) -> PcapDumper {
+        unsafe {
+            let p = pcap::pcap_dump_open(sess.p, CString::from_slice(path.as_bytes()).as_ptr());
+            PcapDumper { p: p }
+        }
+    }
+
+    pub fn dump(&mut self, hdr: *const pcap::Struct_pcap_pkthdr, data: *const u8) {
+        unsafe {
+            pcap::pcap_dump(self.p as *mut u8, hdr, data);
+        }
+    }
+}
+
+impl Drop for PcapDumper {
+    fn drop(&mut self) {
+        unsafe {
+            pcap::pcap_dump_close(self.p);
         }
     }
 }
