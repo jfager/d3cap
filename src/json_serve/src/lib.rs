@@ -1,6 +1,6 @@
 #![crate_type="lib"]
 
-#![feature(std_misc, collections, io, core)]
+#![feature(std_misc, collections, io)]
 
 extern crate openssl;
 

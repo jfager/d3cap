@@ -2,8 +2,6 @@
 
 // Fixed-size ring buffer: when it is at capacity push will drop the oldest element.
 
-#![feature(core)]
-
 extern crate "rustc-serialize" as rustc_serialize;
 
 use std::iter::Iterator;

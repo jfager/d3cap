@@ -1,4 +1,4 @@
-#![feature(collections, core, std_misc, hash, io, env, path, libc)]
+#![feature(collections, std_misc, hash, io, env, path, libc)]
 
 extern crate getopts;
 extern crate collections;

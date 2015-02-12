@@ -125,10 +125,6 @@ pub fn write_frame<W:Writer>(data: &[u8], frame_type: FrameType, w: &mut W) -> I
     w.flush()
 }
 
-fn frame_type_from(i: u8) -> FrameType {
-    FromPrimitive::from_u8(i).unwrap()
-}
-
 pub fn parse_input_frame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<Vec<u8>>, FrameType) {
     let hdr = match s.read_exact(2 as usize) {
         Ok(h) => if h.len() == 2 { h } else { return (None, FrameType::Error) },
@@ -144,12 +140,7 @@ pub fn parse_input_frame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<Vec<u8
     }
 
     let opcode = (hdr[0] & 0x0F) as u8;
-    if opcode == FrameType::Text as u8
-    || opcode == FrameType::Binary as u8
-    || opcode == FrameType::Closing as u8
-    || opcode == FrameType::Ping as u8
-    || opcode == FrameType::Pong as u8 {
-        let frame_type = frame_type_from(opcode);
+    if let Some(frame_type) = FromPrimitive::from_u8(opcode) {
         let payload_len = hdr[1] & 0x7F;
         if payload_len < 0x7E { //Only handle short payloads right now.
             let toread = (payload_len + 4) as usize; //+4 for mask

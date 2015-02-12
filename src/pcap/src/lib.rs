@@ -4,7 +4,8 @@
 
 #![feature(plugin)]
 
-#[plugin]
+#![plugin(bindgen)]
+
 #[no_link]
 extern crate bindgen;
 

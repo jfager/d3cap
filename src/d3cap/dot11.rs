@@ -21,7 +21,7 @@ bitflags!(flags FrameControlFlags: u8 {
 
 impl Debug for FrameControlFlags {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-        f.write_str(format!("{:?}", self.bits).as_slice())
+        f.write_str(&format!("{:?}", self.bits)[])
     }
 }
 
