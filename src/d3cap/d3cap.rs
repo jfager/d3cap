@@ -442,7 +442,7 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
                         }
                     })));
 
-        fn print_ls<A, T>(ph: &ProtocolHandler<A>, t: &mut T)
+        fn print_ls_addr<A, T>(ph: &ProtocolHandler<A>, t: &mut T)
             where A: Eq+Hash<Hasher>+Copy+Clone+Display+Send+Sync,
                   T: TransAddr<A>
         {
@@ -460,35 +460,33 @@ fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
             }
         }
 
+        fn print_ls_tap<T:TransAddr<MacAddr>>(pd_ctrl: &PhysDataController, macs: &mut T) {
+            let m = pd_ctrl.map.read().unwrap();
+            let mut list: Vec<_> = m.iter()
+                .filter(|&(_, ref v)| v.dat.len() > 1).collect();
+
+            list.sort_by(|a, b| a.1.avg_dist().partial_cmp(&b.1.avg_dist()).unwrap());
+
+            for i in list.iter() {
+                let (ref k, ref v) = *i;
+                println!("{:?} [{}, {}, {}]: total: {}, curr_len: {}, dist: {}",
+                         k.0,
+                         macs.trans(&k.1[0]), macs.trans(&k.1[1]), macs.trans(&k.1[2]),
+                         v.count, v.dat.len(), v.avg_dist());
+            }
+            println!("");
+        }
+
+
         cmds.insert("ls".to_string(),
                     ("ls", Box::new(|cmd, ctrl| {
                         match &cmd[1..] {
-                            ["mac"] => print_ls(&ctrl.pg_ctrl.mac, &mut ctrl.mac_names),
-                            ["ip4"] => print_ls(&ctrl.pg_ctrl.ip4, &mut ctrl.ip4_names),
-                            ["ip6"] => print_ls(&ctrl.pg_ctrl.ip6, &mut ctrl.ip6_names),
+                            ["mac"] => print_ls_addr(&ctrl.pg_ctrl.mac, &mut ctrl.mac_names),
+                            ["ip4"] => print_ls_addr(&ctrl.pg_ctrl.ip4, &mut ctrl.ip4_names),
+                            ["ip6"] => print_ls_addr(&ctrl.pg_ctrl.ip6, &mut ctrl.ip6_names),
+                            ["tap"] => print_ls_tap(&ctrl.pd_ctrl, &mut ctrl.mac_names),
                             _ => println!("Illegal argument")
                         }
-                    })));
-
-        cmds.insert("foo".to_string(),
-                    ("foo", Box::new(|cmd, ctrl| {
-                        let m = ctrl.pd_ctrl.map.read().unwrap();
-                        let mut list: Vec<_> = m.iter()
-                            .filter(|&(_, ref v)| v.dat.len() > 1).collect();
-
-                        list.sort_by(|a, b| a.1.avg_dist().partial_cmp(&b.1.avg_dist()).unwrap());
-
-                        let macs = &mut ctrl.mac_names;
-
-                        for i in list.iter() {
-                            let (ref k, ref v) = *i;
-                            println!("{:?} [{}, {}, {}]: total: {}, curr_len: {}, dist: {}",
-                                     k.0,
-                                     macs.trans(&k.1[0]), macs.trans(&k.1[1]), macs.trans(&k.1[2]),
-                                     v.count, v.dat.len(), v.avg_dist());
-                        }
-                        println!("");
-
                     })));
 
         let maxlen = cmds.keys().map(|x| x.len()).max().unwrap();
