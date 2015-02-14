@@ -402,7 +402,13 @@ pub fn start_capture<'a>(conf: D3capConf,
         };
 
         fn go<T:CaptureCtx>(sess: &cap::PcapSession, ctx: &mut T) {
-            loop { sess.next(|cap| ctx.parse(cap)); }
+            let mut dumper = cap::PcapDumper::new(sess, "sample_dump.pcap");
+            loop {
+                sess.next(|cap| {
+                    dumper.dump(&cap);
+                    ctx.parse(cap);
+                });
+            }
         }
 
         match sess.datalink() {

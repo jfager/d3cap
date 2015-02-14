@@ -181,9 +181,9 @@ impl PcapDumper {
         }
     }
 
-    pub fn dump(&mut self, hdr: *const pcap::Struct_pcap_pkthdr, data: *const u8) {
+    pub fn dump(&mut self, data: &PcapData) {
         unsafe {
-            pcap::pcap_dump(self.p as *mut u8, hdr, data);
+            pcap::pcap_dump(self.p as *mut u8, data.hdr, data.dat);
         }
     }
 }
