@@ -116,15 +116,30 @@ impl ProtoGraphController {
     }
 }
 
-trait CaptureCtx {
+trait PktParser {
     fn parse(&mut self, pkt: &cap::PcapData);
 }
 
-struct EthernetCtx {
+struct CaptureCtx {
+    sess: cap::PcapSession,
+    parser: Box<PktParser+'static>
+}
+
+impl CaptureCtx {
+    fn parse_next(&mut self) {
+        let p = &mut self.parser;
+        self.sess.next(|cap| {
+            p.parse(cap);
+        });
+    }
+}
+
+struct EthernetParser {
     pkts: Sender<Pkt>,
 }
 
-impl CaptureCtx for EthernetCtx {
+impl PktParser for EthernetParser {
+
     fn parse(&mut self, pkt: &cap::PcapData) {
         let ether_hdr = unsafe { &*(pkt.pkt_ptr() as *const EthernetHeader) };
         self.pkts.send(Pkt::Mac(PktMeta::new(ether_hdr.src, ether_hdr.dst, pkt.len())));
@@ -263,16 +278,12 @@ impl PhysDataController {
     }
 }
 
-
-
-
-
-struct RadiotapCtx {
+struct RadiotapParser {
     pkts: Sender<Pkt>,
     phys: Sender<PhysData>
 }
 
-impl RadiotapCtx {
+impl RadiotapParser {
     fn blah(&self, frame_ty: FrameType, addrs: [MacAddr; 3], tap_hdr: &tap::RadiotapHeader) {
         match &tap_hdr.it_present {
             &tap::COMMON_A => {
@@ -307,7 +318,7 @@ impl RadiotapCtx {
 }
 
 
-impl CaptureCtx for RadiotapCtx {
+impl PktParser for RadiotapParser {
     fn parse(&mut self, pkt: &cap::PcapData) {
 
         let tap_hdr = unsafe { &*(pkt.pkt_ptr() as *const tap::RadiotapHeader) };
@@ -346,47 +357,47 @@ impl CaptureCtx for RadiotapCtx {
 
 }
 
+pub fn init_capture(conf: D3capConf,
+                    pkt_sender: Sender<Pkt>,
+                    pd_sender: Sender<PhysData>) -> CaptureCtx {
+    let sess = match conf.file {
+        Some(ref f) => cap::PcapSession::from_file(&f[]),
+        None => {
+            let sess_builder = match conf.interface {
+                Some(ref dev) => cap::PcapSessionBuilder::new_dev(&dev[]),
+                None => cap::PcapSessionBuilder::new()
+            };
+
+            sess_builder.unwrap()
+                .buffer_size(65535)
+                .timeout(1000)
+                .promisc(conf.promisc)
+                .rfmon(conf.monitor)
+                .activate()
+        }
+    };
+
+    let parser = match sess.datalink() {
+        cap::DLT_ETHERNET => {
+            Box::new(EthernetParser { pkts: pkt_sender }) as Box<PktParser>
+        }
+        cap::DLT_IEEE802_11_RADIO => {
+            Box::new(RadiotapParser { pkts: pkt_sender, phys: pd_sender }) as Box<PktParser>
+        }
+        x => panic!("unsupported datalink type: {}", x)
+    };
+
+    CaptureCtx { sess: sess, parser: parser }
+}
+
 pub fn start_capture<'a>(conf: D3capConf,
                          pkt_sender: Sender<Pkt>,
-                         pd_sender: Sender<PhysData>)
-                         -> JoinGuard<'a, ()> {
+                         pd_sender: Sender<PhysData>) -> JoinGuard<'a, ()> {
     thread::Builder::new().name("packet_capture".to_string()).scoped(move || {
-        let sess = match conf.file {
-            Some(ref f) => cap::PcapSession::from_file(&f[]),
-            None => {
-                let sess_builder = match conf.interface {
-                    Some(ref dev) => cap::PcapSessionBuilder::new_dev(&dev[]),
-                    None => cap::PcapSessionBuilder::new()
-                };
-
-                sess_builder.unwrap()
-                    .buffer_size(65535)
-                    .timeout(1000)
-                    .promisc(conf.promisc)
-                    .rfmon(conf.monitor)
-                    .activate()
-            }
-        };
-
-        fn go<T:CaptureCtx>(sess: &cap::PcapSession, ctx: &mut T) {
-            let mut dumper = cap::PcapDumper::new(sess, "sampledump.pcap");
-            loop {
-                sess.next(|cap| {
-                    dumper.dump(&cap);
-                    ctx.parse(cap);
-                });
-            }
+        let mut cap = init_capture(conf, pkt_sender, pd_sender);
+        loop {
+            cap.parse_next();
         }
-
-        match sess.datalink() {
-            cap::DLT_ETHERNET => {
-                go(&sess, &mut EthernetCtx { pkts: pkt_sender })
-            }
-            cap::DLT_IEEE802_11_RADIO => {
-                go(&sess, &mut RadiotapCtx { pkts: pkt_sender, phys: pd_sender })
-            }
-            x => panic!("unsupported datalink type: {}", x)
-        };
     })
 }
 
