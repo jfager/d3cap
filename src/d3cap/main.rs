@@ -25,13 +25,14 @@ mod tap;
 mod pkt_graph;
 mod d3cap;
 mod readline;
+mod cli;
 
 
 fn main() {
 
     use getopts as go;
     use std::{env};
-    use d3cap::{D3capConf};
+    use d3cap::{D3capConf, D3capController};
 
     let interface_opt = "i";
     let file_opt = "f";
@@ -78,5 +79,12 @@ fn main() {
         monitor: matches.opt_present(monitor_flag)
     };
 
-    d3cap::run(conf);
+    let mut ctrl = D3capController::spawn(conf.clone());
+
+    // Only start the websocket server if the option is explicitly provided.
+    if let Some(port) = conf.websocket {
+        ctrl.start_websocket(port);
+    }
+
+    cli::start_cli(ctrl).join();
 }
