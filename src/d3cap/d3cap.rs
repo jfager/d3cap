@@ -1,7 +1,8 @@
 use std::thread::{self, JoinGuard};
 use std::hash::{Hash};
 use std::collections::hash_map::{Entry, HashMap, Hasher};
-use std::old_io::{File};
+use std::fs::File;
+use std::io::Read;
 use std::num::Float;
 use std::sync::{Arc,RwLock};
 use std::sync::mpsc::{channel, Sender};
@@ -402,7 +403,10 @@ pub fn start_capture<'a>(conf: D3capConf,
 }
 
 fn load_mac_addrs(file: String) -> HashMap<MacAddr, String> {
-    let s = File::open(&Path::new(file)).read_to_string().unwrap();
+    let mut s = String::new();
+
+    File::open(&Path::new(file)).unwrap().read_to_string(&mut s);
+
     let mut parser = toml::Parser::new(&s[]);
     let t = parser.parse().unwrap();
     let known_macs = t.get(&"known-macs".to_string()).unwrap().as_table().unwrap();
