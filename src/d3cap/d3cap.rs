@@ -285,7 +285,10 @@ struct RadiotapParser {
 }
 
 impl RadiotapParser {
-    fn blah(&self, frame_ty: FrameType, addrs: [MacAddr; 3], tap_hdr: &tap::RadiotapHeader) {
+    fn parse_known_headers(&self,
+                           frame_ty: FrameType,
+                           addrs: [MacAddr; 3],
+                           tap_hdr: &tap::RadiotapHeader) {
         match &tap_hdr.it_present {
             &tap::COMMON_A => {
                 if let Some(vals) = tap::CommonA::parse(tap_hdr) {
@@ -339,7 +342,7 @@ impl PktParser for RadiotapParser {
         match fc.frame_type() {
             ft @ FrameType::Management => {
                 let mgt: &dot11::ManagementFrameHeader = magic(tap_hdr);
-                self.blah(ft, [mgt.addr1, mgt.addr2, mgt.addr3], tap_hdr);
+                self.parse_known_headers(ft, [mgt.addr1, mgt.addr2, mgt.addr3], tap_hdr);
             }
             FrameType::Control => {
                 //println!("Control frame");
@@ -348,7 +351,7 @@ impl PktParser for RadiotapParser {
                 let data: &dot11::DataFrameHeader = magic(tap_hdr);
                 //TODO: get length
                 self.pkts.send(Pkt::Mac(PktMeta::new(data.addr1, data.addr2, 1)));
-                self.blah(ft, [data.addr1, data.addr2, data.addr3], tap_hdr);
+                self.parse_known_headers(ft, [data.addr1, data.addr2, data.addr3], tap_hdr);
             }
             FrameType::Unknown => {
                 //println!("Unknown frame type");
