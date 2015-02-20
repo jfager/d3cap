@@ -47,3 +47,7 @@ git = "https://github.com/alexcrichton/toml-rs.git"
 # [dependencies.rustc-serialize]
 
 # git = "https://github.com/rust-lang/rustc-serialize.git"
+
+
+[profile.dev]
+debug = false
