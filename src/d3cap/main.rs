@@ -86,5 +86,5 @@ fn main() {
         ctrl.start_websocket(port);
     }
 
-    cli::start_cli(ctrl).join();
+    cli::start_cli(ctrl).unwrap().join();
 }

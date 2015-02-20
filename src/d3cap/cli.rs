@@ -4,6 +4,7 @@ use std::hash::{Hash};
 use std::fmt::{Display};
 use std::thread::{self, JoinGuard};
 use std::old_io::{net};
+use std::io::{self};
 
 use d3cap::{D3capController, ProtocolHandler, PhysDataController};
 use ether::{MacAddr};
@@ -43,7 +44,7 @@ impl<T:AsStdIpAddr+Eq+Hash<Hasher>+Display+Clone> TransAddr<T> for HashMap<T, St
     }
 }
 
-pub fn start_cli<'a>(ctrl: D3capController) -> JoinGuard<'a, ()> {
+pub fn start_cli<'a>(ctrl: D3capController) -> io::Result<JoinGuard<'a, ()>> {
     thread::Builder::new().name("cli".to_string()).scoped(move || {
         let mut ctrl = ctrl;
 

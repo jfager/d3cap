@@ -1,8 +1,8 @@
-use std::thread::{self, JoinGuard};
+use std::thread::{self, JoinHandle};
 use std::hash::{Hash};
 use std::collections::hash_map::{Entry, HashMap, Hasher};
 use std::fs::File;
-use std::io::Read;
+use std::io::{self, Read};
 use std::num::Float;
 use std::sync::{Arc,RwLock};
 use std::sync::mpsc::{channel, Sender};
@@ -37,7 +37,7 @@ enum Pkt {
 }
 
 #[derive(Clone)]
-pub struct ProtocolHandler<T:Send+Sync> {
+pub struct ProtocolHandler<T:Send+Sync+'static> {
     pub typ: &'static str,
     pub graph: Arc<RwLock<ProtocolGraph<T>>>,
     stats_mcast: Multicast<RouteStatsMsg<T>>,
@@ -396,8 +396,8 @@ pub fn init_capture(conf: D3capConf,
 
 pub fn start_capture<'a>(conf: D3capConf,
                          pkt_sender: Sender<Pkt>,
-                         pd_sender: Sender<PhysData>) -> JoinGuard<'a, ()> {
-    thread::Builder::new().name("packet_capture".to_string()).scoped(move || {
+                         pd_sender: Sender<PhysData>) -> io::Result<JoinHandle> {
+    thread::Builder::new().name("packet_capture".to_string()).spawn(move || {
         let mut cap = init_capture(conf, pkt_sender, pd_sender);
         loop {
             cap.parse_next();
@@ -457,7 +457,7 @@ impl D3capController {
         let pg_ctrl = ProtoGraphController::spawn();
         let pd_ctrl = PhysDataController::spawn();
 
-        start_capture(conf, pg_ctrl.sender(), pd_ctrl.sender()).detach();
+        start_capture(conf, pg_ctrl.sender(), pd_ctrl.sender());
 
         D3capController {
             pg_ctrl: pg_ctrl,

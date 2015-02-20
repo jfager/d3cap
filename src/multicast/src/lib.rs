@@ -5,12 +5,12 @@ use std::thread;
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct Multicast<T:Send+Sync> {
+pub struct Multicast<T:Send+Sync+'static> {
     msg_tx: Sender<Arc<T>>,
     dest_tx: Sender<Sender<Arc<T>>>
 }
 
-impl<T:Send+Sync> Multicast<T> {
+impl<T:Send+Sync+'static> Multicast<T> {
     pub fn spawn() -> Multicast<T> {
         let (msg_tx, msg_rx): (Sender<Arc<T>>, Receiver<Arc<T>>) = channel();
         let (dest_tx, dest_rx): (Sender<Sender<Arc<T>>>, Receiver<Sender<Arc<T>>>) = channel();

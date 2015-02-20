@@ -103,7 +103,7 @@ impl UIServer {
         UIServer { json_multicast: mc }
     }
 
-    pub fn create_sender<T:Encodable+Send+Sync>(&self) -> Sender<Arc<T>> {
+    pub fn create_sender<T:Encodable+Send+Sync+'static>(&self) -> Sender<Arc<T>> {
         let (tx, rx) = channel();
         let jb = self.json_multicast.clone();
         thread::Builder::new().name("routes_ui".to_string()).spawn(move || {
