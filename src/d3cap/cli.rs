@@ -1,5 +1,5 @@
 use std::iter;
-use std::collections::hash_map::{Entry, HashMap, Hasher};
+use std::collections::hash_map::{Entry, HashMap};
 use std::hash::{Hash};
 use std::fmt::{Display};
 use std::thread::{self, JoinGuard};
@@ -25,7 +25,7 @@ impl TransAddr<MacAddr> for HashMap<MacAddr, String> {
     }
 }
 
-impl<T:AsStdIpAddr+Eq+Hash<Hasher>+Display+Clone> TransAddr<T> for HashMap<T, String> {
+impl<T:AsStdIpAddr+Eq+Hash+Display+Clone> TransAddr<T> for HashMap<T, String> {
     fn trans(&mut self, addr: &T) -> String {
         let k = addr.clone();
         match self.entry(k) {
@@ -56,7 +56,7 @@ pub fn start_cli<'a>(ctrl: D3capController) -> io::Result<JoinGuard<'a, ()>> {
 
         cmds.insert("websocket".to_string(),
                     ("websocket", Box::new(|cmd, ctrl| {
-                        match &cmd[] {
+                        match &cmd[..] {
                             [_, ref port] => {
                                 if let Ok(p) = port.parse() {
                                     ctrl.start_websocket(p);
@@ -68,7 +68,7 @@ pub fn start_cli<'a>(ctrl: D3capController) -> io::Result<JoinGuard<'a, ()>> {
                     })));
 
         fn print_ls_addr<A, T>(ph: &ProtocolHandler<A>, t: &mut T)
-            where A: Eq+Hash<Hasher>+Copy+Clone+Display+Send+Sync,
+            where A: Eq+Hash+Copy+Clone+Display+Send+Sync,
                   T: TransAddr<A>
         {
             let graph = ph.graph.read().unwrap();

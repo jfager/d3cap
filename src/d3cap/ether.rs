@@ -10,13 +10,13 @@ impl Display for MacAddr {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         let &MacAddr(a) = self;
         f.write_str(&format!("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                             a[0], a[1], a[2], a[3], a[4], a[5])[])
+                             a[0], a[1], a[2], a[3], a[4], a[5]))
     }
 }
 
 impl Encodable for MacAddr {
     fn encode<S:Encoder> (&self, s: &mut S) -> Result<(), S::Error> {
-        s.emit_str(&self.to_string()[])
+        s.emit_str(&self.to_string())
     }
 }
 

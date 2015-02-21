@@ -53,7 +53,7 @@ fn main() {
         .optflag(promisc_flag, "promisc", "Turn on promiscuous mode")
         .optflag(monitor_flag, "monitor", "Turn on monitor mode")
         .optflagopt("", websocket_opt, "Run websocket ui server on startup",
-                    &format!("port [{}]", websocket_default)[]);
+                    &format!("port [{}]", websocket_default));
 
     let matches = match opts.parse(env::args()) {
         Ok(m) => { m }
@@ -61,7 +61,7 @@ fn main() {
     };
 
     if matches.opt_present("h") {
-        println!("{}", opts.usage(&opts.short_usage("d3cap")[]));
+        println!("{}", opts.usage(&opts.short_usage("d3cap")));
         return;
     }
 

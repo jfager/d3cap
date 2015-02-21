@@ -1,6 +1,6 @@
 use std::thread::{self, JoinHandle};
 use std::hash::{Hash};
-use std::collections::hash_map::{Entry, HashMap, Hasher};
+use std::collections::hash_map::{Entry, HashMap};
 use std::fs::File;
 use std::io::{self, Read};
 use std::num::Float;
@@ -37,13 +37,13 @@ enum Pkt {
 }
 
 #[derive(Clone)]
-pub struct ProtocolHandler<T:Send+Sync+'static> {
+pub struct ProtocolHandler<T:Eq+Hash+Send+Sync+'static> {
     pub typ: &'static str,
     pub graph: Arc<RwLock<ProtocolGraph<T>>>,
     stats_mcast: Multicast<RouteStatsMsg<T>>,
 }
 
-impl <T:Send+Sync+Copy+Clone+Eq+Hash<Hasher>> ProtocolHandler<T> {
+impl <T:Send+Sync+Copy+Clone+Eq+Hash> ProtocolHandler<T> {
     fn new(typ: &'static str) -> ProtocolHandler<T> {
         ProtocolHandler {
             typ: typ,
@@ -365,10 +365,10 @@ pub fn init_capture(conf: D3capConf,
                     pkt_sender: Sender<Pkt>,
                     pd_sender: Sender<PhysData>) -> CaptureCtx {
     let sess = match conf.file {
-        Some(ref f) => cap::PcapSession::from_file(&f[]),
+        Some(ref f) => cap::PcapSession::from_file(&f),
         None => {
             let sess_builder = match conf.interface {
-                Some(ref dev) => cap::PcapSessionBuilder::new_dev(&dev[]),
+                Some(ref dev) => cap::PcapSessionBuilder::new_dev(&dev),
                 None => cap::PcapSessionBuilder::new()
             };
 
@@ -410,13 +410,13 @@ fn load_mac_addrs(file: String) -> HashMap<MacAddr, String> {
 
     File::open(&Path::new(file)).unwrap().read_to_string(&mut s);
 
-    let mut parser = toml::Parser::new(&s[]);
+    let mut parser = toml::Parser::new(&s);
     let t = parser.parse().unwrap();
     let known_macs = t.get(&"known-macs".to_string()).unwrap().as_table().unwrap();
 
     known_macs.iter()
         .map(|(k,v)| {
-            (MacAddr::from_string(&k[]), v.as_str())
+            (MacAddr::from_string(&k), v.as_str())
         })
         .filter_map(|x| match x {
             (Some(addr), Some(alias)) => Some((addr, alias.to_string())),

@@ -1,4 +1,4 @@
-use std::collections::hash_map::{self, HashMap, Hasher};
+use std::collections::hash_map::{self, HashMap};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::hash::{Hash};
 
@@ -34,13 +34,13 @@ impl PktStats {
 
 //TODO: derive Encodable manually
 #[derive(Clone, Debug)]
-pub struct AddrStats<T:Hash<Hasher>+Eq> {
+pub struct AddrStats<T:Hash+Eq> {
     sent: PktStats,
     sent_to: HashMap<T, PktStats>,
     received: PktStats,
     received_from: HashMap<T, PktStats>
 }
-impl <'a, T:Hash<Hasher>+Eq+Clone> AddrStats<T> {
+impl <'a, T:Hash+Eq+Clone> AddrStats<T> {
     pub fn new() -> AddrStats<T> {
         AddrStats { sent: PktStats::new(), sent_to: HashMap::new(),
                     received: PktStats::new(), received_from: HashMap::new() }
@@ -104,7 +104,7 @@ struct ASIter<'a, T:'a> {
     inner: hash_map::Iter<'a, T, PktStats>
 }
 
-impl<'a, T: 'a+Hash<Hasher>+Eq+Copy+Clone> Iterator for ASIter<'a, T> {
+impl<'a, T: 'a+Hash+Eq+Copy+Clone> Iterator for ASIter<'a, T> {
     type Item = (&'a T, &'a PktStats);
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
@@ -131,12 +131,12 @@ pub struct RouteStats<T> {
 
 //TODO: derive Encodable manually
 #[derive(Clone, Debug)]
-pub struct ProtocolGraph<T:Hash<Hasher>+Eq> {
+pub struct ProtocolGraph<T:Hash+Eq> {
     stats: PktStats,
     routes: HashMap<T, AddrStats<T>>,
 }
 
-impl<'a, T: Hash<Hasher>+Eq+Copy+Clone> ProtocolGraph<T> {
+impl<'a, T: Hash+Eq+Copy+Clone> ProtocolGraph<T> {
     pub fn new() -> ProtocolGraph<T> {
         ProtocolGraph { stats: PktStats::new(), routes: HashMap::new() }
     }
@@ -190,11 +190,11 @@ impl<'a, T: Hash<Hasher>+Eq+Copy+Clone> ProtocolGraph<T> {
     }
 }
 
-struct PGIter<'a, T:'a> {
+struct PGIter<'a, T:'a+Hash+Eq> {
     inner: hash_map::Iter<'a, T, AddrStats<T>>
 }
 
-impl<'a, T: 'a+Hash<Hasher>+Eq+Copy+Clone> Iterator for PGIter<'a, T> {
+impl<'a, T: 'a+Hash+Eq+Copy+Clone> Iterator for PGIter<'a, T> {
     type Item = (&'a T, &'a AddrStats<T>);
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
