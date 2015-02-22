@@ -1,8 +1,9 @@
-#![feature(std_misc)]
+#![feature(std_misc, io)]
 
 use std::sync::mpsc::{channel, Sender, SendError, Receiver};
 use std::thread;
 use std::sync::Arc;
+use std::io;
 
 #[derive(Clone)]
 pub struct Multicast<T:Send+Sync+'static> {
@@ -11,10 +12,10 @@ pub struct Multicast<T:Send+Sync+'static> {
 }
 
 impl<T:Send+Sync+'static> Multicast<T> {
-    pub fn spawn() -> Multicast<T> {
+    pub fn spawn() -> io::Result<Multicast<T>> {
         let (msg_tx, msg_rx): (Sender<Arc<T>>, Receiver<Arc<T>>) = channel();
         let (dest_tx, dest_rx): (Sender<Sender<Arc<T>>>, Receiver<Sender<Arc<T>>>) = channel();
-        thread::Builder::new().name("multicast".to_string()).spawn(move || {
+        try!(thread::Builder::new().name("multicast".to_string()).spawn(move || {
             let mut mc_txs = Vec::new();
             let mut to_remove = Vec::new();
             loop {
@@ -38,9 +39,9 @@ impl<T:Send+Sync+'static> Multicast<T> {
                     }
                 )
             }
-        });
+        }));
 
-        Multicast { msg_tx: msg_tx, dest_tx: dest_tx }
+        Ok(Multicast { msg_tx: msg_tx, dest_tx: dest_tx })
     }
 
     pub fn send(&self, msg: Arc<T>) -> Result<(), SendError<Arc<T>>> {

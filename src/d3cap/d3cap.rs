@@ -1,11 +1,12 @@
 use std::thread::{self, JoinHandle};
+use std::error::{FromError};
 use std::hash::{Hash};
 use std::collections::hash_map::{Entry, HashMap};
 use std::fs::File;
 use std::io::{self, Read};
 use std::num::Float;
 use std::sync::{Arc,RwLock};
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Sender, SendError};
 
 use toml;
 
@@ -44,12 +45,12 @@ pub struct ProtocolHandler<T:Eq+Hash+Send+Sync+'static> {
 }
 
 impl <T:Send+Sync+Copy+Clone+Eq+Hash> ProtocolHandler<T> {
-    fn new(typ: &'static str) -> ProtocolHandler<T> {
-        ProtocolHandler {
+    fn new(typ: &'static str) -> io::Result<ProtocolHandler<T>> {
+        Ok(ProtocolHandler {
             typ: typ,
             graph: Arc::new(RwLock::new(ProtocolGraph::new())),
-            stats_mcast: Multicast::spawn()
-        }
+            stats_mcast: try!(Multicast::spawn())
+        })
     }
 
     fn update(&mut self, pkt: &PktMeta<T>) {
@@ -73,17 +74,17 @@ pub struct ProtoGraphController {
 }
 
 impl ProtoGraphController {
-    fn spawn() -> ProtoGraphController {
+    fn spawn() -> io::Result<ProtoGraphController> {
         let (cap_tx, cap_rx) = channel();
         let ctl = ProtoGraphController {
             cap_tx: cap_tx,
-            mac: ProtocolHandler::new("mac"),
-            ip4: ProtocolHandler::new("ip4"),
-            ip6: ProtocolHandler::new("ip6"),
+            mac: try!(ProtocolHandler::new("mac")),
+            ip4: try!(ProtocolHandler::new("ip4")),
+            ip6: try!(ProtocolHandler::new("ip6")),
         };
 
         let mut phctl = ctl.clone();
-        thread::Builder::new().name("protocol_handler".to_string()).spawn(move || {
+        try!(thread::Builder::new().name("protocol_handler".to_string()).spawn(move || {
             loop {
                 let pkt = cap_rx.recv();
                 if pkt.is_err() {
@@ -95,9 +96,9 @@ impl ProtoGraphController {
                     Pkt::IP6(ref p) => phctl.ip6.update(p),
                 }
             }
-        });
+        }));
 
-        ctl
+        Ok(ctl)
     }
 
     fn sender(&self) -> Sender<Pkt> {
@@ -117,8 +118,19 @@ impl ProtoGraphController {
     }
 }
 
+enum ParseErr {
+    Send,
+    UnknownPacket
+}
+
+impl<T> FromError<SendError<T>> for ParseErr {
+    fn from_error(_: SendError<T>) -> ParseErr {
+        ParseErr::Send
+    }
+}
+
 trait PktParser {
-    fn parse(&mut self, pkt: &cap::PcapData);
+    fn parse(&mut self, pkt: &cap::PcapData) -> Result<(), ParseErr>;
 }
 
 struct CaptureCtx {
@@ -130,7 +142,9 @@ impl CaptureCtx {
     fn parse_next(&mut self) {
         let p = &mut self.parser;
         self.sess.next(|cap| {
-            p.parse(cap);
+            match p.parse(cap) {
+                _ => () //just ignore
+            }
         });
     }
 }
@@ -141,20 +155,22 @@ struct EthernetParser {
 
 impl PktParser for EthernetParser {
 
-    fn parse(&mut self, pkt: &cap::PcapData) {
+    fn parse(&mut self, pkt: &cap::PcapData) -> Result<(), ParseErr> {
         let ether_hdr = unsafe { &*(pkt.pkt_ptr() as *const EthernetHeader) };
         self.pkts.send(Pkt::Mac(PktMeta::new(ether_hdr.src, ether_hdr.dst, pkt.len())));
-        match ether_hdr.typ {
+        Ok(match ether_hdr.typ {
             ETHERTYPE_ARP => {
                 //io::println("ARP!");
             },
             ETHERTYPE_IP4 => {
                 let ipp: &IP4Header = unsafe { skip_cast(ether_hdr) };
-                self.pkts.send(Pkt::IP4(PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32)));
+                try!(self.pkts.send(Pkt::IP4(PktMeta::new(ipp.src, ipp.dst,
+                                                          ntohs(ipp.len) as u32))));
             },
             ETHERTYPE_IP6 => {
                 let ipp: &IP6Header = unsafe { skip_cast(ether_hdr) };
-                self.pkts.send(Pkt::IP6(PktMeta::new(ipp.src, ipp.dst, ntohs(ipp.len) as u32)));
+                try!(self.pkts.send(Pkt::IP6(PktMeta::new(ipp.src, ipp.dst,
+                                                          ntohs(ipp.len) as u32))));
             },
             ETHERTYPE_802_1X => {
                 //io::println("802.1X!");
@@ -162,7 +178,7 @@ impl PktParser for EthernetParser {
             _ => {
                 //println!("Unknown type: {:x}", x);
             }
-        }
+        })
     }
 }
 
@@ -239,7 +255,7 @@ pub struct PhysDataController {
 }
 
 impl PhysDataController {
-    fn spawn() -> PhysDataController {
+    fn spawn() -> io::Result<PhysDataController> {
         let (pd_tx, pd_rx) = channel();
         let out = PhysDataController {
             pd_tx: pd_tx,
@@ -247,7 +263,7 @@ impl PhysDataController {
         };
 
         let ctl = out.clone();
-        thread::Builder::new().name("physdata_handler".to_string()).spawn(move || {
+        try!(thread::Builder::new().name("physdata_handler".to_string()).spawn(move || {
             loop {
                 let res = pd_rx.recv();
                 if res.is_err() {
@@ -269,9 +285,9 @@ impl PhysDataController {
                     }
                 };
             }
-        });
+        }));
 
-        out
+        Ok(out)
     }
 
     fn sender(&self) -> Sender<PhysData> {
@@ -323,7 +339,7 @@ impl RadiotapParser {
 
 
 impl PktParser for RadiotapParser {
-    fn parse(&mut self, pkt: &cap::PcapData) {
+    fn parse(&mut self, pkt: &cap::PcapData) ->  Result<(), ParseErr> {
 
         let tap_hdr = unsafe { &*(pkt.pkt_ptr() as *const tap::RadiotapHeader) };
 
@@ -336,10 +352,10 @@ impl PktParser for RadiotapParser {
         let fc = &base.fr_ctrl;
         if fc.protocol_version() != 0 {
             // bogus packet, bail
-            return;
+            return Err(ParseErr::UnknownPacket);
         }
 
-        match fc.frame_type() {
+        Ok(match fc.frame_type() {
             ft @ FrameType::Management => {
                 let mgt: &dot11::ManagementFrameHeader = magic(tap_hdr);
                 self.parse_known_headers(ft, [mgt.addr1, mgt.addr2, mgt.addr3], tap_hdr);
@@ -350,13 +366,13 @@ impl PktParser for RadiotapParser {
             ft @ FrameType::Data => {
                 let data: &dot11::DataFrameHeader = magic(tap_hdr);
                 //TODO: get length
-                self.pkts.send(Pkt::Mac(PktMeta::new(data.addr1, data.addr2, 1)));
+                try!(self.pkts.send(Pkt::Mac(PktMeta::new(data.addr1, data.addr2, 1))));
                 self.parse_known_headers(ft, [data.addr1, data.addr2, data.addr3], tap_hdr);
             }
             FrameType::Unknown => {
                 //println!("Unknown frame type");
             }
-        }
+        })
     }
 
 }
@@ -405,31 +421,45 @@ pub fn start_capture<'a>(conf: D3capConf,
     })
 }
 
-fn load_mac_addrs(file: String) -> HashMap<MacAddr, String> {
-    let mut s = String::new();
-
-    File::open(&Path::new(file)).unwrap().read_to_string(&mut s);
-
-    let mut parser = toml::Parser::new(&s);
-    let t = parser.parse().unwrap();
-    let known_macs = t.get(&"known-macs".to_string()).unwrap().as_table().unwrap();
-
-    known_macs.iter()
-        .map(|(k,v)| {
-            (MacAddr::from_string(&k), v.as_str())
-        })
-        .filter_map(|x| match x {
-            (Some(addr), Some(alias)) => Some((addr, alias.to_string())),
-            _ => None
-        })
-        .collect()
+enum LoadMacError {
+    IOError(io::Error),
+    TomlError
+}
+impl FromError<io::Error> for LoadMacError {
+    fn from_error(err: io::Error) -> LoadMacError {
+        LoadMacError::IOError(err)
+    }
 }
 
-fn start_websocket(port: u16, mac_addr_map: &MacMap, pg_ctl: &ProtoGraphController) {
-    let ui = UIServer::spawn(port, mac_addr_map);
+fn load_mac_addrs(file: String) -> Result<HashMap<MacAddr, String>, LoadMacError> {
+    let mut s = String::new();
+
+    let mut f = try!(File::open(&file));
+    try!(f.read_to_string(&mut s));
+
+    let mut parser = toml::Parser::new(&s);
+    if let Some(t) = parser.parse() {
+        if let Some(k) = t.get(&"known-macs".to_string()) {
+            if let Some(tbl) = k.as_table() {
+                return Ok(tbl.iter()
+                          .map(|(k,v)| (MacAddr::from_string(&k), v.as_str()))
+                          .filter_map(|x| match x {
+                              (Some(addr), Some(alias)) => Some((addr, alias.to_string())),
+                              _ => None
+                          })
+                          .collect())
+            }
+        }
+    }
+    Err(LoadMacError::TomlError)
+}
+
+fn start_websocket(port: u16, mac_map: &MacMap, pg_ctl: &ProtoGraphController) -> io::Result<()> {
+    let ui = try!(UIServer::spawn(port, mac_map));
     pg_ctl.register_mac_listener(ui.create_sender());
     pg_ctl.register_ip4_listener(ui.create_sender());
     pg_ctl.register_ip6_listener(ui.create_sender());
+    Ok(())
 }
 
 type MacMap = HashMap<MacAddr, String>;
@@ -447,35 +477,36 @@ pub struct D3capController {
 }
 
 impl D3capController {
-    pub fn spawn(conf: D3capConf) -> D3capController {
+    pub fn spawn(conf: D3capConf) -> io::Result<D3capController> {
         let mac_names = conf.conf.as_ref()
-            .map(|x| load_mac_addrs(x.to_string()))
+            .map(|x| load_mac_addrs(x.to_string()).unwrap_or_else(|_| HashMap::new()))
             .unwrap_or_else(HashMap::new);
         let ip4_names = HashMap::new();
         let ip6_names = HashMap::new();
 
-        let pg_ctrl = ProtoGraphController::spawn();
-        let pd_ctrl = PhysDataController::spawn();
+        let pg_ctrl = try!(ProtoGraphController::spawn());
+        let pd_ctrl = try!(PhysDataController::spawn());
 
-        start_capture(conf, pg_ctrl.sender(), pd_ctrl.sender());
+        start_capture(conf, pg_ctrl.sender(), pd_ctrl.sender()).unwrap();
 
-        D3capController {
+        Ok(D3capController {
             pg_ctrl: pg_ctrl,
             pd_ctrl: pd_ctrl,
             mac_names: mac_names,
             ip4_names: ip4_names,
             ip6_names: ip6_names,
             server_started: false
-        }
+        })
     }
 
-    pub fn start_websocket(&mut self, port: u16) {
+    pub fn start_websocket(&mut self, port: u16) -> io::Result<()> {
         if self.server_started {
             println!("server already started");
         } else {
-            start_websocket(port, &self.mac_names, &self.pg_ctrl);
+            try!(start_websocket(port, &self.mac_names, &self.pg_ctrl));
             self.server_started = true;
         }
+        Ok(())
     }
 }
 

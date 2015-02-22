@@ -1,4 +1,4 @@
-use std::ffi::{self, CString};
+use std::ffi::{self, CString, CStr};
 use std::str;
 use libc;
 
@@ -12,23 +12,32 @@ mod raw {
     }
 }
 
+#[derive(Debug)]
+enum ReadlineError {
+    NullInPrompt(ffi::NulError),
+    NullOnRead
+}
 
-pub fn readline(prompt: &str) -> Option<String> {
-    let cprmt = CString::from_slice(prompt.as_bytes());
-    let in_buf = cprmt.as_ptr();
+pub fn readline(prompt: &str) -> Result<String, ReadlineError> {
+    let cprompt = match CString::new(prompt.as_bytes()) {
+        Ok(s) => s,
+        Err(e) => return Err(ReadlineError::NullInPrompt(e))
+    };
+
+    let in_buf = cprompt.as_ptr();
     unsafe {
         let raw = raw::readline(in_buf as *const libc::c_char);
         if !raw.is_null() {
-            let slice = ffi::c_str_to_bytes(&raw);
+            let slice = CStr::from_ptr(raw).to_bytes();
             match str::from_utf8(slice).map(|ret| ret.trim()) {
                 Ok(a) if !a.is_empty() => {
                     raw::add_history(raw);
-                    Some(a.to_string())
+                    Ok(a.to_string())
                 }
-                _ => Some("".to_string())
+                _ => Ok("".to_string())
             }
         } else {
-            None
+            Err(ReadlineError::NullOnRead)
         }
     }
 }

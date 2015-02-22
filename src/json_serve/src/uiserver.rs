@@ -3,6 +3,7 @@ use std::old_io::{Acceptor,Listener,Stream,BufferedStream,IoResult};
 use std::old_io::net::tcp::{TcpListener};
 use std::thread;
 use std::sync::Arc;
+use std::io;
 
 use rustc_serialize::{json, Encodable};
 
@@ -77,13 +78,13 @@ pub struct UIServer {
 }
 
 impl UIServer {
-    pub fn spawn<T: Encodable>(port: u16, welcome: &T) -> UIServer {
+    pub fn spawn<T: Encodable>(port: u16, welcome: &T) -> io::Result<UIServer> {
         let welcome_msg = Arc::new(json::encode(welcome).unwrap());
 
-        let mc = Multicast::spawn();
+        let mc = try!(Multicast::spawn());
         let json_dest_sender = mc.clone();
 
-        thread::Builder::new().name("ui_server".to_string()).spawn(move || {
+        try!(thread::Builder::new().name("ui_server".to_string()).spawn(move || {
             let mut acceptor = TcpListener::bind(("127.0.0.1", port)).listen();
             println!("Server listening on port {}", port);
 
@@ -98,9 +99,9 @@ impl UIServer {
                 });
                 wrkr_cnt += 1;
             }
-        });
+        }));
 
-        UIServer { json_multicast: mc }
+        Ok(UIServer { json_multicast: mc })
     }
 
     pub fn create_sender<T:Encodable+Send+Sync+'static>(&self) -> Sender<Arc<T>> {

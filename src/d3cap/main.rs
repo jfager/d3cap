@@ -1,4 +1,4 @@
-#![feature(collections, std_misc, hash, io, env, path, libc)]
+#![feature(collections, std_misc, io, env, fs, libc)]
 
 extern crate getopts;
 extern crate collections;
@@ -79,11 +79,11 @@ fn main() {
         monitor: matches.opt_present(monitor_flag)
     };
 
-    let mut ctrl = D3capController::spawn(conf.clone());
+    let mut ctrl = D3capController::spawn(conf.clone()).unwrap();
 
     // Only start the websocket server if the option is explicitly provided.
     if let Some(port) = conf.websocket {
-        ctrl.start_websocket(port);
+        ctrl.start_websocket(port).unwrap();
     }
 
     cli::start_cli(ctrl).unwrap().join();

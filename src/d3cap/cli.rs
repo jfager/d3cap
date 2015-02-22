@@ -5,6 +5,7 @@ use std::fmt::{Display};
 use std::thread::{self, JoinGuard};
 use std::old_io::{net};
 use std::io::{self};
+use std::error::FromError;
 
 use d3cap::{D3capController, ProtocolHandler, PhysDataController};
 use ether::{MacAddr};
@@ -44,27 +45,41 @@ impl<T:AsStdIpAddr+Eq+Hash+Display+Clone> TransAddr<T> for HashMap<T, String> {
     }
 }
 
+#[derive(Debug)]
+enum CliErr {
+    IoError(io::Error)
+}
+
+impl FromError<io::Error> for CliErr {
+    fn from_error(e: io::Error) -> CliErr {
+        CliErr::IoError(e)
+    }
+}
+
+type CliFn = (&'static str, Box<FnMut(Vec<&str>, &mut D3capController)->Result<(), CliErr>>);
+
 pub fn start_cli<'a>(ctrl: D3capController) -> io::Result<JoinGuard<'a, ()>> {
     thread::Builder::new().name("cli".to_string()).scoped(move || {
         let mut ctrl = ctrl;
 
-        let mut cmds: HashMap<String, (&str, Box<FnMut(Vec<&str>, &mut D3capController)>)>
-            = HashMap::new();
+        let mut cmds: HashMap<String, CliFn> = HashMap::new();
 
         cmds.insert("ping".to_string(),
-                    ("ping", Box::new(|_, _| println!("pong"))));
+                    ("ping", Box::new(|_, _| Ok(println!("pong")))));
 
         cmds.insert("websocket".to_string(),
                     ("websocket", Box::new(|cmd, ctrl| {
-                        match &cmd[..] {
+                        Ok(match &cmd[..] {
                             [_, ref port] => {
                                 if let Ok(p) = port.parse() {
-                                    ctrl.start_websocket(p);
+                                    try!(ctrl.start_websocket(p));
                                 }
                             },
-                            [_] => ctrl.start_websocket(7432u16),
-                            _ => println!("Illegal argument")
-                        }
+                            [_] => {
+                                try!(ctrl.start_websocket(7432u16));
+                            }
+                            _ => println!("Unknown argument")
+                        })
                     })));
 
         fn print_ls_addr<A, T>(ph: &ProtocolHandler<A>, t: &mut T)
@@ -105,34 +120,35 @@ pub fn start_cli<'a>(ctrl: D3capController) -> io::Result<JoinGuard<'a, ()>> {
 
         cmds.insert("ls".to_string(),
                     ("ls", Box::new(|cmd, ctrl| {
-                        match &cmd[1..] {
+                        Ok(match &cmd[1..] {
                             ["mac"] => print_ls_addr(&ctrl.pg_ctrl.mac, &mut ctrl.mac_names),
                             ["ip4"] => print_ls_addr(&ctrl.pg_ctrl.ip4, &mut ctrl.ip4_names),
                             ["ip6"] => print_ls_addr(&ctrl.pg_ctrl.ip6, &mut ctrl.ip6_names),
                             ["tap"] => print_ls_tap(&ctrl.pd_ctrl, &mut ctrl.mac_names),
                             _ => println!("Illegal argument")
-                        }
+                        })
                     })));
 
         let maxlen = cmds.keys().map(|x| x.len()).max().unwrap();
 
-        while let Some(val) = readline("> ") {
-             let full_cmd: Vec<_> = val.split(' ').collect();
-             match full_cmd[0] {
-                 "h" | "help" => {
-                     println!("\nAvailable commands are:");
-                     for (cmd, &(desc, _)) in cmds.iter() {
-                         println!("    {:2$}\t{}", cmd, desc, maxlen);
-                     }
-                     println!("");
-                 },
-                 "q" | "quit" | "exit" => break,
-                 "" => {}
-                 cmd => match cmds.get_mut(cmd) {
-                     Some(&mut (_, ref mut f)) => f(full_cmd, &mut ctrl),
-                     None => println!("unknown command")
-                 }
-             }
+        loop {
+            let val = readline("> ").unwrap();
+            let full_cmd: Vec<_> = val.split(' ').collect();
+            match full_cmd[0] {
+                "h" | "help" => {
+                    println!("\nAvailable commands are:");
+                    for (cmd, &(desc, _)) in cmds.iter() {
+                        println!("    {:2$}\t{}", cmd, desc, maxlen);
+                    }
+                    println!("");
+                },
+                "q" | "quit" | "exit" => break,
+                "" => {}
+                cmd => match cmds.get_mut(cmd) {
+                    Some(&mut (_, ref mut f)) => f(full_cmd, &mut ctrl).unwrap(),
+                    None => println!("unknown command")
+                }
+            }
         }
     })
 }
