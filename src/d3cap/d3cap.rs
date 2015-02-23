@@ -157,7 +157,7 @@ impl PktParser for EthernetParser {
 
     fn parse(&mut self, pkt: &cap::PcapData) -> Result<(), ParseErr> {
         let ether_hdr = unsafe { &*(pkt.pkt_ptr() as *const EthernetHeader) };
-        self.pkts.send(Pkt::Mac(PktMeta::new(ether_hdr.src, ether_hdr.dst, pkt.len())));
+        try!(self.pkts.send(Pkt::Mac(PktMeta::new(ether_hdr.src, ether_hdr.dst, pkt.len()))));
         Ok(match ether_hdr.typ {
             ETHERTYPE_ARP => {
                 //io::println("ARP!");

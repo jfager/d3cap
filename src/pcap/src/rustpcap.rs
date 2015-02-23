@@ -29,13 +29,13 @@ pub fn list_devices() {
 impl PcapSessionBuilder {
 
     pub fn new_dev(dev: &str) -> Result<PcapSessionBuilder, &'static str> {
-        let mut errbuf = Vec::with_capacity(256us);
-        let c_dev = CString::from_slice(dev.as_bytes()).as_ptr();
+        let mut errbuf = Vec::with_capacity(256);
+        let c_dev = CString::new(dev.as_bytes()).unwrap().as_ptr();
         PcapSessionBuilder::do_new(c_dev, errbuf.as_mut_slice())
     }
 
     pub fn new() -> Result<PcapSessionBuilder, &'static str> {
-        let mut errbuf = Vec::with_capacity(256us);
+        let mut errbuf = Vec::with_capacity(256);
         let dev = unsafe { pcap::pcap_lookupdev(errbuf.as_mut_slice().as_mut_ptr()) };
         if dev.is_null() {
             Err("No device available")
@@ -92,9 +92,9 @@ pub struct PcapSession {
 
 impl PcapSession {
     pub fn from_file(f: &str) -> PcapSession {
-        let mut errbuf = Vec::with_capacity(256us);
+        let mut errbuf = Vec::with_capacity(256);
         unsafe {
-            let p = pcap::pcap_open_offline(CString::from_slice(f.as_bytes()).as_ptr(),
+            let p = pcap::pcap_open_offline(CString::new(f.as_bytes()).unwrap().as_ptr(),
                                             errbuf.as_mut_slice().as_mut_ptr());
             PcapSession { p: p }
         }
@@ -176,7 +176,7 @@ pub struct PcapDumper {
 impl PcapDumper {
     pub fn new(sess: &PcapSession, path: &str) -> PcapDumper {
         unsafe {
-            let p = pcap::pcap_dump_open(sess.p, CString::from_slice(path.as_bytes()).as_ptr());
+            let p = pcap::pcap_dump_open(sess.p, CString::new(path.as_bytes()).unwrap().as_ptr());
             PcapDumper { p: p }
         }
     }
