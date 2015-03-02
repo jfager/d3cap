@@ -1,10 +1,10 @@
 use std::fmt::{Display,Error,Formatter};
-use std::old_io::{net};
+use std::{net};
 
 use rustc_serialize::{Encodable, Encoder};
 
 pub trait AsStdIpAddr {
-    fn as_std_ip(&self) -> net::ip::IpAddr;
+    fn as_std_ip(&self) -> net::IpAddr;
 }
 
 
@@ -12,9 +12,9 @@ pub trait AsStdIpAddr {
 pub struct IP4Addr([u8; 4]);
 
 impl AsStdIpAddr for IP4Addr {
-    fn as_std_ip(&self) -> net::ip::IpAddr {
+    fn as_std_ip(&self) -> net::IpAddr {
         let &IP4Addr(a) = self;
-        net::ip::IpAddr::Ipv4Addr(a[0], a[1], a[2], a[3])
+        net::IpAddr::new_v4(a[0], a[1], a[2], a[3])
     }
 }
 
@@ -50,9 +50,9 @@ pub struct IP4Header {
 pub struct IP6Addr([u16; 8]);
 
 impl AsStdIpAddr for IP6Addr {
-    fn as_std_ip(&self) -> net::ip::IpAddr {
+    fn as_std_ip(&self) -> net::IpAddr {
         let &IP6Addr(a) = self;
-        net::ip::IpAddr::Ipv6Addr(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7])
+        net::IpAddr::new_v6(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7])
     }
 }
 

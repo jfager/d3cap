@@ -1,9 +1,8 @@
 use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
-use std::old_io::{Acceptor,Listener,Stream,BufferedStream,IoResult};
-use std::old_io::net::tcp::{TcpListener};
+use std::io::{self,Read,Write,BufStream};
+use std::net::{TcpListener,ToSocketAddrs};
 use std::thread;
 use std::sync::Arc;
-use std::io;
 
 use rustc_serialize::{json, Encodable};
 
@@ -15,7 +14,7 @@ use multicast::{Multicast};
 pub struct WebSocketWorker;
 
 impl WebSocketWorker {
-    fn handshake<S: Stream>(&self, tcps: &mut BufferedStream<S>) -> IoResult<()> {
+    fn handshake<S: Read+Write>(&self, tcps: &mut BufStream<S>) -> io::Result<()> {
         match ws::parse_handshake(tcps) {
             Some(hs) => {
                 try!(tcps.write_all(hs.get_answer().as_bytes()));
@@ -28,7 +27,7 @@ impl WebSocketWorker {
         Ok(())
     }
 
-    fn run<S: Stream>(&self, tcps: &mut BufferedStream<S>, data_po: &Receiver<Arc<String>>) -> IoResult<()> {
+    fn run<S: Read+Write>(&self, tcps: &mut BufStream<S>, data_po: &Receiver<Arc<String>>) -> io::Result<()> {
 
         try!(self.handshake(tcps));
 
@@ -85,17 +84,17 @@ impl UIServer {
         let json_dest_sender = mc.clone();
 
         try!(thread::Builder::new().name("ui_server".to_string()).spawn(move || {
-            let mut acceptor = TcpListener::bind(("127.0.0.1", port)).listen();
+            let mut listener = TcpListener::bind(&("127.0.0.1", port)).unwrap();
             println!("Server listening on port {}", port);
 
             let mut wrkr_cnt = 0u32;
-            for tcp_stream in acceptor.incoming() {
+            for tcp_stream in listener.incoming() {
                 let (conn_tx, conn_rx) = channel();
                 conn_tx.send(welcome_msg.clone()).unwrap();
                 json_dest_sender.register(conn_tx).unwrap();
                 thread::Builder::new().name(format!("websocket_{}", wrkr_cnt)).spawn(move || {
                     let tcps = tcp_stream.unwrap();
-                    WebSocketWorker.run(&mut BufferedStream::new(tcps), &conn_rx).unwrap();
+                    WebSocketWorker.run(&mut BufStream::new(tcps), &conn_rx).unwrap();
                 });
                 wrkr_cnt += 1;
             }

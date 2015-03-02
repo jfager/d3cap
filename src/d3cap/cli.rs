@@ -3,7 +3,8 @@ use std::collections::hash_map::{Entry, HashMap};
 use std::hash::{Hash};
 use std::fmt::{Display};
 use std::thread::{self, JoinGuard};
-use std::old_io::{net};
+use std::old_io::net as old_net;
+use std::net;
 use std::io::{self};
 use std::error::FromError;
 
@@ -26,6 +27,21 @@ impl TransAddr<MacAddr> for HashMap<MacAddr, String> {
     }
 }
 
+//TODO: waiting for https://github.com/rust-lang/rust/issues/22608
+fn new_to_old_ip(n: net::IpAddr) -> old_net::ip::IpAddr {
+    match n {
+        net::IpAddr::V4(addr) => {
+            let o = addr.octets();
+            old_net::ip::IpAddr::Ipv4Addr(o[0], o[1], o[2], o[3])
+        }
+        net::IpAddr::V6(addr) => {
+            let s = addr.segments();
+            old_net::ip::IpAddr::Ipv6Addr(s[0], s[1], s[2], s[3],
+                                          s[4], s[5], s[6], s[7])
+        }
+    }
+}
+
 impl<T:AsStdIpAddr+Eq+Hash+Display+Clone> TransAddr<T> for HashMap<T, String> {
     fn trans(&mut self, addr: &T) -> String {
         let k = addr.clone();
@@ -33,7 +49,7 @@ impl<T:AsStdIpAddr+Eq+Hash+Display+Clone> TransAddr<T> for HashMap<T, String> {
             Entry::Occupied(e) => e.get().clone(),
             Entry::Vacant(e) => {
                 let a = addr.as_std_ip();
-                let n = match net::addrinfo::get_address_name(a) {
+                let n = match old_net::addrinfo::get_address_name(new_to_old_ip(a)) {
                     Ok(name) => name,
                     _ => addr.to_string()
                 };

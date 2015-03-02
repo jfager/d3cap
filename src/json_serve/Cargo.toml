@@ -12,6 +12,7 @@ git = "https://github.com/sfackler/rust-openssl.git"
 
 [dependencies]
 rustc-serialize = "*"
+byteorder = "*"
 
 [dependencies.multicast]
 path = "../multicast"

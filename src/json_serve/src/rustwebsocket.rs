@@ -1,7 +1,8 @@
-use std::old_io::{Stream,BufferedStream,IoResult};
+use std::io::{self,Read,Write,BufRead,BufStream};
 use std::num::{FromPrimitive};
 
 use rustc_serialize::base64::{ToBase64, STANDARD};
+use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
 
 use openssl::crypto::hash::{self, Type};
 
@@ -57,10 +58,10 @@ impl Handshake {
     }
 }
 
-pub fn parse_handshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake> {
-    let line = match s.read_line() {
-        Ok(ln) => ln,
-        _ => return None
+pub fn parse_handshake<S: Read+Write>(s: &mut BufStream<S>) -> Option<Handshake> {
+    let mut line = String::new();
+    if s.read_line(&mut line).is_err() {
+        return None
     };
 
     let prop: Vec<_> = line.split_str(" ").collect();
@@ -74,9 +75,9 @@ pub fn parse_handshake<S: Stream>(s: &mut BufferedStream<S>) -> Option<Handshake
 
     let mut has_handshake = false;
     loop {
-        let line = match s.read_line() {
-            Ok(ln) => ln,
-            _ => return if has_handshake { Some(hs) } else { None }
+        let mut line = String::new();
+        if s.read_line(&mut line).is_err() {
+            return if has_handshake { Some(hs) } else { None }
         };
 
         let line = line.trim();
@@ -109,27 +110,26 @@ static MED_FRAME: usize = 65535;
 static MED_FRAME_FLAG: u8 = 126;
 static LARGE_FRAME_FLAG: u8 = 127;
 
-pub fn write_frame<W:Writer>(data: &[u8], frame_type: FrameType, w: &mut W) -> IoResult<()> {
+pub fn write_frame<W:Write>(data: &[u8], frame_type: FrameType, w: &mut W) -> io::Result<()> {
     try!(w.write_u8((0x80 | frame_type as u32) as u8));
 
     if data.len() <= SMALL_FRAME {
         try!(w.write_u8(data.len() as u8));
     } else if data.len() <= MED_FRAME {
         try!(w.write_u8(MED_FRAME_FLAG));
-        try!(w.write_be_u16(data.len() as u16));
+        try!(w.write_u16::<BigEndian>(data.len() as u16));
     } else {
         try!(w.write_u8(LARGE_FRAME_FLAG));
-        try!(w.write_be_u64(data.len() as u64));
+        try!(w.write_u64::<BigEndian>(data.len() as u64));
     }
     try!(w.write_all(data));
     w.flush()
 }
 
-pub fn parse_input_frame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<Vec<u8>>, FrameType) {
-    let hdr = match s.read_exact(2 as usize) {
-        Ok(h) => if h.len() == 2 { h } else { return (None, FrameType::Error) },
-        //Ok(h) if h.len() == 2 => h //Fails w/ cannot bind by-move into a pattern guard
-        //Ok(ref h) if h.len() == 2 => h.clone(),
+pub fn parse_input_frame<S: Read+Write>(s: &mut BufStream<S>) -> (Option<Vec<u8>>, FrameType) {
+    let mut hdr = [0; 2];
+    match s.read(&mut hdr) {
+        Ok(sz) => if sz != 2 { return (None, FrameType::Error) },
         _ => return (None, FrameType::Error)
     };
 
@@ -144,8 +144,9 @@ pub fn parse_input_frame<S: Stream>(s: &mut BufferedStream<S>) -> (Option<Vec<u8
         let payload_len = hdr[1] & 0x7F;
         if payload_len < 0x7E { //Only handle short payloads right now.
             let toread = (payload_len + 4) as usize; //+4 for mask
-            let masked_payload = match s.read_exact(toread) {
-                Ok(mp) => mp,
+            let mut masked_payload = vec![0; toread];
+            match s.read(&mut masked_payload) {
+                Ok(sz) => if sz != toread { return (None, FrameType::Error) },
                 _ => return (None, FrameType::Error)
             };
             let payload = masked_payload[4..].iter()
