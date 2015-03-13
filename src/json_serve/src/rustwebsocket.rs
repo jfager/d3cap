@@ -2,7 +2,7 @@ use std::io::{self,Read,Write,BufRead,BufStream};
 use std::num::{FromPrimitive};
 
 use rustc_serialize::base64::{ToBase64, STANDARD};
-use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
+use byteorder::{BigEndian, WriteBytesExt};
 
 use openssl::crypto::hash::{self, Type};
 
@@ -64,7 +64,7 @@ pub fn parse_handshake<S: Read+Write>(s: &mut BufStream<S>) -> Option<Handshake>
         return None
     };
 
-    let prop: Vec<_> = line.split_str(" ").collect();
+    let prop: Vec<_> = line.split(" ").collect();
     let mut hs = Handshake {
         //host: ~"",
         //origin: ~"",
@@ -85,7 +85,7 @@ pub fn parse_handshake<S: Read+Write>(s: &mut BufStream<S>) -> Option<Handshake>
             return if has_handshake { Some(hs) } else { None };
         }
 
-        let prop: Vec<_> = line.split_str(": ").collect();
+        let prop: Vec<_> = line.split(": ").collect();
         if prop.len() != 2 {
             println!("Unexpected line: '{}'", line);
             return None;

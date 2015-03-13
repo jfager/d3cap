@@ -1,6 +1,6 @@
 #![crate_type="lib"]
 
-#![feature(std_misc, collections, libc)]
+#![feature(collections, libc)]
 
 #![feature(plugin)]
 

@@ -1,6 +1,6 @@
 #![crate_type="lib"]
 
-#![feature(std_misc, collections, io)]
+#![feature(io, net)]
 
 extern crate openssl;
 extern crate multicast;

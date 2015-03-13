@@ -1,6 +1,6 @@
 use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
 use std::io::{self,Read,Write,BufStream};
-use std::net::{TcpListener,ToSocketAddrs};
+use std::net::{TcpListener};
 use std::thread;
 use std::sync::Arc;
 
@@ -84,7 +84,7 @@ impl UIServer {
         let json_dest_sender = mc.clone();
 
         try!(thread::Builder::new().name("ui_server".to_string()).spawn(move || {
-            let mut listener = TcpListener::bind(&("127.0.0.1", port)).unwrap();
+            let listener = TcpListener::bind(&("127.0.0.1", port)).unwrap();
             println!("Server listening on port {}", port);
 
             let mut wrkr_cnt = 0u32;
