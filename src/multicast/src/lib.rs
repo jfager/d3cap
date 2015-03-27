@@ -1,4 +1,4 @@
-#![feature(std_misc, io)]
+#![feature(std_misc)]
 
 use std::sync::mpsc::{channel, Sender, SendError, Receiver};
 use std::thread;

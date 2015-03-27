@@ -13,7 +13,7 @@ mod raw {
 }
 
 #[derive(Debug)]
-enum ReadlineError {
+pub enum ReadlineError {
     NullInPrompt(ffi::NulError),
     NullOnRead
 }

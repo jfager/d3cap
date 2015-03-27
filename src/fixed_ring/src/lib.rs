@@ -2,7 +2,7 @@
 
 // Fixed-size ring buffer: when it is at capacity push will drop the oldest element.
 
-extern crate "rustc-serialize" as rustc_serialize;
+extern crate rustc_serialize;
 
 use std::iter::Iterator;
 use std::fmt;
@@ -72,13 +72,13 @@ impl<T:Encodable> Encodable for FixedRingBuffer<T> {
 impl<T> std::ops::Index<usize> for FixedRingBuffer<T> {
     type Output = T;
 
-    fn index(&self, index: &usize) -> &T {
-        assert!(*index < self.size);
+    fn index(&self, index: usize) -> &T {
+        assert!(index < self.size);
 
         if self.size < self.capacity {
-            &self.buffer[*index]
+            &self.buffer[index]
         } else {
-            &self.buffer[(self.next + *index) % self.capacity]
+            &self.buffer[(self.next + index) % self.capacity]
         }
     }
 }

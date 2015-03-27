@@ -80,7 +80,7 @@ pub struct Dot11BaseHeader {
 }
 
 
-type FCS = [u8; 4];
+pub type FCS = [u8; 4];
 
 // 8.2.4.3.5 DA field
 // The DA field contains an IEEE MAC individual or group address that

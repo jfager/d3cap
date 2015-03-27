@@ -31,7 +31,7 @@ struct RouteStatsMsg<T> {
 }
 
 #[derive(Debug)]
-enum Pkt {
+pub enum Pkt {
     Mac(PktMeta<MacAddr>),
     IP4(PktMeta<IP4Addr>),
     IP6(PktMeta<IP6Addr>),
@@ -133,7 +133,7 @@ trait PktParser {
     fn parse(&mut self, pkt: &cap::PcapData) -> Result<(), ParseErr>;
 }
 
-struct CaptureCtx {
+pub struct CaptureCtx {
     sess: cap::PcapSession,
     parser: Box<PktParser+'static>
 }
@@ -183,7 +183,7 @@ impl PktParser for EthernetParser {
 }
 
 #[derive(Debug)]
-struct PhysData { // TODO: this name sucks
+pub struct PhysData { // TODO: this name sucks
     frame_ty: FrameType,
     addrs: [MacAddr; 3],
     rate: Option<tap::Rate>,
@@ -462,9 +462,9 @@ fn start_websocket(port: u16, mac_map: &MacMap, pg_ctl: &ProtoGraphController) -
     Ok(())
 }
 
-type MacMap = HashMap<MacAddr, String>;
-type IP4Map = HashMap<IP4Addr, String>;
-type IP6Map = HashMap<IP6Addr, String>;
+pub type MacMap = HashMap<MacAddr, String>;
+pub type IP4Map = HashMap<IP4Addr, String>;
+pub type IP6Map = HashMap<IP6Addr, String>;
 
 #[derive(Clone)]
 pub struct D3capController {

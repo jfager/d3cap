@@ -1,4 +1,4 @@
-#![feature(collections, std_misc, io, libc, net)]
+#![feature(collections, old_io, libc, ip_addr)]
 
 extern crate getopts;
 extern crate collections;
@@ -6,7 +6,7 @@ extern crate time;
 extern crate libc;
 
 extern crate toml;
-extern crate "rustc-serialize" as rustc_serialize;
+extern crate rustc_serialize;
 
 extern crate pcap;
 extern crate multicast;

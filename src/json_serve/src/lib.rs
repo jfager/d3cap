@@ -1,10 +1,10 @@
 #![crate_type="lib"]
 
-#![feature(io, net)]
+#![feature(core)]
 
 extern crate openssl;
 extern crate multicast;
-extern crate "rustc-serialize" as rustc_serialize;
+extern crate rustc_serialize;
 extern crate byteorder;
 
 pub mod uiserver;

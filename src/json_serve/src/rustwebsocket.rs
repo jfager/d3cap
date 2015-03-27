@@ -38,7 +38,7 @@ enum State {
     Closing
 }
 
-struct Handshake {
+pub struct Handshake {
     key: String,
     resource: String,
     frame_type: FrameType
@@ -139,7 +139,7 @@ pub fn parse_input_frame<S: Read+Write>(s: &mut BufStream<S>) -> (Option<Vec<u8>
         return (None, FrameType::Error);
     }
 
-    let opcode = (hdr[0] & 0x0F) as u8;
+    let opcode = hdr[0] & 0x0F;
     if let Some(frame_type) = FromPrimitive::from_u8(opcode) {
         let payload_len = hdr[1] & 0x7F;
         if payload_len < 0x7E { //Only handle short payloads right now.
