@@ -1,4 +1,4 @@
-#![feature(collections, old_io, libc, ip_addr)]
+#![feature(collections, old_io, libc, ip_addr, slice_patterns)]
 
 extern crate getopts;
 extern crate collections;

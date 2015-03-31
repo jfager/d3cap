@@ -95,7 +95,7 @@ impl UIServer {
                 thread::Builder::new().name(format!("websocket_{}", wrkr_cnt)).spawn(move || {
                     let tcps = tcp_stream.unwrap();
                     WebSocketWorker.run(&mut BufStream::new(tcps), &conn_rx).unwrap();
-                });
+                }).unwrap();
                 wrkr_cnt += 1;
             }
         }));
@@ -103,21 +103,21 @@ impl UIServer {
         Ok(UIServer { json_multicast: mc })
     }
 
-    pub fn create_sender<T:Encodable+Send+Sync+'static>(&self) -> Sender<Arc<T>> {
+    pub fn create_sender<T:Encodable+Send+Sync+'static>(&self) -> io::Result<Sender<Arc<T>>> {
         let (tx, rx) = channel();
         let jb = self.json_multicast.clone();
-        thread::Builder::new().name("routes_ui".to_string()).spawn(move || {
+        try!(thread::Builder::new().name("routes_ui".to_string()).spawn(move || {
             loop {
                 let t: Result<Arc<T>, _> = rx.recv();
                 match t {
                     Ok(t) => {
                         let j: String = json::encode(&*t).unwrap();
-                        jb.send(Arc::new(j));
+                        jb.send(Arc::new(j)).unwrap();
                     }
                     Err(_) => panic!("oh shit")
                 }
             }
-        });
-        tx
+        }));
+        Ok(tx)
     }
 }

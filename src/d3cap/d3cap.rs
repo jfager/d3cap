@@ -61,7 +61,7 @@ impl <T:Send+Sync+Copy+Clone+Eq+Hash> ProtocolHandler<T> {
             typ: self.typ,
             route: route_stats
         });
-        self.stats_mcast.send(route_stats_msg);
+        self.stats_mcast.send(route_stats_msg).unwrap();
     }
 }
 
@@ -106,15 +106,15 @@ impl ProtoGraphController {
     }
 
     fn register_mac_listener(&self, s: Sender<Arc<RouteStatsMsg<MacAddr>>>) {
-        self.mac.stats_mcast.register(s);
+        self.mac.stats_mcast.register(s).unwrap();
     }
 
     fn register_ip4_listener(&self, s: Sender<Arc<RouteStatsMsg<IP4Addr>>>) {
-        self.ip4.stats_mcast.register(s);
+        self.ip4.stats_mcast.register(s).unwrap();
     }
 
     fn register_ip6_listener(&self, s: Sender<Arc<RouteStatsMsg<IP6Addr>>>) {
-        self.ip6.stats_mcast.register(s);
+        self.ip6.stats_mcast.register(s).unwrap();
     }
 }
 
@@ -316,7 +316,7 @@ impl RadiotapParser {
                         vals.antenna_signal,
                         vals.antenna_noise,
                         vals.antenna
-                    ));
+                    )).unwrap();
                 }
             },
             &tap::COMMON_B => {
@@ -329,7 +329,7 @@ impl RadiotapParser {
                         vals.antenna_signal,
                         vals.antenna_noise,
                         vals.antenna
-                    ));
+                    )).unwrap();
                 }
             },
             _ => {} //Unknown header
@@ -456,9 +456,9 @@ fn load_mac_addrs(file: String) -> Result<HashMap<MacAddr, String>, LoadMacError
 
 fn start_websocket(port: u16, mac_map: &MacMap, pg_ctl: &ProtoGraphController) -> io::Result<()> {
     let ui = try!(UIServer::spawn(port, mac_map));
-    pg_ctl.register_mac_listener(ui.create_sender());
-    pg_ctl.register_ip4_listener(ui.create_sender());
-    pg_ctl.register_ip6_listener(ui.create_sender());
+    pg_ctl.register_mac_listener(try!(ui.create_sender()));
+    pg_ctl.register_ip4_listener(try!(ui.create_sender()));
+    pg_ctl.register_ip6_listener(try!(ui.create_sender()));
     Ok(())
 }
 
