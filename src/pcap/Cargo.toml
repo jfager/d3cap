@@ -3,7 +3,3 @@
 name = "pcap"
 version = "0.0.1"
 authors = [ "jfager@gmail.com" ]
-
-[dependencies.rust-bindgen]
-
-git = "https://github.com/crabtw/rust-bindgen.git"

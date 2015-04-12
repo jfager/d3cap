@@ -1,5 +1,4 @@
 use std::thread::{self, JoinHandle};
-use std::error::{FromError};
 use std::hash::{Hash};
 use std::collections::hash_map::{Entry, HashMap};
 use std::fs::File;
@@ -21,7 +20,7 @@ use dot11::{self, FrameType};
 use tap;
 use pkt_graph::{PktMeta, ProtocolGraph, RouteStats};
 use fixed_ring::FixedRingBuffer;
-use pcap::rustpcap as cap;
+use pcap::pcap as cap;
 
 
 #[derive(RustcEncodable, Clone)]
@@ -123,8 +122,8 @@ enum ParseErr {
     UnknownPacket
 }
 
-impl<T> FromError<SendError<T>> for ParseErr {
-    fn from_error(_: SendError<T>) -> ParseErr {
+impl<T> From<SendError<T>> for ParseErr {
+    fn from(_: SendError<T>) -> ParseErr {
         ParseErr::Send
     }
 }
@@ -425,8 +424,8 @@ enum LoadMacError {
     IOError(io::Error),
     TomlError
 }
-impl FromError<io::Error> for LoadMacError {
-    fn from_error(err: io::Error) -> LoadMacError {
+impl From<io::Error> for LoadMacError {
+    fn from(err: io::Error) -> LoadMacError {
         LoadMacError::IOError(err)
     }
 }

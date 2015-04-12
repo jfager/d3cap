@@ -10,7 +10,7 @@ use rustwebsocket as ws;
 
 use multicast::{Multicast};
 
-#[derive(Copy)]
+#[derive(Copy,Clone)]
 pub struct WebSocketWorker;
 
 impl WebSocketWorker {

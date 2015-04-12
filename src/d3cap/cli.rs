@@ -6,7 +6,6 @@ use std::thread::{self, JoinGuard};
 use std::old_io::net as old_net;
 use std::net;
 use std::io::{self};
-use std::error::FromError;
 
 use d3cap::{D3capController, ProtocolHandler, PhysDataController};
 use ether::{MacAddr};
@@ -66,8 +65,8 @@ enum CliErr {
     IoError(io::Error)
 }
 
-impl FromError<io::Error> for CliErr {
-    fn from_error(e: io::Error) -> CliErr {
+impl From<io::Error> for CliErr {
+    fn from(e: io::Error) -> CliErr {
         CliErr::IoError(e)
     }
 }

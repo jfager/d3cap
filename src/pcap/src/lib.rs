@@ -1,14 +1,8 @@
 #![crate_type="lib"]
 
-#![feature(collections, libc)]
-
-#![feature(plugin)]
-
-#![plugin(bindgen)]
-
-#[no_link]
-extern crate bindgen;
+#![feature(collections, libc, convert)]
 
 extern crate libc;
 
-pub mod rustpcap;
+pub mod pcap;
+pub mod pcapll;

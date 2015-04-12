@@ -57,7 +57,7 @@ impl FrameControl {
 }
 
 
-#[derive(Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum FrameType {
     Management,
     Control,

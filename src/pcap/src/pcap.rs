@@ -1,14 +1,7 @@
-use libc::{c_char,c_int};
+use libc::{self,c_char,c_int};
 use std::ptr;
 use std::ffi::CString;
-
-mod pcap {
-    #![allow(dead_code)]
-    #![allow(non_camel_case_types)]
-    #![allow(non_snake_case)]
-
-    bindgen!("/usr/include/pcap.h", link="pcap");
-}
+use pcapll;
 
 //TODO: http://www.tcpdump.org/linktypes.html
 pub type DataLinkType = c_int;
@@ -16,9 +9,9 @@ pub const DLT_NULL: DataLinkType = 0;
 pub const DLT_ETHERNET: DataLinkType = 1;
 pub const DLT_IEEE802_11_RADIO: DataLinkType = 127;
 
-#[derive(Copy)]
+#[derive(Copy,Clone)]
 pub struct PcapSessionBuilder {
-    p: *mut pcap::pcap_t,
+    p: *mut pcapll::pcap_t,
     activated: bool
 }
 
@@ -36,7 +29,7 @@ impl PcapSessionBuilder {
 
     pub fn new() -> Result<PcapSessionBuilder, &'static str> {
         let mut errbuf = Vec::with_capacity(256);
-        let dev = unsafe { pcap::pcap_lookupdev(errbuf.as_mut_slice().as_mut_ptr()) };
+        let dev = unsafe { pcapll::pcap_lookupdev(errbuf.as_mut_slice().as_mut_ptr()) };
         if dev.is_null() {
             Err("No device available")
         } else {
@@ -45,7 +38,7 @@ impl PcapSessionBuilder {
     }
 
     fn do_new(dev: *const c_char, errbuf: &mut [c_char]) -> Result<PcapSessionBuilder, &'static str> {
-        let p = unsafe { pcap::pcap_create(dev, errbuf.as_mut_ptr()) };
+        let p = unsafe { pcapll::pcap_create(dev, errbuf.as_mut_ptr()) };
         if p.is_null() {
             Err("Could not initialize device")
         } else {
@@ -55,61 +48,61 @@ impl PcapSessionBuilder {
 
     pub fn buffer_size(&mut self, sz: i32) -> &mut PcapSessionBuilder {
         if self.activated { panic!("Session already activated") }
-        unsafe { pcap::pcap_set_buffer_size(self.p, sz); }
+        unsafe { pcapll::pcap_set_buffer_size(self.p, sz); }
         self
     }
 
     pub fn timeout(&mut self, to: i32) -> &mut PcapSessionBuilder {
         if self.activated { panic!("Session already activated") }
-        unsafe { pcap::pcap_set_timeout(self.p, to); }
+        unsafe { pcapll::pcap_set_timeout(self.p, to); }
         self
     }
 
     pub fn promisc(&mut self, promisc: bool) -> &mut PcapSessionBuilder {
         if self.activated { panic!("Session already activated") }
-        unsafe { pcap::pcap_set_promisc(self.p, promisc as c_int); }
+        unsafe { pcapll::pcap_set_promisc(self.p, promisc as c_int); }
         self
     }
 
     pub fn rfmon(&mut self, rfmon: bool) -> &mut PcapSessionBuilder {
         if self.activated { panic!("Session already activated") }
-        unsafe { pcap::pcap_set_rfmon(self.p, rfmon as c_int); }
+        unsafe { pcapll::pcap_set_rfmon(self.p, rfmon as c_int); }
         self
     }
 
     pub fn activate(&mut self) -> PcapSession {
         if self.activated { panic!("Session already activated") }
-        unsafe { pcap::pcap_activate(self.p); }
+        unsafe { pcapll::pcap_activate(self.p); }
         self.activated = true;
         PcapSession { p: self.p }
     }
 }
 
-#[derive(Copy)]
+#[derive(Copy,Clone)]
 pub struct PcapSession {
-    p: *mut pcap::pcap_t
+    p: *mut pcapll::pcap_t
 }
 
 impl PcapSession {
     pub fn from_file(f: &str) -> PcapSession {
         let mut errbuf = Vec::with_capacity(256);
         unsafe {
-            let p = pcap::pcap_open_offline(CString::new(f.as_bytes()).unwrap().as_ptr(),
+            let p = pcapll::pcap_open_offline(CString::new(f.as_bytes()).unwrap().as_ptr(),
                                             errbuf.as_mut_slice().as_mut_ptr());
             PcapSession { p: p }
         }
     }
 
     pub fn datalink(&self) -> DataLinkType {
-        unsafe { pcap::pcap_datalink(self.p) }
+        unsafe { pcapll::pcap_datalink(self.p) }
     }
 
     pub fn list_datalinks(&self) -> Vec<i32> {
         unsafe {
             let mut dlt_buf = ptr::null_mut();
-            let sz = pcap::pcap_list_datalinks(self.p, &mut dlt_buf);
+            let sz = pcapll::pcap_list_datalinks(self.p, &mut dlt_buf);
             let out = Vec::from_raw_buf(dlt_buf as *const c_int, sz as usize);
-            pcap::pcap_free_datalinks(dlt_buf);
+            pcapll::pcap_free_datalinks(dlt_buf);
             out
         }
     }
@@ -118,7 +111,7 @@ impl PcapSession {
     pub fn next<F>(&self, mut f: F) where F: FnMut(&PcapData) {
         let mut head_ptr = ptr::null_mut();
         let mut data_ptr = ptr::null();
-        let res = unsafe { pcap::pcap_next_ex(self.p, &mut head_ptr, &mut data_ptr) };
+        let res = unsafe { pcapll::pcap_next_ex(self.p, &mut head_ptr, &mut data_ptr) };
         match res {
             0 => return, //timed out
             1 => {
@@ -134,7 +127,7 @@ impl PcapSession {
 }
 
 
-pub struct PcapTimeval(pcap::Struct_timeval);
+pub struct PcapTimeval(libc::timeval);
 
 impl PcapTimeval {
     pub fn sec(&self) -> i64 {
@@ -147,7 +140,7 @@ impl PcapTimeval {
 }
 
 pub struct PcapData {
-    hdr: *mut pcap::Struct_pcap_pkthdr,
+    hdr: *mut pcapll::Struct_pcap_pkthdr,
     dat: *const u8
 }
 
@@ -170,20 +163,20 @@ impl PcapData {
 }
 
 pub struct PcapDumper {
-    p: *mut pcap::Struct_pcap_dumper
+    p: *mut pcapll::Struct_pcap_dumper
 }
 
 impl PcapDumper {
     pub fn new(sess: &PcapSession, path: &str) -> PcapDumper {
         unsafe {
-            let p = pcap::pcap_dump_open(sess.p, CString::new(path.as_bytes()).unwrap().as_ptr());
+            let p = pcapll::pcap_dump_open(sess.p, CString::new(path.as_bytes()).unwrap().as_ptr());
             PcapDumper { p: p }
         }
     }
 
     pub fn dump(&mut self, data: &PcapData) {
         unsafe {
-            pcap::pcap_dump(self.p as *mut u8, data.hdr, data.dat);
+            pcapll::pcap_dump(self.p as *mut u8, data.hdr, data.dat);
         }
     }
 }
@@ -191,7 +184,7 @@ impl PcapDumper {
 impl Drop for PcapDumper {
     fn drop(&mut self) {
         unsafe {
-            pcap::pcap_dump_close(self.p);
+            pcapll::pcap_dump_close(self.p);
         }
     }
 }
