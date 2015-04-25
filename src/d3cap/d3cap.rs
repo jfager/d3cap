@@ -3,7 +3,6 @@ use std::hash::{Hash};
 use std::collections::hash_map::{Entry, HashMap};
 use std::fs::File;
 use std::io::{self, Read};
-use std::num::Float;
 use std::sync::{Arc,RwLock};
 use std::sync::mpsc::{channel, Sender, SendError};
 
@@ -411,7 +410,7 @@ pub fn init_capture(conf: D3capConf,
 
 pub fn start_capture<'a>(conf: D3capConf,
                          pkt_sender: Sender<Pkt>,
-                         pd_sender: Sender<PhysData>) -> io::Result<JoinHandle> {
+                         pd_sender: Sender<PhysData>) -> io::Result<JoinHandle<()>> {
     thread::Builder::new().name("packet_capture".to_string()).spawn(move || {
         let mut cap = init_capture(conf, pkt_sender, pd_sender);
         loop {

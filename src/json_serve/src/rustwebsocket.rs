@@ -1,5 +1,4 @@
 use std::io::{self,Read,Write,BufRead,BufStream};
-use std::num::{FromPrimitive};
 
 use rustc_serialize::base64::{ToBase64, STANDARD};
 use byteorder::{BigEndian, WriteBytesExt};
@@ -19,7 +18,6 @@ const VERSION: &'static str = "13";
 const ACCEPT_FIELD: &'static str = "Sec-WebSocket-Accept";
 const SECRET: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-#[derive(FromPrimitive)]
 pub enum FrameType {
     Empty = 0xF0,
     Error = 0xF1,
@@ -30,6 +28,22 @@ pub enum FrameType {
     Pong = 0x0A,
     Opening = 0xF3,
     Closing = 0x08
+}
+
+fn from_prim(prim: u8) -> Option<FrameType> {
+   use self::FrameType::*;
+   match prim {
+      0xF0 => Some(Empty),
+      0xF1 => Some(Error),
+      0xF2 => Some(Incomplete),
+      0x01 => Some(Text),
+      0x02 => Some(Binary),
+      0x09 => Some(Ping),
+      0x0A => Some(Pong),
+      0xF3 => Some(Opening),
+      0x0  => Some(Closing),
+      _    => None
+    }
 }
 
 enum State {
@@ -140,7 +154,7 @@ pub fn parse_input_frame<S: Read+Write>(s: &mut BufStream<S>) -> (Option<Vec<u8>
     }
 
     let opcode = hdr[0] & 0x0F;
-    if let Some(frame_type) = FromPrimitive::from_u8(opcode) {
+    if let Some(frame_type) = from_prim(opcode) {
         let payload_len = hdr[1] & 0x7F;
         if payload_len < 0x7E { //Only handle short payloads right now.
             let toread = (payload_len + 4) as usize; //+4 for mask

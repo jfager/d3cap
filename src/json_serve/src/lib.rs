@@ -1,7 +1,5 @@
 #![crate_type="lib"]
 
-#![feature(core)]
-
 extern crate openssl;
 extern crate multicast;
 extern crate rustc_serialize;

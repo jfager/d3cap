@@ -2,8 +2,7 @@ use std::iter;
 use std::collections::hash_map::{Entry, HashMap};
 use std::hash::{Hash};
 use std::fmt::{Display};
-use std::thread::{self, JoinGuard};
-use std::old_io::net as old_net;
+use std::thread::{self, JoinHandle};
 use std::net;
 use std::io::{self};
 
@@ -26,21 +25,6 @@ impl TransAddr<MacAddr> for HashMap<MacAddr, String> {
     }
 }
 
-//TODO: waiting for https://github.com/rust-lang/rust/issues/22608
-fn new_to_old_ip(n: net::IpAddr) -> old_net::ip::IpAddr {
-    match n {
-        net::IpAddr::V4(addr) => {
-            let o = addr.octets();
-            old_net::ip::IpAddr::Ipv4Addr(o[0], o[1], o[2], o[3])
-        }
-        net::IpAddr::V6(addr) => {
-            let s = addr.segments();
-            old_net::ip::IpAddr::Ipv6Addr(s[0], s[1], s[2], s[3],
-                                          s[4], s[5], s[6], s[7])
-        }
-    }
-}
-
 impl<T:AsStdIpAddr+Eq+Hash+Display+Clone> TransAddr<T> for HashMap<T, String> {
     fn trans(&mut self, addr: &T) -> String {
         let k = addr.clone();
@@ -48,7 +32,7 @@ impl<T:AsStdIpAddr+Eq+Hash+Display+Clone> TransAddr<T> for HashMap<T, String> {
             Entry::Occupied(e) => e.get().clone(),
             Entry::Vacant(e) => {
                 let a = addr.as_std_ip();
-                let n = match old_net::addrinfo::get_address_name(new_to_old_ip(a)) {
+                let n = match net::lookup_addr(&a) {
                     Ok(name) => name,
                     _ => addr.to_string()
                 };
@@ -73,8 +57,8 @@ impl From<io::Error> for CliErr {
 
 type CliFn = (&'static str, Box<FnMut(Vec<&str>, &mut D3capController)->Result<(), CliErr>>);
 
-pub fn start_cli<'a>(ctrl: D3capController) -> io::Result<JoinGuard<'a, ()>> {
-    thread::Builder::new().name("cli".to_string()).scoped(move || {
+pub fn start_cli<'a>(ctrl: D3capController) -> io::Result<JoinHandle<()>> {
+    thread::Builder::new().name("cli".to_string()).spawn(move || {
         let mut ctrl = ctrl;
 
         let mut cmds: HashMap<String, CliFn> = HashMap::new();

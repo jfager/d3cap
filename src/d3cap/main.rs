@@ -1,4 +1,4 @@
-#![feature(collections, old_io, libc, ip_addr, slice_patterns)]
+#![feature(collections, libc, ip_addr, slice_patterns, lookup_addr)]
 
 extern crate getopts;
 extern crate collections;
@@ -86,5 +86,5 @@ fn main() {
         ctrl.start_websocket(port).unwrap();
     }
 
-    cli::start_cli(ctrl).unwrap().join();
+    cli::start_cli(ctrl).unwrap().join().unwrap();
 }
