@@ -1,4 +1,4 @@
-use std::io::{self,Read,Write,BufRead,BufStream};
+use std::io::{self,BufRead,Write};
 
 use rustc_serialize::base64::{ToBase64, STANDARD};
 use byteorder::{BigEndian, WriteBytesExt};
@@ -72,9 +72,9 @@ impl Handshake {
     }
 }
 
-pub fn parse_handshake<S: Read+Write>(s: &mut BufStream<S>) -> Option<Handshake> {
+pub fn parse_handshake<R: BufRead>(r: &mut R) -> Option<Handshake> {
     let mut line = String::new();
-    if s.read_line(&mut line).is_err() {
+    if r.read_line(&mut line).is_err() {
         return None
     };
 
@@ -90,7 +90,7 @@ pub fn parse_handshake<S: Read+Write>(s: &mut BufStream<S>) -> Option<Handshake>
     let mut has_handshake = false;
     loop {
         let mut line = String::new();
-        if s.read_line(&mut line).is_err() {
+        if r.read_line(&mut line).is_err() {
             return if has_handshake { Some(hs) } else { None }
         };
 
@@ -140,9 +140,9 @@ pub fn write_frame<W:Write>(data: &[u8], frame_type: FrameType, w: &mut W) -> io
     w.flush()
 }
 
-pub fn parse_input_frame<S: Read+Write>(s: &mut BufStream<S>) -> (Option<Vec<u8>>, FrameType) {
+pub fn parse_input_frame<R: BufRead>(r: &mut R) -> (Option<Vec<u8>>, FrameType) {
     let mut hdr = [0; 2];
-    match s.read(&mut hdr) {
+    match r.read(&mut hdr) {
         Ok(sz) => if sz != 2 { return (None, FrameType::Error) },
         _ => return (None, FrameType::Error)
     };
@@ -159,7 +159,7 @@ pub fn parse_input_frame<S: Read+Write>(s: &mut BufStream<S>) -> (Option<Vec<u8>
         if payload_len < 0x7E { //Only handle short payloads right now.
             let toread = (payload_len + 4) as usize; //+4 for mask
             let mut masked_payload = vec![0; toread];
-            match s.read(&mut masked_payload) {
+            match r.read(&mut masked_payload) {
                 Ok(sz) => if sz != toread { return (None, FrameType::Error) },
                 _ => return (None, FrameType::Error)
             };

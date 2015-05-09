@@ -1,5 +1,5 @@
 use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
-use std::io::{self,Read,Write,BufStream};
+use std::io::{self,BufRead,Write,BufStream};
 use std::net::{TcpListener};
 use std::thread;
 use std::sync::Arc;
@@ -14,29 +14,27 @@ use multicast::{Multicast};
 pub struct WebSocketWorker;
 
 impl WebSocketWorker {
-    fn handshake<S: Read+Write>(&self, tcps: &mut BufStream<S>) -> io::Result<()> {
-        match ws::parse_handshake(tcps) {
+    fn handshake<S: BufRead+Write>(&self, s: &mut S) -> io::Result<()> {
+        match ws::parse_handshake(s) {
             Some(hs) => {
-                try!(tcps.write_all(hs.get_answer().as_bytes()));
-                try!(tcps.flush());
+                try!(s.write_all(hs.get_answer().as_bytes()));
+                try!(s.flush());
             }
             None => {
-                try!(tcps.write_all("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()));
+                try!(s.write_all("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()));
             }
         }
         Ok(())
     }
 
-    fn run<S: Read+Write>(&self, tcps: &mut BufStream<S>, data_po: &Receiver<Arc<String>>) -> io::Result<()> {
-
-        try!(self.handshake(tcps));
-
+    fn run<S: BufRead+Write>(&self, s: &mut S, data_po: &Receiver<Arc<String>>) -> io::Result<()> {
+        try!(self.handshake(s));
         loop {
             let mut counter = 0u32;
             loop {
                 match data_po.try_recv() {
                     Ok(msg) => {
-                        let res = ws::write_frame(msg.as_bytes(), ws::FrameType::Text, tcps);
+                        let res = ws::write_frame(msg.as_bytes(), ws::FrameType::Text, s);
                         if res.is_err() {
                             println!("Error writing msg frame: {:?}", res);
                             break
@@ -55,11 +53,11 @@ impl WebSocketWorker {
                     }
                 }
             }
-            let (_, frame_type) = ws::parse_input_frame(tcps);
+            let (_, frame_type) = ws::parse_input_frame(s);
             match frame_type {
                 ws::FrameType::Closing |
                 ws::FrameType::Error   => {
-                    let res = ws::write_frame(&[], ws::FrameType::Closing, tcps);
+                    let res = ws::write_frame(&[], ws::FrameType::Closing, s);
                     if res.is_err() {
                         println!("Error writing closing frame: {:?}", res);
                     }
