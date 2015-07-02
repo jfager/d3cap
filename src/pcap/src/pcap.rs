@@ -1,5 +1,5 @@
 use libc::{self,c_char,c_int};
-use std::ptr;
+use std::{ptr, slice};
 use std::ffi::CString;
 use pcapll;
 
@@ -101,7 +101,7 @@ impl PcapSession {
         unsafe {
             let mut dlt_buf = ptr::null_mut();
             let sz = pcapll::pcap_list_datalinks(self.p, &mut dlt_buf);
-            let out = Vec::from_raw_buf(dlt_buf as *const c_int, sz as usize);
+            let out = slice::from_raw_parts(dlt_buf as *const c_int, sz as usize).to_vec();
             pcapll::pcap_free_datalinks(dlt_buf);
             out
         }

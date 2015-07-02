@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use ether::{MacAddr};
-use std::fmt::{Debug, Formatter, Error};
 
 // For possible reference:
 // https://github.com/simsong/tcpflow/blob/master/src/wifipcap/wifipcap.h
@@ -18,12 +17,6 @@ bitflags!(flags FrameControlFlags: u8 {
     const PROTECTED_FRAME = 1 << 6,
     const ORDER           = 1 << 7
 });
-
-impl Debug for FrameControlFlags {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-        f.write_str(&format!("{:?}", self.bits))
-    }
-}
 
 #[derive(Debug)]
 #[repr(packed)]

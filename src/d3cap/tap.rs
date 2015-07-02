@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use std::mem::size_of;
-use std::fmt;
 
 use util::skip_cast;
 
@@ -59,12 +58,6 @@ bitflags!(flags ItPresent: u32 {
                             | MCS.bits
 });
 
-impl fmt::Debug for ItPresent {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:08x}", self.bits)
-    }
-}
-
 #[derive(Copy,Clone,Debug)]
 #[repr(packed)]
 pub struct Tsft {
@@ -99,11 +92,6 @@ bitflags!(flags ChannelFlags: u16 {
     const GFSK         = 0x0800
 });
 
-impl fmt::Debug for ChannelFlags {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:08x}", self.bits)
-    }
-}
 
 #[derive(Copy,Clone,Debug)]
 #[repr(packed)]
