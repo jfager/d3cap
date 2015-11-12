@@ -1,4 +1,6 @@
-#![feature(collections, libc, ip_addr, slice_patterns, lookup_addr)]
+#![feature(plugin, collections, libc, ip_addr, slice_patterns, lookup_addr)]
+
+#![plugin(clippy)]
 
 extern crate getopts;
 extern crate collections;

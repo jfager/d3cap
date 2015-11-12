@@ -8,7 +8,7 @@ use ether::{MacAddr};
 // http://standards.ieee.org/getieee802/download/802.11-2012.pdf
 
 bitflags!(flags FrameControlFlags: u8 {
-    const TO_DS           = 1 << 0,
+    const TO_DS           = 1,
     const FROM_DS         = 1 << 1,
     const MORE_FRAGS      = 1 << 2,
     const RETRY           = 1 << 3,

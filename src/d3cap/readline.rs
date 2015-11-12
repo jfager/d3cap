@@ -32,9 +32,9 @@ pub fn readline(prompt: &str) -> Result<String, ReadlineError> {
             match str::from_utf8(slice).map(|ret| ret.trim()) {
                 Ok(a) if !a.is_empty() => {
                     raw::add_history(raw);
-                    Ok(a.to_string())
+                    Ok(a.to_owned())
                 }
-                _ => Ok("".to_string())
+                _ => Ok("".to_owned())
             }
         } else {
             Err(ReadlineError::NullOnRead)

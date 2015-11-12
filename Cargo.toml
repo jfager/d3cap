@@ -16,6 +16,7 @@ time = "*"
 getopts = "*"
 rustc-serialize = "*"
 bitflags = "*"
+clippy = "*"
 
 
 [dependencies.pcap]

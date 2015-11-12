@@ -82,7 +82,7 @@ impl ProtoGraphController {
         };
 
         let mut phctl = ctl.clone();
-        try!(thread::Builder::new().name("protocol_handler".to_string()).spawn(move || {
+        try!(thread::Builder::new().name("protocol_handler".to_owned()).spawn(move || {
             loop {
                 let pkt = cap_rx.recv();
                 if pkt.is_err() {
@@ -261,7 +261,7 @@ impl PhysDataController {
         };
 
         let ctl = out.clone();
-        try!(thread::Builder::new().name("physdata_handler".to_string()).spawn(move || {
+        try!(thread::Builder::new().name("physdata_handler".to_owned()).spawn(move || {
             loop {
                 let res = pd_rx.recv();
                 if res.is_err() {
@@ -303,8 +303,8 @@ impl RadiotapParser {
                            frame_ty: FrameType,
                            addrs: [MacAddr; 3],
                            tap_hdr: &tap::RadiotapHeader) {
-        match &tap_hdr.it_present {
-            &tap::COMMON_A => {
+        match tap_hdr.it_present {
+            tap::COMMON_A => {
                 if let Some(vals) = tap::CommonA::parse(tap_hdr) {
                     self.phys.send(PhysData::new(
                         frame_ty,
@@ -317,7 +317,7 @@ impl RadiotapParser {
                     )).unwrap();
                 }
             },
-            &tap::COMMON_B => {
+            tap::COMMON_B => {
                 if let Some(vals) = tap::CommonB::parse(tap_hdr) {
                     self.phys.send(PhysData::new(
                         frame_ty,
@@ -381,6 +381,7 @@ pub fn init_capture(conf: D3capConf,
     let sess = match conf.file {
         Some(ref f) => cap::PcapSession::from_file(&f),
         None => {
+            println!("No session file");
             let sess_builder = match conf.interface {
                 Some(ref dev) => cap::PcapSessionBuilder::new_dev(&dev),
                 None => cap::PcapSessionBuilder::new()
@@ -411,7 +412,7 @@ pub fn init_capture(conf: D3capConf,
 pub fn start_capture<'a>(conf: D3capConf,
                          pkt_sender: Sender<Pkt>,
                          pd_sender: Sender<PhysData>) -> io::Result<JoinHandle<()>> {
-    thread::Builder::new().name("packet_capture".to_string()).spawn(move || {
+    thread::Builder::new().name("packet_capture".to_owned()).spawn(move || {
         let mut cap = init_capture(conf, pkt_sender, pd_sender);
         loop {
             cap.parse_next();
@@ -437,12 +438,12 @@ fn load_mac_addrs(file: String) -> Result<HashMap<MacAddr, String>, LoadMacError
 
     let mut parser = toml::Parser::new(&s);
     if let Some(t) = parser.parse() {
-        if let Some(k) = t.get(&"known-macs".to_string()) {
+        if let Some(k) = t.get(&"known-macs".to_owned()) {
             if let Some(tbl) = k.as_table() {
                 return Ok(tbl.iter()
                           .map(|(k,v)| (MacAddr::from_string(&k), v.as_str()))
                           .filter_map(|x| match x {
-                              (Some(addr), Some(alias)) => Some((addr, alias.to_string())),
+                              (Some(addr), Some(alias)) => Some((addr, alias.to_owned())),
                               _ => None
                           })
                           .collect())
@@ -477,7 +478,7 @@ pub struct D3capController {
 impl D3capController {
     pub fn spawn(conf: D3capConf) -> io::Result<D3capController> {
         let mac_names = conf.conf.as_ref()
-            .map(|x| load_mac_addrs(x.to_string()).unwrap_or_else(|_| HashMap::new()))
+            .map(|x| load_mac_addrs(x.to_owned()).unwrap_or_else(|_| HashMap::new()))
             .unwrap_or_else(HashMap::new);
         let ip4_names = HashMap::new();
         let ip6_names = HashMap::new();

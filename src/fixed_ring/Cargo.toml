@@ -6,3 +6,4 @@ authors = [ "jfager@gmail.com" ]
 
 [dependencies]
 rustc-serialize = "*"
+clippy = "*"

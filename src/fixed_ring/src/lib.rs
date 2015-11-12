@@ -1,6 +1,10 @@
+#![feature(plugin)]
+#![plugin(clippy)]
+
 // Example modified from https://github.com/mozilla/rust/issues/3562#issuecomment-9210203
 
 // Fixed-size ring buffer: when it is at capacity push will drop the oldest element.
+
 
 extern crate rustc_serialize;
 

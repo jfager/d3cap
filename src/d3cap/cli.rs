@@ -58,15 +58,15 @@ impl From<io::Error> for CliErr {
 type CliFn = (&'static str, Box<FnMut(Vec<&str>, &mut D3capController)->Result<(), CliErr>>);
 
 pub fn start_cli<'a>(ctrl: D3capController) -> io::Result<JoinHandle<()>> {
-    thread::Builder::new().name("cli".to_string()).spawn(move || {
+    thread::Builder::new().name("cli".to_owned()).spawn(move || {
         let mut ctrl = ctrl;
 
         let mut cmds: HashMap<String, CliFn> = HashMap::new();
 
-        cmds.insert("ping".to_string(),
+        cmds.insert("ping".to_owned(),
                     ("ping", Box::new(|_, _| Ok(println!("pong")))));
 
-        cmds.insert("websocket".to_string(),
+        cmds.insert("websocket".to_owned(),
                     ("websocket", Box::new(|cmd, ctrl| {
                         Ok(match &cmd[..] {
                             [_, ref port] => {
@@ -93,7 +93,7 @@ pub fn start_cli<'a>(ctrl: D3capController) -> io::Result<JoinHandle<()>> {
 
             list.sort_by(|a,b| (a.1).1.count.cmp(&(b.1).1.count).reverse());
 
-            for &(src_addr, (dst_addr, pstats)) in list.iter() {
+            for &(src_addr, (dst_addr, pstats)) in &list {
                 println!("{} -> {}: count: {}, size: {}",
                          t.trans(&src_addr), t.trans(&dst_addr), pstats.count, pstats.size);
             }
@@ -106,7 +106,7 @@ pub fn start_cli<'a>(ctrl: D3capController) -> io::Result<JoinHandle<()>> {
 
             list.sort_by(|a, b| a.1.avg_dist().partial_cmp(&b.1.avg_dist()).unwrap());
 
-            for i in list.iter() {
+            for i in &list {
                 let (ref k, ref v) = *i;
                 println!("{:?} [{}, {}, {}]: total: {}, curr_len: {}, dist: {}",
                          k.0,
@@ -117,7 +117,7 @@ pub fn start_cli<'a>(ctrl: D3capController) -> io::Result<JoinHandle<()>> {
         }
 
 
-        cmds.insert("ls".to_string(),
+        cmds.insert("ls".to_owned(),
                     ("ls", Box::new(|cmd, ctrl| {
                         Ok(match &cmd[1..] {
                             ["mac"] => print_ls_addr(&ctrl.pg_ctrl.mac, &mut ctrl.mac_names),
@@ -136,7 +136,7 @@ pub fn start_cli<'a>(ctrl: D3capController) -> io::Result<JoinHandle<()>> {
             match full_cmd[0] {
                 "h" | "help" => {
                     println!("\nAvailable commands are:");
-                    for (cmd, &(desc, _)) in cmds.iter() {
+                    for (cmd, &(desc, _)) in &cmds {
                         println!("    {:2$}\t{}", cmd, desc, maxlen);
                     }
                     println!("");

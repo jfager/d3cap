@@ -1,5 +1,5 @@
 use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
-use std::io::{self,BufRead,Write,BufStream};
+use std::io::{self,BufRead,BufReader,Write,BufWriter};
 use std::net::{TcpListener};
 use std::thread;
 use std::sync::Arc;
@@ -14,27 +14,27 @@ use multicast::{Multicast};
 pub struct WebSocketWorker;
 
 impl WebSocketWorker {
-    fn handshake<S: BufRead+Write>(&self, s: &mut S) -> io::Result<()> {
-        match ws::parse_handshake(s) {
+    fn handshake<R: BufRead, W:Write>(&self, r: &mut R, w: &mut W) -> io::Result<()> {
+        match ws::parse_handshake(r) {
             Some(hs) => {
-                try!(s.write_all(hs.get_answer().as_bytes()));
-                try!(s.flush());
+                try!(w.write_all(hs.get_answer().as_bytes()));
+                try!(w.flush());
             }
             None => {
-                try!(s.write_all("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()));
+                try!(w.write_all("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()));
             }
         }
         Ok(())
     }
 
-    fn run<S: BufRead+Write>(&self, s: &mut S, data_po: &Receiver<Arc<String>>) -> io::Result<()> {
-        try!(self.handshake(s));
+    fn run<R: BufRead, W:Write>(&self, r: &mut R, w: &mut W, data_po: &Receiver<Arc<String>>) -> io::Result<()> {
+        try!(self.handshake(r, w));
         loop {
             let mut counter = 0u32;
             loop {
                 match data_po.try_recv() {
                     Ok(msg) => {
-                        let res = ws::write_frame(msg.as_bytes(), ws::FrameType::Text, s);
+                        let res = ws::write_frame(msg.as_bytes(), ws::FrameType::Text, w);
                         if res.is_err() {
                             println!("Error writing msg frame: {:?}", res);
                             break
@@ -53,11 +53,11 @@ impl WebSocketWorker {
                     }
                 }
             }
-            let (_, frame_type) = ws::parse_input_frame(s);
+            let (_, frame_type) = ws::parse_input_frame(r);
             match frame_type {
                 ws::FrameType::Closing |
                 ws::FrameType::Error   => {
-                    let res = ws::write_frame(&[], ws::FrameType::Closing, s);
+                    let res = ws::write_frame(&[], ws::FrameType::Closing, w);
                     if res.is_err() {
                         println!("Error writing closing frame: {:?}", res);
                     }
@@ -92,7 +92,9 @@ impl UIServer {
                 json_dest_sender.register(conn_tx).unwrap();
                 thread::Builder::new().name(format!("websocket_{}", wrkr_cnt)).spawn(move || {
                     let tcps = tcp_stream.unwrap();
-                    WebSocketWorker.run(&mut BufStream::new(tcps), &conn_rx).unwrap();
+                    let mut tcpr = BufReader::new(tcps.try_clone().unwrap());
+                    let mut tcpw = BufWriter::new(tcps);
+                    WebSocketWorker.run(&mut tcpr, &mut tcpw, &conn_rx).unwrap();
                 }).unwrap();
                 wrkr_cnt += 1;
             }

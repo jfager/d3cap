@@ -18,7 +18,7 @@ pub struct RadiotapHeader {
 //size_of should == 8
 
 bitflags!(flags ItPresent: u32 {
-    const TSFT              = 1 << 0,
+    const TSFT              = 1,
     const FLAGS             = 1 << 1,
     const RATE              = 1 << 2,
     const CHANNEL           = 1 << 3,

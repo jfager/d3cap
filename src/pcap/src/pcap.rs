@@ -72,7 +72,12 @@ impl PcapSessionBuilder {
 
     pub fn activate(&mut self) -> PcapSession {
         if self.activated { panic!("Session already activated") }
-        unsafe { pcapll::pcap_activate(self.p); }
+        unsafe {
+            let res = pcapll::pcap_activate(self.p);
+            if res != 0 {
+                panic!("Could not activate pcap session: {}", res);
+            }
+        }
         self.activated = true;
         PcapSession { p: self.p }
     }
