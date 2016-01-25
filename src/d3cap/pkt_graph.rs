@@ -100,7 +100,7 @@ impl <'a, T:Hash+Eq+Clone> AddrStats<T> {
     }
 }
 
-struct ASIter<'a, T:'a> {
+pub struct ASIter<'a, T:'a> {
     inner: hash_map::Iter<'a, T, PktStats>
 }
 
@@ -190,7 +190,7 @@ impl<'a, T: Hash+Eq+Copy+Clone> ProtocolGraph<T> {
     }
 }
 
-struct PGIter<'a, T:'a+Hash+Eq> {
+pub struct PGIter<'a, T:'a+Hash+Eq> {
     inner: hash_map::Iter<'a, T, AddrStats<T>>
 }
 

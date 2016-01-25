@@ -57,7 +57,7 @@ impl From<io::Error> for CliErr {
 
 type CliFn = (&'static str, Box<FnMut(Vec<&str>, &mut D3capController)->Result<(), CliErr>>);
 
-pub fn start_cli<'a>(ctrl: D3capController) -> io::Result<JoinHandle<()>> {
+pub fn start_cli(ctrl: D3capController) -> io::Result<JoinHandle<()>> {
     thread::Builder::new().name("cli".to_owned()).spawn(move || {
         let mut ctrl = ctrl;
 

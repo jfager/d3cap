@@ -6,6 +6,7 @@ extern crate getopts;
 extern crate collections;
 extern crate time;
 extern crate libc;
+extern crate bitflags;
 
 extern crate toml;
 extern crate rustc_serialize;

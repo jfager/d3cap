@@ -409,9 +409,9 @@ pub fn init_capture(conf: D3capConf,
     CaptureCtx { sess: sess, parser: parser }
 }
 
-pub fn start_capture<'a>(conf: D3capConf,
-                         pkt_sender: Sender<Pkt>,
-                         pd_sender: Sender<PhysData>) -> io::Result<JoinHandle<()>> {
+pub fn start_capture(conf: D3capConf,
+                     pkt_sender: Sender<Pkt>,
+                     pd_sender: Sender<PhysData>) -> io::Result<JoinHandle<()>> {
     thread::Builder::new().name("packet_capture".to_owned()).spawn(move || {
         let mut cap = init_capture(conf, pkt_sender, pd_sender);
         loop {
@@ -478,8 +478,9 @@ pub struct D3capController {
 impl D3capController {
     pub fn spawn(conf: D3capConf) -> io::Result<D3capController> {
         let mac_names = conf.conf.as_ref()
-            .map(|x| load_mac_addrs(x.to_owned()).unwrap_or_else(|_| HashMap::new()))
-            .unwrap_or_else(HashMap::new);
+            .map_or_else(HashMap::new, |x| {
+                load_mac_addrs(x.to_owned()).unwrap_or_else(|_| HashMap::new())
+            });
         let ip4_names = HashMap::new();
         let ip6_names = HashMap::new();
 

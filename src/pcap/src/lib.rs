@@ -1,6 +1,6 @@
 #![crate_type="lib"]
 
-#![feature(libc, convert)]
+#![feature(libc)]
 
 extern crate libc;
 
