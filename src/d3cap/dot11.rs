@@ -204,19 +204,16 @@ pub struct DataFrameHeader {
 impl DataFrameHeader {
     fn get_src(&self) -> MacAddr {
         match (self.base.fr_ctrl.has_flag(TO_DS), self.base.fr_ctrl.has_flag(FROM_DS)) {
-            (false, false) => self.addr2,
+            (_, false) => self.addr2,
             (false, true)  => self.addr3,
-            (true,  false) => self.addr2,
             (true,  true)  => panic!("can't handle this yet")
         }
     }
 
     fn get_dest(&self) -> MacAddr {
         match (self.base.fr_ctrl.has_flag(TO_DS), self.base.fr_ctrl.has_flag(FROM_DS)) {
-            (false, false) => self.addr1,
-            (false, true)  => self.addr1,
-            (true,  false) => self.addr3,
-            (true,  true)  => self.addr3
+            (false, _) => self.addr1,
+            (true, _) => self.addr3,
         }
     }
 }

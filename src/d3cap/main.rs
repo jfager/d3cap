@@ -1,4 +1,4 @@
-#![feature(plugin, collections, libc, ip_addr, slice_patterns, lookup_addr)]
+#![feature(plugin, collections, libc, slice_patterns, lookup_addr)]
 
 #![plugin(clippy)]
 

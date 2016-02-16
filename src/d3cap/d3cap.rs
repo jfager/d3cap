@@ -338,13 +338,11 @@ impl RadiotapParser {
 
 impl PktParser for RadiotapParser {
     fn parse(&mut self, pkt: &cap::PcapData) ->  Result<(), ParseErr> {
-
-        let tap_hdr = unsafe { &*(pkt.pkt_ptr() as *const tap::RadiotapHeader) };
-
         fn magic<U>(pkt: &tap::RadiotapHeader) -> &U {
             unsafe { skip_bytes_cast(pkt, pkt.it_len as isize) }
         }
 
+        let tap_hdr = unsafe { &*(pkt.pkt_ptr() as *const tap::RadiotapHeader) };
         let base: &dot11::Dot11BaseHeader = magic(tap_hdr);
 
         let fc = &base.fr_ctrl;
@@ -358,16 +356,13 @@ impl PktParser for RadiotapParser {
                 let mgt: &dot11::ManagementFrameHeader = magic(tap_hdr);
                 self.parse_known_headers(ft, [mgt.addr1, mgt.addr2, mgt.addr3], tap_hdr);
             }
-            FrameType::Control => {
-                //println!("Control frame");
-            }
             ft @ FrameType::Data => {
                 let data: &dot11::DataFrameHeader = magic(tap_hdr);
                 //TODO: get length
                 try!(self.pkts.send(Pkt::Mac(PktMeta::new(data.addr1, data.addr2, 1))));
                 self.parse_known_headers(ft, [data.addr1, data.addr2, data.addr3], tap_hdr);
             }
-            FrameType::Unknown => {
+            FrameType::Control | FrameType::Unknown => {
                 //println!("Unknown frame type");
             }
         })

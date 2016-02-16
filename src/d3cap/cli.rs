@@ -59,28 +59,6 @@ type CliFn = (&'static str, Box<FnMut(Vec<&str>, &mut D3capController)->Result<(
 
 pub fn start_cli(ctrl: D3capController) -> io::Result<JoinHandle<()>> {
     thread::Builder::new().name("cli".to_owned()).spawn(move || {
-        let mut ctrl = ctrl;
-
-        let mut cmds: HashMap<String, CliFn> = HashMap::new();
-
-        cmds.insert("ping".to_owned(),
-                    ("ping", Box::new(|_, _| Ok(println!("pong")))));
-
-        cmds.insert("websocket".to_owned(),
-                    ("websocket", Box::new(|cmd, ctrl| {
-                        Ok(match &cmd[..] {
-                            [_, ref port] => {
-                                if let Ok(p) = port.parse() {
-                                    try!(ctrl.start_websocket(p));
-                                }
-                            },
-                            [_] => {
-                                try!(ctrl.start_websocket(7432u16));
-                            }
-                            _ => println!("Unknown argument")
-                        })
-                    })));
-
         fn print_ls_addr<A, T>(ph: &ProtocolHandler<A>, t: &mut T)
             where A: Eq+Hash+Copy+Clone+Display+Send+Sync,
                   T: TransAddr<A>
@@ -116,6 +94,27 @@ pub fn start_cli(ctrl: D3capController) -> io::Result<JoinHandle<()>> {
             println!("");
         }
 
+        let mut ctrl = ctrl;
+
+        let mut cmds: HashMap<String, CliFn> = HashMap::new();
+
+        cmds.insert("ping".to_owned(),
+                    ("ping", Box::new(|_, _| Ok(println!("pong")))));
+
+        cmds.insert("websocket".to_owned(),
+                    ("websocket", Box::new(|cmd, ctrl| {
+                        Ok(match &cmd[..] {
+                            [_, ref port] => {
+                                if let Ok(p) = port.parse() {
+                                    try!(ctrl.start_websocket(p));
+                                }
+                            },
+                            [_] => {
+                                try!(ctrl.start_websocket(7432u16));
+                            }
+                            _ => println!("Unknown argument")
+                        })
+                    })));
 
         cmds.insert("ls".to_owned(),
                     ("ls", Box::new(|cmd, ctrl| {
