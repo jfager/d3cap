@@ -17,7 +17,7 @@ pub struct RadiotapHeader {
 }
 //size_of should == 8
 
-bitflags!(flags ItPresent: u32 {
+bitflags!(pub flags ItPresent: u32 {
     const TSFT              = 1,
     const FLAGS             = 1 << 1,
     const RATE              = 1 << 2,
@@ -64,7 +64,7 @@ pub struct Tsft {
     pub timer_micros: u64
 }
 
-bitflags!(flags Flags: u8 {
+bitflags!(pub flags Flags: u8 {
     const DURING_CFP     = 0x01,
     const SHORT_PREAMBLE = 0x02,
     const ENCRYPT_WEP    = 0x04,
@@ -81,7 +81,7 @@ pub struct Rate {
     pub in_500kbps: u8
 }
 
-bitflags!(flags ChannelFlags: u16 {
+bitflags!(pub flags ChannelFlags: u16 {
     const TURBO        = 0x0010,
     const CCK          = 0x0020,
     const OFDM         = 0x0040,

@@ -2,6 +2,8 @@
 
 #![plugin(clippy)]
 
+#![allow(if_not_else, similar_names, enum_variant_names, many_single_char_names)]
+
 extern crate getopts;
 extern crate collections;
 extern crate time;

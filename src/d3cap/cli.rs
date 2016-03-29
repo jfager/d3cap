@@ -32,10 +32,11 @@ impl<T:AsStdIpAddr+Eq+Hash+Display+Clone> TransAddr<T> for HashMap<T, String> {
             Entry::Occupied(e) => e.get().clone(),
             Entry::Vacant(e) => {
                 let a = addr.as_std_ip();
-                let n = match net::lookup_addr(&a) {
-                    Ok(name) => name,
-                    _ => addr.to_string()
-                };
+                let n = addr.to_string();
+                // let n = match net::lookup_addr(&a) {
+                //     Ok(name) => name,
+                //     _ => addr.to_string()
+                // };
                 let out = n.clone();
                 e.insert(n);
                 out
