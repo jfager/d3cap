@@ -5,14 +5,10 @@ version = "0.0.1"
 authors = [ "jfager@gmail.com" ]
 
 
-[dependencies.openssl]
-
-git = "https://github.com/sfackler/rust-openssl.git"
-
-
 [dependencies]
 rustc-serialize = "*"
 byteorder = "*"
+openssl = "*"
 
 [dependencies.multicast]
 path = "../multicast"

@@ -28,7 +28,7 @@ impl PktStats {
     }
     pub fn update(&mut self, size: u32) {
         self.count += 1;
-        self.size += size as u64;
+        self.size += u64::from(size);
     }
 }
 

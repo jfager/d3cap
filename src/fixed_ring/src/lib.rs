@@ -66,7 +66,7 @@ impl<T:Encodable> Encodable for FixedRingBuffer<T> {
     fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
         s.emit_seq(self.len(), |s| {
             for (i, e) in self.iter().enumerate() {
-                try!(s.emit_seq_elt(i, |s| e.encode(s)));
+                s.emit_seq_elt(i, |s| e.encode(s))?;
             }
             Ok(())
         })
@@ -108,14 +108,14 @@ impl<'s, T> Iterator for RingIterator<'s, T> {
 
 impl<T: Debug> Debug for FixedRingBuffer<T> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        try!(write!(f, "["));
+        write!(f, "[")?;
         let mut first = true;
         for e in self.iter() {
             if !first {
-                try!(write!(f, ", "));
+                write!(f, ", ")?;
             }
             first = false;
-            try!(e.fmt(f));
+            e.fmt(f)?;
         }
         write!(f, "]")
     }

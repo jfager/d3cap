@@ -47,7 +47,7 @@ impl <T:Send+Sync+Copy+Clone+Eq+Hash> ProtocolHandler<T> {
         Ok(ProtocolHandler {
             typ: typ,
             graph: Arc::new(RwLock::new(ProtocolGraph::new())),
-            stats_mcast: try!(Multicast::spawn())
+            stats_mcast: Multicast::spawn()?
         })
     }
 
@@ -76,13 +76,13 @@ impl ProtoGraphController {
         let (cap_tx, cap_rx) = channel();
         let ctl = ProtoGraphController {
             cap_tx: cap_tx,
-            mac: try!(ProtocolHandler::new("mac")),
-            ip4: try!(ProtocolHandler::new("ip4")),
-            ip6: try!(ProtocolHandler::new("ip6")),
+            mac: ProtocolHandler::new("mac")?,
+            ip4: ProtocolHandler::new("ip4")?,
+            ip6: ProtocolHandler::new("ip6")?,
         };
 
         let mut phctl = ctl.clone();
-        try!(thread::Builder::new().name("protocol_handler".to_owned()).spawn(move || {
+        thread::Builder::new().name("protocol_handler".to_owned()).spawn(move || {
             loop {
                 let pkt = cap_rx.recv();
                 if pkt.is_err() {
@@ -94,7 +94,7 @@ impl ProtoGraphController {
                     Pkt::IP6(ref p) => phctl.ip6.update(p),
                 }
             }
-        }));
+        })?;
 
         Ok(ctl)
     }
@@ -155,20 +155,18 @@ impl PktParser for EthernetParser {
 
     fn parse(&mut self, pkt: &cap::PcapData) -> Result<(), ParseErr> {
         let ether_hdr = unsafe { &*(pkt.pkt_ptr() as *const EthernetHeader) };
-        try!(self.pkts.send(Pkt::Mac(PktMeta::new(ether_hdr.src, ether_hdr.dst, pkt.len()))));
-        Ok(match ether_hdr.typ {
+        self.pkts.send(Pkt::Mac(PktMeta::new(ether_hdr.src, ether_hdr.dst, pkt.len())))?;
+        match ether_hdr.typ {
             ETHERTYPE_ARP => {
                 //io::println("ARP!");
             },
             ETHERTYPE_IP4 => {
                 let ipp: &IP4Header = unsafe { skip_cast(ether_hdr) };
-                try!(self.pkts.send(Pkt::IP4(PktMeta::new(ipp.src, ipp.dst,
-                                                          ntohs(ipp.len) as u32))));
+                self.pkts.send(Pkt::IP4(PktMeta::new(ipp.src, ipp.dst, u32::from(ntohs(ipp.len)))))?;
             },
             ETHERTYPE_IP6 => {
                 let ipp: &IP6Header = unsafe { skip_cast(ether_hdr) };
-                try!(self.pkts.send(Pkt::IP6(PktMeta::new(ipp.src, ipp.dst,
-                                                          ntohs(ipp.len) as u32))));
+                self.pkts.send(Pkt::IP6(PktMeta::new(ipp.src, ipp.dst, u32::from(ntohs(ipp.len)))))?;
             },
             ETHERTYPE_802_1X => {
                 //io::println("802.1X!");
@@ -176,7 +174,8 @@ impl PktParser for EthernetParser {
             _ => {
                 //println!("Unknown type: {:x}", x);
             }
-        })
+        }
+        Ok(())
     }
 }
 
@@ -212,8 +211,8 @@ impl PhysData {
     }
 
     fn dist(&self) -> f32 {
-        let freq = self.channel.mhz as f32;
-        let signal = self.antenna_signal.dbm as f32;
+        let freq = f32::from(self.channel.mhz);
+        let signal = f32::from(self.antenna_signal.dbm);
 
         let exp = (27.55 - (20.0 * freq.log10()) + signal.abs()) / 20.0;
         (10.0f32).powf(exp)
@@ -261,7 +260,7 @@ impl PhysDataController {
         };
 
         let ctl = out.clone();
-        try!(thread::Builder::new().name("physdata_handler".to_owned()).spawn(move || {
+        thread::Builder::new().name("physdata_handler".to_owned()).spawn(move || {
             loop {
                 let res = pd_rx.recv();
                 if res.is_err() {
@@ -283,7 +282,7 @@ impl PhysDataController {
                     }
                 };
             }
-        }));
+        })?;
 
         Ok(out)
     }
@@ -304,7 +303,7 @@ impl RadiotapParser {
                            addrs: [MacAddr; 3],
                            tap_hdr: &tap::RadiotapHeader) {
         match tap_hdr.it_present {
-            tap::COMMON_A => {
+            tap::ItPresent::COMMON_A => {
                 if let Some(vals) = tap::CommonA::parse(tap_hdr) {
                     self.phys.send(PhysData::new(
                         frame_ty,
@@ -317,7 +316,7 @@ impl RadiotapParser {
                     )).unwrap();
                 }
             },
-            tap::COMMON_B => {
+            tap::ItPresent::COMMON_B => {
                 if let Some(vals) = tap::CommonB::parse(tap_hdr) {
                     self.phys.send(PhysData::new(
                         frame_ty,
@@ -351,7 +350,7 @@ impl PktParser for RadiotapParser {
             return Err(ParseErr::UnknownPacket);
         }
 
-        Ok(match fc.frame_type() {
+        match fc.frame_type() {
             ft @ FrameType::Management => {
                 let mgt: &dot11::ManagementFrameHeader = magic(tap_hdr);
                 self.parse_known_headers(ft, [mgt.addr1, mgt.addr2, mgt.addr3], tap_hdr);
@@ -359,31 +358,32 @@ impl PktParser for RadiotapParser {
             ft @ FrameType::Data => {
                 let data: &dot11::DataFrameHeader = magic(tap_hdr);
                 //TODO: get length
-                try!(self.pkts.send(Pkt::Mac(PktMeta::new(data.addr1, data.addr2, 1))));
+                self.pkts.send(Pkt::Mac(PktMeta::new(data.addr1, data.addr2, 1)))?;
                 self.parse_known_headers(ft, [data.addr1, data.addr2, data.addr3], tap_hdr);
             }
             FrameType::Control | FrameType::Unknown => {
                 //println!("Unknown frame type");
             }
-        })
+        }
+        Ok(())
     }
 
 }
 
-pub fn init_capture(conf: D3capConf,
+pub fn init_capture(conf: &D3capConf,
                     pkt_sender: Sender<Pkt>,
                     pd_sender: Sender<PhysData>) -> CaptureCtx {
     let sess = match conf.file {
-        Some(ref f) => cap::PcapSession::from_file(&f),
+        Some(ref f) => cap::PcapSession::from_file(f),
         None => {
             println!("No session file");
             let sess_builder = match conf.interface {
-                Some(ref dev) => cap::PcapSessionBuilder::new_dev(&dev),
+                Some(ref dev) => cap::PcapSessionBuilder::new_dev(dev),
                 None => cap::PcapSessionBuilder::new()
             };
 
             sess_builder.unwrap()
-                .buffer_size(65535)
+                .buffer_size(0xFFFF)
                 .timeout(1000)
                 .promisc(conf.promisc)
                 .rfmon(conf.monitor)
@@ -408,7 +408,7 @@ pub fn start_capture(conf: D3capConf,
                      pkt_sender: Sender<Pkt>,
                      pd_sender: Sender<PhysData>) -> io::Result<JoinHandle<()>> {
     thread::Builder::new().name("packet_capture".to_owned()).spawn(move || {
-        let mut cap = init_capture(conf, pkt_sender, pd_sender);
+        let mut cap = init_capture(&conf, pkt_sender, pd_sender);
         loop {
             cap.parse_next();
         }
@@ -417,42 +417,43 @@ pub fn start_capture(conf: D3capConf,
 
 enum LoadMacError {
     IOError(io::Error),
-    TomlError
+    TomlError(Option<toml::de::Error>)
 }
 impl From<io::Error> for LoadMacError {
     fn from(err: io::Error) -> LoadMacError {
         LoadMacError::IOError(err)
     }
 }
+impl From<toml::de::Error> for LoadMacError {
+    fn from(err: toml::de::Error) -> LoadMacError { LoadMacError::TomlError(Some(err)) }
+}
 
-fn load_mac_addrs(file: String) -> Result<HashMap<MacAddr, String>, LoadMacError> {
+fn load_mac_addrs(file: &str) -> Result<HashMap<MacAddr, String>, LoadMacError> {
     let mut s = String::new();
 
-    let mut f = try!(File::open(&file));
-    try!(f.read_to_string(&mut s));
+    let mut f = File::open(&file)?;
+    f.read_to_string(&mut s)?;
 
-    let mut parser = toml::Parser::new(&s);
-    if let Some(t) = parser.parse() {
-        if let Some(k) = t.get(&"known-macs".to_owned()) {
-            if let Some(tbl) = k.as_table() {
-                return Ok(tbl.iter()
-                          .map(|(k,v)| (MacAddr::from_string(&k), v.as_str()))
-                          .filter_map(|x| match x {
-                              (Some(addr), Some(alias)) => Some((addr, alias.to_owned())),
-                              _ => None
-                          })
-                          .collect())
-            }
+    let t = s.parse::<toml::Value>()?;
+    if let Some(k) = t.get(&"known-macs".to_owned()) {
+        if let Some(tbl) = k.as_table() {
+            return Ok(tbl.iter()
+                .map(|(k, v)| (MacAddr::from_string(k), v.as_str()))
+                .filter_map(|x| match x {
+                    (Some(addr), Some(alias)) => Some((addr, alias.to_owned())),
+                    _ => None
+                })
+                .collect())
         }
     }
-    Err(LoadMacError::TomlError)
+    Err(LoadMacError::TomlError(None))
 }
 
 fn start_websocket(port: u16, mac_map: &MacMap, pg_ctl: &ProtoGraphController) -> io::Result<()> {
-    let ui = try!(UIServer::spawn(port, mac_map));
-    pg_ctl.register_mac_listener(try!(ui.create_sender()));
-    pg_ctl.register_ip4_listener(try!(ui.create_sender()));
-    pg_ctl.register_ip6_listener(try!(ui.create_sender()));
+    let ui = UIServer::spawn(port, mac_map)?;
+    pg_ctl.register_mac_listener(ui.create_sender()?);
+    pg_ctl.register_ip4_listener(ui.create_sender()?);
+    pg_ctl.register_ip6_listener(ui.create_sender()?);
     Ok(())
 }
 
@@ -474,13 +475,13 @@ impl D3capController {
     pub fn spawn(conf: D3capConf) -> io::Result<D3capController> {
         let mac_names = conf.conf.as_ref()
             .map_or_else(HashMap::new, |x| {
-                load_mac_addrs(x.to_owned()).unwrap_or_else(|_| HashMap::new())
+                load_mac_addrs(x).unwrap_or_else(|_| HashMap::new())
             });
         let ip4_names = HashMap::new();
         let ip6_names = HashMap::new();
 
-        let pg_ctrl = try!(ProtoGraphController::spawn());
-        let pd_ctrl = try!(PhysDataController::spawn());
+        let pg_ctrl = ProtoGraphController::spawn()?;
+        let pd_ctrl = PhysDataController::spawn()?;
 
         start_capture(conf, pg_ctrl.sender(), pd_ctrl.sender()).unwrap();
 
@@ -498,7 +499,7 @@ impl D3capController {
         if self.server_started {
             println!("server already started");
         } else {
-            try!(start_websocket(port, &self.mac_names, &self.pg_ctrl));
+            start_websocket(port, &self.mac_names, &self.pg_ctrl)?;
             self.server_started = true;
         }
         Ok(())

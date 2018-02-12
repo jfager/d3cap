@@ -38,8 +38,8 @@ impl MacAddr {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
 #[repr(packed)]
-#[derive(Debug)]
 pub struct EthernetHeader {
     pub dst: MacAddr,
     pub src: MacAddr,

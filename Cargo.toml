@@ -17,6 +17,7 @@ getopts = "*"
 rustc-serialize = "*"
 bitflags = "*"
 clippy = "*"
+toml = "*"
 
 
 [dependencies.pcap]
@@ -37,12 +38,6 @@ path = "src/fixed_ring"
 [dependencies.json_serve]
 
 path = "src/json_serve"
-
-
-[dependencies.toml]
-
-git = "https://github.com/alexcrichton/toml-rs.git"
-
 
 
 # [dependencies.rustc-serialize]

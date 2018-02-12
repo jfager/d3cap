@@ -2,12 +2,14 @@
 
 #![plugin(clippy)]
 
-#![allow(if_not_else, similar_names, enum_variant_names, many_single_char_names)]
+#![allow(if_not_else, similar_names, enum_variant_names, many_single_char_names, match_same_arms)]
 
 extern crate getopts;
-extern crate collections;
 extern crate time;
 extern crate libc;
+
+#[macro_use]
+#[no_link]
 extern crate bitflags;
 
 extern crate toml;
@@ -17,10 +19,6 @@ extern crate pcap;
 extern crate multicast;
 extern crate fixed_ring;
 extern crate json_serve;
-
-#[macro_use]
-#[no_link]
-extern crate bitflags;
 
 mod util;
 mod ip;

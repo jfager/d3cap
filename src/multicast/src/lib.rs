@@ -15,7 +15,7 @@ impl<T:Send+Sync+'static> Multicast<T> {
     pub fn spawn() -> io::Result<Multicast<T>> {
         let (msg_tx, msg_rx): (Sender<Arc<T>>, Receiver<Arc<T>>) = channel();
         let (dest_tx, dest_rx): (Sender<Sender<Arc<T>>>, Receiver<Sender<Arc<T>>>) = channel();
-        try!(thread::Builder::new().name("multicast".to_string()).spawn(move || {
+        thread::Builder::new().name("multicast".to_string()).spawn(move || {
             let mut mc_txs = Vec::new();
             let mut to_remove = Vec::new();
             loop {
@@ -39,7 +39,7 @@ impl<T:Send+Sync+'static> Multicast<T> {
                     }
                 )
             }
-        }));
+        })?;
 
         Ok(Multicast { msg_tx: msg_tx, dest_tx: dest_tx })
     }

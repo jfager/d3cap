@@ -5,4 +5,4 @@ sampledump.pcap
 conf.toml
 TAGS
 .cargo
-
+.idea/

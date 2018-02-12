@@ -7,18 +7,20 @@ use ether::{MacAddr};
 // For definitive reference:
 // http://standards.ieee.org/getieee802/download/802.11-2012.pdf
 
-bitflags!(pub flags FrameControlFlags: u8 {
-    const TO_DS           = 1,
-    const FROM_DS         = 1 << 1,
-    const MORE_FRAGS      = 1 << 2,
-    const RETRY           = 1 << 3,
-    const POWER_MGMT      = 1 << 4,
-    const MORE_DATA       = 1 << 5,
-    const PROTECTED_FRAME = 1 << 6,
-    const ORDER           = 1 << 7
-});
+bitflags! {
+    pub struct FrameControlFlags: u8 {
+        const TO_DS           = 1;
+        const FROM_DS         = 1 << 1;
+        const MORE_FRAGS      = 1 << 2;
+        const RETRY           = 1 << 3;
+        const POWER_MGMT      = 1 << 4;
+        const MORE_DATA       = 1 << 5;
+        const PROTECTED_FRAME = 1 << 6;
+        const ORDER           = 1 << 7;
+    }
+}
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 #[repr(packed)]
 pub struct FrameControl {
     pub ty: u8,
@@ -31,10 +33,10 @@ impl FrameControl {
     /// around, bogus packets can be pretty common (and are on my network and card), so
     /// you need to be able to handle them.
     pub fn protocol_version(&self) -> u8 {
-        self.ty & 0b00000011
+        self.ty & 0b0000_0011
     }
     pub fn frame_type(&self) -> FrameType {
-        match (self.ty & 0b00001100) >> 2 {
+        match (self.ty & 0b0000_1100) >> 2 {
             0 => FrameType::Management,
             1 => FrameType::Control,
             2 => FrameType::Data,
@@ -42,7 +44,7 @@ impl FrameControl {
         }
     }
     pub fn frame_subtype(&self) -> u8 {
-        (self.ty & 0b11110000) >> 4
+        (self.ty & 0b1111_0000) >> 4
     }
     pub fn has_flag(&self, flag: FrameControlFlags) -> bool {
         self.flags.contains(flag)
@@ -59,13 +61,13 @@ pub enum FrameType {
 }
 
 //8.2.4.2 Duration/ID field
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 #[repr(packed)]
 pub struct DurationID {
     dur_id: u16
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 #[repr(packed)]
 pub struct Dot11BaseHeader {
     pub fr_ctrl: FrameControl,
@@ -203,7 +205,7 @@ pub struct DataFrameHeader {
 
 impl DataFrameHeader {
     fn get_src(&self) -> MacAddr {
-        match (self.base.fr_ctrl.has_flag(TO_DS), self.base.fr_ctrl.has_flag(FROM_DS)) {
+        match (self.base.fr_ctrl.has_flag(FrameControlFlags::TO_DS), self.base.fr_ctrl.has_flag(FrameControlFlags::FROM_DS)) {
             (_, false) => self.addr2,
             (false, true)  => self.addr3,
             (true,  true)  => panic!("can't handle this yet")
@@ -211,7 +213,7 @@ impl DataFrameHeader {
     }
 
     fn get_dest(&self) -> MacAddr {
-        match (self.base.fr_ctrl.has_flag(TO_DS), self.base.fr_ctrl.has_flag(FROM_DS)) {
+        match (self.base.fr_ctrl.has_flag(FrameControlFlags::TO_DS), self.base.fr_ctrl.has_flag(FrameControlFlags::FROM_DS)) {
             (false, _) => self.addr1,
             (true, _) => self.addr3,
         }

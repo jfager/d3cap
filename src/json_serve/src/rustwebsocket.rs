@@ -3,7 +3,7 @@ use std::io::{self,BufRead,Write};
 use rustc_serialize::base64::{ToBase64, STANDARD};
 use byteorder::{BigEndian, WriteBytesExt};
 
-use openssl::crypto::hash::{self, Type};
+use openssl::sha::sha1;
 
 const CONNECTION_FIELD: &'static str = "Connection";
 const UPGRADE: &'static str = "upgrade";
@@ -60,7 +60,7 @@ pub struct Handshake {
 
 impl Handshake {
     pub fn get_answer(&self) -> String {
-        let res = hash::hash(Type::SHA1, self.key.as_bytes());
+        let res = sha1(self.key.as_bytes());
         let response_key = res.to_base64(STANDARD);
         format!("HTTP/1.1 101 Switching Protocols\r\n\
                  {}: {}\r\n\
@@ -125,18 +125,18 @@ static MED_FRAME_FLAG: u8 = 126;
 static LARGE_FRAME_FLAG: u8 = 127;
 
 pub fn write_frame<W:Write>(data: &[u8], frame_type: FrameType, w: &mut W) -> io::Result<()> {
-    try!(w.write_u8((0x80 | frame_type as u32) as u8));
+    w.write_u8((0x80 | frame_type as u32) as u8)?;
 
     if data.len() <= SMALL_FRAME {
-        try!(w.write_u8(data.len() as u8));
+        w.write_u8(data.len() as u8)?;
     } else if data.len() <= MED_FRAME {
-        try!(w.write_u8(MED_FRAME_FLAG));
-        try!(w.write_u16::<BigEndian>(data.len() as u16));
+        w.write_u8(MED_FRAME_FLAG)?;
+        w.write_u16::<BigEndian>(data.len() as u16)?;
     } else {
-        try!(w.write_u8(LARGE_FRAME_FLAG));
-        try!(w.write_u64::<BigEndian>(data.len() as u64));
+        w.write_u8(LARGE_FRAME_FLAG)?;
+        w.write_u64::<BigEndian>(data.len() as u64)?;
     }
-    try!(w.write_all(data));
+    w.write_all(data)?;
     w.flush()
 }
 

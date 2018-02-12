@@ -17,18 +17,18 @@ impl WebSocketWorker {
     fn handshake<R: BufRead, W:Write>(&self, r: &mut R, w: &mut W) -> io::Result<()> {
         match ws::parse_handshake(r) {
             Some(hs) => {
-                try!(w.write_all(hs.get_answer().as_bytes()));
-                try!(w.flush());
+                w.write_all(hs.get_answer().as_bytes())?;
+                w.flush()?;
             }
             None => {
-                try!(w.write_all("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()));
+                w.write_all("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())?;
             }
         }
         Ok(())
     }
 
     fn run<R: BufRead, W:Write>(&self, r: &mut R, w: &mut W, data_po: &Receiver<Arc<String>>) -> io::Result<()> {
-        try!(self.handshake(r, w));
+        self.handshake(r, w)?;
         loop {
             let mut counter = 0u32;
             loop {
@@ -78,10 +78,10 @@ impl UIServer {
     pub fn spawn<T: Encodable>(port: u16, welcome: &T) -> io::Result<UIServer> {
         let welcome_msg = Arc::new(json::encode(welcome).unwrap());
 
-        let mc = try!(Multicast::spawn());
+        let mc = Multicast::spawn()?;
         let json_dest_sender = mc.clone();
 
-        try!(thread::Builder::new().name("ui_server".to_string()).spawn(move || {
+        thread::Builder::new().name("ui_server".to_string()).spawn(move || {
             let listener = TcpListener::bind(&("127.0.0.1", port)).unwrap();
             println!("Server listening on port {}", port);
 
@@ -98,7 +98,7 @@ impl UIServer {
                 }).unwrap();
                 wrkr_cnt += 1;
             }
-        }));
+        })?;
 
         Ok(UIServer { json_multicast: mc })
     }
@@ -106,7 +106,7 @@ impl UIServer {
     pub fn create_sender<T:Encodable+Send+Sync+'static>(&self) -> io::Result<Sender<Arc<T>>> {
         let (tx, rx) = channel();
         let jb = self.json_multicast.clone();
-        try!(thread::Builder::new().name("routes_ui".to_string()).spawn(move || {
+        thread::Builder::new().name("routes_ui".to_string()).spawn(move || {
             loop {
                 let t: Result<Arc<T>, _> = rx.recv();
                 match t {
@@ -117,7 +117,7 @@ impl UIServer {
                     Err(_) => panic!("oh shit")
                 }
             }
-        }));
+        })?;
         Ok(tx)
     }
 }

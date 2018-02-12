@@ -3,7 +3,6 @@ use std::collections::hash_map::{Entry, HashMap};
 use std::hash::{Hash};
 use std::fmt::{Display};
 use std::thread::{self, JoinHandle};
-use std::net;
 use std::io::{self};
 
 use d3cap::{D3capController, ProtocolHandler, PhysDataController};
@@ -31,7 +30,7 @@ impl<T:AsStdIpAddr+Eq+Hash+Display+Clone> TransAddr<T> for HashMap<T, String> {
         match self.entry(k) {
             Entry::Occupied(e) => e.get().clone(),
             Entry::Vacant(e) => {
-                let a = addr.as_std_ip();
+                let _a = addr.as_std_ip();
                 let n = addr.to_string();
                 // let n = match net::lookup_addr(&a) {
                 //     Ok(name) => name,
@@ -74,25 +73,25 @@ pub fn start_cli(ctrl: D3capController) -> io::Result<JoinHandle<()>> {
 
             for &(src_addr, (dst_addr, pstats)) in &list {
                 println!("{} -> {}: count: {}, size: {}",
-                         t.trans(&src_addr), t.trans(&dst_addr), pstats.count, pstats.size);
+                         t.trans(src_addr), t.trans(dst_addr), pstats.count, pstats.size);
             }
         }
 
         fn print_ls_tap<T:TransAddr<MacAddr>>(pd_ctrl: &PhysDataController, macs: &mut T) {
             let m = pd_ctrl.map.read().unwrap();
             let mut list: Vec<_> = m.iter()
-                .filter(|&(_, ref v)| v.dat.len() > 1).collect();
+                .filter(|&(_, v)| v.dat.len() > 1).collect();
 
             list.sort_by(|a, b| a.1.avg_dist().partial_cmp(&b.1.avg_dist()).unwrap());
 
             for i in &list {
-                let (ref k, ref v) = *i;
+                let (k, v) = *i;
                 println!("{:?} [{}, {}, {}]: total: {}, curr_len: {}, dist: {}",
                          k.0,
                          macs.trans(&k.1[0]), macs.trans(&k.1[1]), macs.trans(&k.1[2]),
                          v.count, v.dat.len(), v.avg_dist());
             }
-            println!("");
+            println!();
         }
 
         let mut ctrl = ctrl;
@@ -100,32 +99,34 @@ pub fn start_cli(ctrl: D3capController) -> io::Result<JoinHandle<()>> {
         let mut cmds: HashMap<String, CliFn> = HashMap::new();
 
         cmds.insert("ping".to_owned(),
-                    ("ping", Box::new(|_, _| Ok(println!("pong")))));
+                    ("ping", Box::new(|_, _| { println!("pong"); Ok(()) })));
 
         cmds.insert("websocket".to_owned(),
                     ("websocket", Box::new(|cmd, ctrl| {
-                        Ok(match &cmd[..] {
-                            [_, ref port] => {
+                        match cmd[..] {
+                            [_, port] => {
                                 if let Ok(p) = port.parse() {
-                                    try!(ctrl.start_websocket(p));
+                                    ctrl.start_websocket(p)?;
                                 }
                             },
                             [_] => {
-                                try!(ctrl.start_websocket(7432u16));
+                                ctrl.start_websocket(7432u16)?;
                             }
                             _ => println!("Unknown argument")
-                        })
+                        }
+                        Ok(())
                     })));
 
         cmds.insert("ls".to_owned(),
                     ("ls", Box::new(|cmd, ctrl| {
-                        Ok(match &cmd[1..] {
+                        match cmd[1..] {
                             ["mac"] => print_ls_addr(&ctrl.pg_ctrl.mac, &mut ctrl.mac_names),
                             ["ip4"] => print_ls_addr(&ctrl.pg_ctrl.ip4, &mut ctrl.ip4_names),
                             ["ip6"] => print_ls_addr(&ctrl.pg_ctrl.ip6, &mut ctrl.ip6_names),
                             ["tap"] => print_ls_tap(&ctrl.pd_ctrl, &mut ctrl.mac_names),
                             _ => println!("Illegal argument")
-                        })
+                        }
+                        Ok(())
                     })));
 
         let maxlen = cmds.keys().map(|x| x.len()).max().unwrap();
@@ -139,7 +140,7 @@ pub fn start_cli(ctrl: D3capController) -> io::Result<JoinHandle<()>> {
                     for (cmd, &(desc, _)) in &cmds {
                         println!("    {:2$}\t{}", cmd, desc, maxlen);
                     }
-                    println!("");
+                    println!();
                 },
                 "q" | "quit" | "exit" => break,
                 "" => {}
