@@ -3,6 +3,7 @@
 name = "d3cap"
 version = "0.0.1"
 authors = [ "jfager@gmail.com" ]
+edition = "2018"
 
 
 [[bin]]
@@ -16,8 +17,9 @@ time = "*"
 getopts = "*"
 rustc-serialize = "*"
 bitflags = "*"
-clippy = "*"
 toml = "*"
+libc = "*"
+crossbeam = "*"
 
 
 [dependencies.pcap]

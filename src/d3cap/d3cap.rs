@@ -4,20 +4,20 @@ use std::collections::hash_map::{Entry, HashMap};
 use std::fs::File;
 use std::io::{self, Read};
 use std::sync::{Arc,RwLock};
-use std::sync::mpsc::{channel, Sender, SendError};
+use crossbeam::channel::{unbounded, Sender, SendError};
 
 use toml;
 
 use multicast::Multicast;
 use json_serve::uiserver::UIServer;
 
-use util::{ntohs, skip_bytes_cast, skip_cast};
-use ip::{IP4Addr, IP6Addr, IP4Header, IP6Header};
-use ether::{EthernetHeader, MacAddr,
+use crate::util::{ntohs, skip_bytes_cast, skip_cast};
+use crate::ip::{IP4Addr, IP6Addr, IP4Header, IP6Header};
+use crate::ether::{EthernetHeader, MacAddr,
             ETHERTYPE_ARP, ETHERTYPE_IP4, ETHERTYPE_IP6, ETHERTYPE_802_1X};
-use dot11::{self, FrameType};
-use tap;
-use pkt_graph::{PktMeta, ProtocolGraph, RouteStats};
+use crate::dot11::{self, FrameType};
+use crate::tap;
+use crate::pkt_graph::{PktMeta, ProtocolGraph, RouteStats};
 use fixed_ring::FixedRingBuffer;
 use pcap::pcap as cap;
 
@@ -45,7 +45,7 @@ pub struct ProtocolHandler<T:Eq+Hash+Send+Sync+'static> {
 impl <T:Send+Sync+Copy+Clone+Eq+Hash> ProtocolHandler<T> {
     fn new(typ: &'static str) -> io::Result<ProtocolHandler<T>> {
         Ok(ProtocolHandler {
-            typ: typ,
+            typ,
             graph: Arc::new(RwLock::new(ProtocolGraph::new())),
             stats_mcast: Multicast::spawn()?
         })
@@ -73,9 +73,9 @@ pub struct ProtoGraphController {
 
 impl ProtoGraphController {
     fn spawn() -> io::Result<ProtoGraphController> {
-        let (cap_tx, cap_rx) = channel();
+        let (cap_tx, cap_rx) = unbounded();
         let ctl = ProtoGraphController {
-            cap_tx: cap_tx,
+            cap_tx,
             mac: ProtocolHandler::new("mac")?,
             ip4: ProtocolHandler::new("ip4")?,
             ip6: ProtocolHandler::new("ip6")?,
@@ -199,15 +199,7 @@ impl PhysData {
            antenna_noise: tap::AntennaNoise,
            antenna: tap::Antenna,
            ) -> PhysData {
-        PhysData {
-            frame_ty: frame_ty,
-            addrs: addrs,
-            rate: rate,
-            channel: channel,
-            antenna_signal: antenna_signal,
-            antenna_noise: antenna_noise,
-            antenna: antenna
-        }
+        PhysData { frame_ty, addrs, rate, channel, antenna_signal, antenna_noise, antenna }
     }
 
     fn dist(&self) -> f32 {
@@ -253,9 +245,9 @@ pub struct PhysDataController {
 
 impl PhysDataController {
     fn spawn() -> io::Result<PhysDataController> {
-        let (pd_tx, pd_rx) = channel();
+        let (pd_tx, pd_rx) = unbounded();
         let out = PhysDataController {
-            pd_tx: pd_tx,
+            pd_tx,
             map: Arc::new(RwLock::new(HashMap::new()))
         };
 
@@ -401,7 +393,7 @@ pub fn init_capture(conf: &D3capConf,
         x => panic!("unsupported datalink type: {}", x)
     };
 
-    CaptureCtx { sess: sess, parser: parser }
+    CaptureCtx { sess, parser }
 }
 
 pub fn start_capture(conf: D3capConf,
@@ -485,14 +477,7 @@ impl D3capController {
 
         start_capture(conf, pg_ctrl.sender(), pd_ctrl.sender()).unwrap();
 
-        Ok(D3capController {
-            pg_ctrl: pg_ctrl,
-            pd_ctrl: pd_ctrl,
-            mac_names: mac_names,
-            ip4_names: ip4_names,
-            ip6_names: ip6_names,
-            server_started: false
-        })
+        Ok(D3capController { pg_ctrl, pd_ctrl, mac_names, ip4_names, ip6_names, server_started: false })
     }
 
     pub fn start_websocket(&mut self, port: u16) -> io::Result<()> {

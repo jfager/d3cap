@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use ether::{MacAddr};
+use crate::ether::{MacAddr};
 
 // For possible reference:
 // https://github.com/simsong/tcpflow/blob/master/src/wifipcap/wifipcap.h

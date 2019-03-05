@@ -1,6 +1,6 @@
-#![feature(mpsc_select)]
+extern crate crossbeam;
 
-use std::sync::mpsc::{channel, Sender, SendError, Receiver};
+use crossbeam::channel::{unbounded, select, Sender, Receiver, SendError};
 use std::thread;
 use std::sync::Arc;
 use std::io;
@@ -11,17 +11,20 @@ pub struct Multicast<T:Send+Sync+'static> {
     dest_tx: Sender<Sender<Arc<T>>>
 }
 
+type SenderSender<T> = Sender<Sender<Arc<T>>>;
+type SenderReceiver<T> = Receiver<Sender<Arc<T>>>;
+
 impl<T:Send+Sync+'static> Multicast<T> {
     pub fn spawn() -> io::Result<Multicast<T>> {
-        let (msg_tx, msg_rx): (Sender<Arc<T>>, Receiver<Arc<T>>) = channel();
-        let (dest_tx, dest_rx): (Sender<Sender<Arc<T>>>, Receiver<Sender<Arc<T>>>) = channel();
+        let (msg_tx, msg_rx): (Sender<Arc<T>>, Receiver<Arc<T>>) = unbounded();
+        let (dest_tx, dest_rx): (SenderSender<T>, SenderReceiver<T>) = unbounded();
         thread::Builder::new().name("multicast".to_string()).spawn(move || {
             let mut mc_txs = Vec::new();
             let mut to_remove = Vec::new();
             loop {
-                select!(
-                    dest = dest_rx.recv() => mc_txs.push(dest.unwrap()),
-                    msg = msg_rx.recv() => {
+                select! {
+                    recv(dest_rx) -> dest => mc_txs.push(dest.unwrap()),
+                    recv(msg_rx) -> msg => {
                         let m = msg.unwrap();
                         to_remove.truncate(0);
                         for (i, mc_tx) in mc_txs.iter().enumerate() {
@@ -29,7 +32,7 @@ impl<T:Send+Sync+'static> Multicast<T> {
                                 to_remove.push(i)
                             }
                         }
-                        if to_remove.len() > 0 {
+                        if !to_remove.is_empty() {
                             //Walk in reverse to avoid changing indices of
                             //channels to be removed.
                             for i in to_remove.iter().rev() {
@@ -37,11 +40,11 @@ impl<T:Send+Sync+'static> Multicast<T> {
                             }
                         }
                     }
-                )
+                }
             }
         })?;
 
-        Ok(Multicast { msg_tx: msg_tx, dest_tx: dest_tx })
+        Ok(Multicast { msg_tx, dest_tx })
     }
 
     pub fn send(&self, msg: Arc<T>) -> Result<(), SendError<Arc<T>>> {

@@ -5,18 +5,18 @@ use byteorder::{BigEndian, WriteBytesExt};
 
 use openssl::sha::sha1;
 
-const CONNECTION_FIELD: &'static str = "Connection";
-const UPGRADE: &'static str = "upgrade";
-const UPGRADE_FIELD: &'static str = "Upgrade";
-const WEBSOCKET: &'static str = "websocket";
-const HOST_FIELD: &'static str = "Host";
-const ORIGIN_FIELD: &'static str = "Origin";
-const KEY_FIELD: &'static str = "Sec-WebSocket-Key";
-const PROTOCOL_FIELD: &'static str = "Sec-WebSocket-Protocol";
-const VERSION_FIELD: &'static str = "Sec-WebSocket-Version";
-const VERSION: &'static str = "13";
-const ACCEPT_FIELD: &'static str = "Sec-WebSocket-Accept";
-const SECRET: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+const CONNECTION_FIELD: &str = "Connection";
+const UPGRADE: &str = "upgrade";
+const UPGRADE_FIELD: &str = "Upgrade";
+const WEBSOCKET: &str = "websocket";
+const HOST_FIELD: &str = "Host";
+const ORIGIN_FIELD: &str = "Origin";
+const KEY_FIELD: &str = "Sec-WebSocket-Key";
+const PROTOCOL_FIELD: &str = "Sec-WebSocket-Protocol";
+const VERSION_FIELD: &str = "Sec-WebSocket-Version";
+const VERSION: & str = "13";
+const ACCEPT_FIELD: &str = "Sec-WebSocket-Accept";
+const SECRET: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 pub enum FrameType {
     Empty = 0xF0,
@@ -78,7 +78,7 @@ pub fn parse_handshake<R: BufRead>(r: &mut R) -> Option<Handshake> {
         return None
     };
 
-    let prop: Vec<_> = line.split(" ").collect();
+    let prop: Vec<_> = line.split(' ').collect();
     let mut hs = Handshake {
         //host: ~"",
         //origin: ~"",
@@ -107,13 +107,10 @@ pub fn parse_handshake<R: BufRead>(r: &mut R) -> Option<Handshake> {
         let key = prop[0].trim();
         let val = prop[1].trim();
 
-        match key {
-            KEY_FIELD => {
-                hs.key = val.to_string();
-                hs.key.push_str(SECRET);
-                has_handshake = true;
-            }
-            _ => () //do nothing
+        if let KEY_FIELD = key {
+           hs.key = val.to_string();
+           hs.key.push_str(SECRET);
+           has_handshake = true;
         }
     }
 }
@@ -173,5 +170,5 @@ pub fn parse_input_frame<R: BufRead>(r: &mut R) -> (Option<Vec<u8>>, FrameType) 
         return (None, frame_type);
     }
 
-    return (None, FrameType::Error);
+    (None, FrameType::Error)
 }

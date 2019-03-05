@@ -3,12 +3,13 @@
 name = "json_serve"
 version = "0.0.1"
 authors = [ "jfager@gmail.com" ]
-
+edition = "2018"
 
 [dependencies]
 rustc-serialize = "*"
 byteorder = "*"
 openssl = "*"
+crossbeam = "*"
 
 [dependencies.multicast]
 path = "../multicast"

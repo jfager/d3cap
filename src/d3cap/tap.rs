@@ -2,7 +2,7 @@
 
 use std::mem::size_of;
 
-use util::skip_cast;
+use crate::util::skip_cast;
 
 //For possible reference:
 //https://github.com/simsong/tcpflow/blob/master/src/wifipcap/ieee802_11_radio.h
@@ -160,6 +160,7 @@ impl CommonA {
     }
 }
 
+#[derive(Copy, Clone)]
 #[repr(packed)]
 pub struct CommonB {
     pub tsft: Tsft,

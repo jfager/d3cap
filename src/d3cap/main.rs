@@ -1,8 +1,5 @@
-#![feature(plugin, collections, libc, slice_patterns, lookup_addr)]
-
-#![plugin(clippy)]
-
-#![allow(if_not_else, similar_names, enum_variant_names, many_single_char_names, match_same_arms)]
+#![allow(unknown_lints, clippy::if_not_else, clippy::similar_names, clippy::enum_variant_names,
+         clippy::many_single_char_names, clippy::match_same_arms, clippy::trivially_copy_pass_by_ref)]
 
 extern crate getopts;
 extern crate time;
@@ -14,6 +11,7 @@ extern crate bitflags;
 
 extern crate toml;
 extern crate rustc_serialize;
+extern crate crossbeam;
 
 extern crate pcap;
 extern crate multicast;
@@ -35,7 +33,7 @@ fn main() {
 
     use getopts as go;
     use std::{env};
-    use d3cap::{D3capConf, D3capController};
+    use crate::d3cap::{D3capConf, D3capController};
 
     let interface_opt = "i";
     let file_opt = "f";

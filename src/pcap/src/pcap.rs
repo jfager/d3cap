@@ -1,7 +1,7 @@
 use libc::{self,c_char,c_int};
 use std::{ptr, slice};
 use std::ffi::CString;
-use pcapll;
+use crate::pcapll;
 
 //TODO: http://www.tcpdump.org/linktypes.html
 pub type DataLinkType = c_int;
@@ -23,8 +23,8 @@ impl PcapSessionBuilder {
 
     pub fn new_dev(dev: &str) -> Result<PcapSessionBuilder, &'static str> {
         let mut errbuf = Vec::with_capacity(256);
-        let c_dev = CString::new(dev.as_bytes()).unwrap().as_ptr();
-        PcapSessionBuilder::do_new(c_dev, errbuf.as_mut_slice())
+        let c_dev = CString::new(dev.as_bytes()).unwrap();
+        PcapSessionBuilder::do_new(c_dev.as_ptr(), errbuf.as_mut_slice())
     }
 
     pub fn new() -> Result<PcapSessionBuilder, &'static str> {
@@ -42,7 +42,7 @@ impl PcapSessionBuilder {
         if p.is_null() {
             Err("Could not initialize device")
         } else {
-            Ok(PcapSessionBuilder { p: p, activated: false })
+            Ok(PcapSessionBuilder { p, activated: false })
         }
     }
 
@@ -92,17 +92,17 @@ impl PcapSession {
     pub fn from_file(f: &str) -> PcapSession {
         let mut errbuf = Vec::with_capacity(256);
         unsafe {
-            let p = pcapll::pcap_open_offline(CString::new(f.as_bytes()).unwrap().as_ptr(),
-                                            errbuf.as_mut_slice().as_mut_ptr());
-            PcapSession { p: p }
+            let cs = CString::new(f.as_bytes()).unwrap();
+            let p = pcapll::pcap_open_offline(cs.as_ptr(), errbuf.as_mut_slice().as_mut_ptr());
+            PcapSession { p }
         }
     }
 
-    pub fn datalink(&self) -> DataLinkType {
+    pub fn datalink(self) -> DataLinkType {
         unsafe { pcapll::pcap_datalink(self.p) }
     }
 
-    pub fn list_datalinks(&self) -> Vec<i32> {
+    pub fn list_datalinks(self) -> Vec<i32> {
         unsafe {
             let mut dlt_buf = ptr::null_mut();
             let sz = pcapll::pcap_list_datalinks(self.p, &mut dlt_buf);
@@ -113,7 +113,7 @@ impl PcapSession {
     }
 
     //TODO: add a return value for success/failure
-    pub fn next<F>(&self, mut f: F) where F: FnMut(&PcapData) {
+    pub fn next<F>(self, mut f: F) where F: FnMut(&PcapData) {
         let mut head_ptr = ptr::null_mut();
         let mut data_ptr = ptr::null();
         let res = unsafe { pcapll::pcap_next_ex(self.p, &mut head_ptr, &mut data_ptr) };
@@ -154,6 +154,10 @@ impl PcapData {
         unsafe { (*self.hdr).len }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn caplen(&self) -> u32 {
         unsafe { (*self.hdr).caplen }
     }
@@ -172,10 +176,11 @@ pub struct PcapDumper {
 }
 
 impl PcapDumper {
-    pub fn new(sess: &PcapSession, path: &str) -> PcapDumper {
+    pub fn new(sess: PcapSession, path: &str) -> PcapDumper {
         unsafe {
-            let p = pcapll::pcap_dump_open(sess.p, CString::new(path.as_bytes()).unwrap().as_ptr());
-            PcapDumper { p: p }
+            let cs = CString::new(path.as_bytes()).unwrap();
+            let p = pcapll::pcap_dump_open(sess.p, cs.as_ptr());
+            PcapDumper { p }
         }
     }
 

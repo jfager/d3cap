@@ -13,7 +13,7 @@ pub struct PktMeta<T> {
 }
 impl<T> PktMeta<T> {
     pub fn new(src: T, dst: T, size: u32) -> PktMeta<T> {
-        PktMeta { src: src, dst: dst, size: size, tm: time::get_time() }
+        PktMeta { src, dst, size, tm: time::get_time() }
     }
 }
 

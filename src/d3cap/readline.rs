@@ -13,7 +13,7 @@ mod raw {
 }
 
 #[derive(Debug)]
-#[allow(enum_variant_names)]
+#[allow(clippy::enum_variant_names)]
 pub enum ReadlineError {
     NullInPrompt(ffi::NulError),
     NullOnRead

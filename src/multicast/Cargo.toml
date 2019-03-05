@@ -3,3 +3,8 @@
 name = "multicast"
 version = "0.0.1"
 authors = [ "jfager@gmail.com" ]
+edition = "2018"
+
+
+[dependencies]
+crossbeam = "0.7"

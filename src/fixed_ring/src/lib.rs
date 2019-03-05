@@ -1,6 +1,3 @@
-#![feature(plugin)]
-#![plugin(clippy)]
-
 // Example modified from https://github.com/mozilla/rust/issues/3562#issuecomment-9210203
 
 // Fixed-size ring buffer: when it is at capacity push will drop the oldest element.
@@ -25,7 +22,7 @@ impl<T> FixedRingBuffer<T> {
     pub fn new(capacity: usize) -> FixedRingBuffer<T> {
         FixedRingBuffer {
             buffer: Vec::with_capacity(capacity),
-            capacity: capacity,
+            capacity,
             size: 0,
             next: 0
         }
